@@ -15,6 +15,7 @@ Kokoro model files live in ~/Downloads/:
 import subprocess
 import threading
 import tempfile
+import time
 import os
 from pathlib import Path
 
@@ -45,11 +46,16 @@ class PuckyVoice:
         self._pitch_cents = cfg.get("pitch", pitch_cents)
         self._kokoro      = None
         self._speaking    = False
+        self._last_spoke  = 0.0
+        self._post_mute   = 3.0   # seconds to keep mic muted after speaking ends
         self._init()
 
     @property
     def is_speaking(self) -> bool:
-        return self._speaking
+        # Stay muted for a few seconds after speech ends so room reverb decays
+        if self._speaking:
+            return True
+        return (time.time() - self._last_spoke) < self._post_mute
 
     def _init(self):
         # ── Kokoro neural TTS ─────────────────
@@ -165,4 +171,5 @@ class PuckyVoice:
         except Exception as e:
             print(f"  ⚠️  Voice error: {e}")
         finally:
-            self._speaking = False
+            self._speaking   = False
+            self._last_spoke = time.time()
