@@ -437,6 +437,33 @@ def _execute(decision: dict) -> tuple[str, str]:
     return summary, say
 
 
+# ── Directive fast-path ───────────────────────────────────────────────────────
+
+def _directive_as_decision(directive: dict | None) -> dict | None:
+    """If the directive contains a quoted say phrase or explicit JSON, return
+    the decision directly so Ollama doesn't need to interpret it."""
+    if not directive:
+        return None
+    text = directive.get("text", "")
+
+    # Explicit JSON embedded in directive (e.g. 'Respond with ONLY this JSON: {...}')
+    m = re.search(r'\{[^{}]+\}', text)
+    if m:
+        try:
+            d = json.loads(m.group())
+            if "say" in d or "action" in d:
+                return d
+        except Exception:
+            pass
+
+    # 'Say exactly: "..."' or 'Say: "..."'
+    m = re.search(r'[Ss]ay\s+(?:exactly\s+)?(?:this\s*:?\s*)?["“]([^"”]+)["”]', text)
+    if m:
+        return {"action": "speak", "say": m.group(1).strip(), "reason": "directive"}
+
+    return None
+
+
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 def _describe_event(state: dict, positions: dict) -> str:
@@ -510,11 +537,15 @@ def run() -> None:
             # Check for a pending directive from Claude
             directive = _find_pending_directive()
 
-            # Ask Ollama
-            recent  = _journal_tail(CONTEXT_ENTRIES)
-            prompt  = _build_prompt(state, positions, recent, directive)
-            raw     = _ask(prompt)
-            decision = _parse(raw) if raw else {}
+            # If the directive contains explicit JSON with a say/action, use it directly
+            decision = _directive_as_decision(directive) if directive else None
+
+            if decision is None:
+                # Ask Ollama
+                recent   = _journal_tail(CONTEXT_ENTRIES)
+                prompt   = _build_prompt(state, positions, recent, directive)
+                raw      = _ask(prompt)
+                decision = _parse(raw) if raw else {}
 
             # Act
             summary, say = _execute(decision)
