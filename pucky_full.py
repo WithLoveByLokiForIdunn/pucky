@@ -71,7 +71,7 @@ def main():
     music     = PuckyMusic()
     listening = PuckyEars(
         on_speech_fn = lambda text: None,   # wired below after soul exists
-        mute_fn = lambda: speech.is_speaking,
+        mute_fn = lambda: speech.is_speaking or singer.is_singing,
     )
 
     atom    = BMOAtom(

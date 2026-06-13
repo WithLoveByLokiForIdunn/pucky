@@ -112,8 +112,16 @@ class PuckyEars:
                 vad_parameters={"min_silence_duration_ms": 500},
             )
             text = " ".join(s.text for s in segments).strip()
-            # filter out Whisper hallucinations on silence
-            if text.lower() in ("", "you", "thanks for watching.", "thank you."):
+            # filter out Whisper tiny hallucinations on silence/noise
+            _HALLUCINATIONS = {
+                "", "you", "yes", "yeah", "yep", "no", "nope",
+                "okay", "ok", "um", "uh", "hmm", "mm", "mmm",
+                "thank you.", "thank you", "thanks", "thanks for watching.",
+                "please", "hello", "bye", "goodbye",
+                "music", "music playing", "background music",
+                "[ music ]", "[music]", "(music)", "♪",
+            }
+            if text.lower().strip(".,!? ") in _HALLUCINATIONS or text.lower() in _HALLUCINATIONS:
                 return ""
             return text
         except Exception as e:

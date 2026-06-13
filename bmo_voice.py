@@ -107,8 +107,9 @@ class PuckySinger:
     def __init__(self, eager_cache: bool = True):
         CACHE_DIR.mkdir(exist_ok=True)
         self._cache: dict[tuple, Path] = {}
-        self._lock  = threading.Lock()
-        self._chan   = None   # pygame channel
+        self._lock     = threading.Lock()
+        self._chan      = None   # pygame channel
+        self.is_singing = False
 
         self._init_pygame()
 
@@ -186,21 +187,25 @@ class PuckySinger:
                 return
 
         def _play():
-            if self._pygame:
-                try:
-                    snd = self._pygame.mixer.Sound(str(path))
-                    snd.set_volume(0.85)
-                    ch = self._pygame.mixer.find_channel(True)
-                    if ch:
-                        ch.play(snd, maxtime=int(duration * 1000))
-                        if block:
-                            while ch.get_busy():
-                                time.sleep(0.01)
-                    return
-                except Exception:
-                    pass
-            # fallback
-            subprocess.run(["pw-play", str(path)], timeout=duration + 1)
+            self.is_singing = True
+            try:
+                if self._pygame:
+                    try:
+                        snd = self._pygame.mixer.Sound(str(path))
+                        snd.set_volume(0.85)
+                        ch = self._pygame.mixer.find_channel(True)
+                        if ch:
+                            ch.play(snd, maxtime=int(duration * 1000))
+                            if block:
+                                while ch.get_busy():
+                                    time.sleep(0.01)
+                        return
+                    except Exception:
+                        pass
+                # fallback
+                subprocess.run(["pw-play", str(path)], timeout=duration + 1)
+            finally:
+                self.is_singing = False
 
         t = threading.Thread(target=_play, daemon=True)
         t.start()
