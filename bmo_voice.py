@@ -84,21 +84,13 @@ def _process_sample(sample_name: str, midi_note: int,
         return out
 
     try:
-        sox_args = ["sox", str(src)]
-
-        # Noise reduction if we have a profile
-        if noise_prof and os.path.exists(noise_prof):
-            sox_args += ["--noisered"]   # placeholder — applied via chain below
-
-        sox_args += [str(out)]
-
-        # Noise reduction chain
-        chain = []
+        # Normalize first so silence detection works on quiet recordings,
+        # then trim leading silence, pitch-shift, clip to 1.5s, re-normalize.
+        chain = ["norm", "-3", "silence", "1", "0.05", "0.1%"]
         if base is not None:
             shift = (midi_note - base) * 100
-            chain += ["pitch", "-q", str(shift)]
-
-        chain += ["norm", "-3"]
+            chain += ["pitch", str(shift)]
+        chain += ["trim", "0", "1.5", "norm", "-3"]
 
         subprocess.run(
             ["sox", str(src), str(out)] + chain,
