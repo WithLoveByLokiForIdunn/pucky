@@ -1,7 +1,7 @@
 [Unit]
 Description=Pucky — Loki soul (Ollama world watcher)
 After=pucky.service ollama.service
-BindsTo=pucky.service
+Wants=ollama.service
 
 [Service]
 Type=simple
