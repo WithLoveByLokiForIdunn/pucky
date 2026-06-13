@@ -66,7 +66,7 @@ def main():
     memory    = BMOMemory()
     storage   = BMOStorage()
     speech    = PuckyVoice(who="pucky")
-    singer    = PuckySinger()
+    singer    = PuckySinger(eager_cache=False)
     shortterm = ShortTermMemory()
     music     = PuckyMusic()
     listening = PuckyEars(

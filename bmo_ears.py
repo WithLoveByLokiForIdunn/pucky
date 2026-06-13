@@ -25,7 +25,7 @@ CHUNK_SECS   = 0.5          # how often we sample for speech onset
 MAX_PHRASE   = 12.0         # max seconds to collect before forcing transcription
 SILENCE_SECS = 0.9          # silence after speech that ends a phrase
 SPEECH_RMS   = 0.002        # RMS threshold — below this is silence
-MODEL_SIZE   = "base"
+MODEL_SIZE   = "tiny"
 
 
 class PuckyEars:
