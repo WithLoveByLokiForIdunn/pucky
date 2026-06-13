@@ -1,0 +1,12 @@
+{
+  "pucky": {
+    "voice": "af_sky",
+    "speed": 1.238,
+    "pitch": 514
+  },
+  "loki": {
+    "voice": "af_heart",
+    "speed": 1.076,
+    "pitch": -300
+  }
+}

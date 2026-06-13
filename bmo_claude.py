@@ -139,9 +139,8 @@ class PuckyClaude:
         self._thread               = None
         self._last_autonomous_time = time.time()
 
-        # When billing/auth errors occur, back off for this long before retrying
-        self._api_backoff_until    = 0.0
-        self._API_BACKOFF_SECONDS  = 1800  # 30 minutes
+        # Set to True when billing/credit errors hit — signals pucky_full to swap souls
+        self.billing_failed        = False
 
         print("💜 Claude soul loaded.")
         if self._client:
@@ -289,9 +288,7 @@ If you feel quiet, a single soft line is enough."""
         if not self._client:
             return "<expression>neutral</expression><speak>...</speak>"
 
-        if time.time() < self._api_backoff_until:
-            mins = int((self._api_backoff_until - time.time()) / 60)
-            print(f"  ⏸️  Claude API in backoff — retrying in ~{mins}m")
+        if self.billing_failed:
             return "<expression>neutral</expression><speak>...</speak>"
 
         with self._lock:
@@ -318,9 +315,9 @@ If you feel quiet, a single soft line is enough."""
                 msg = str(e).lower()
                 if any(w in msg for w in ("credit", "balance", "billing", "payment",
                                           "quota", "insufficient")):
-                    self._api_backoff_until = time.time() + self._API_BACKOFF_SECONDS
+                    self.billing_failed = True
                     print(f"  💸 Claude API: {e}")
-                    print(f"     Backing off for {self._API_BACKOFF_SECONDS // 60} minutes.")
+                    print(f"     Credits exhausted — signalling soul swap to Ollama.")
                 else:
                     print(f"  ⚠️  Claude API error: {e}")
                 return "<expression>neutral</expression><speak>...</speak>"
@@ -384,6 +381,13 @@ If you feel quiet, a single soft line is enough."""
                 self.speech.say(words)
             except Exception as e:
                 print(f"  ⚠️  Speech: {e}")
+        elif not words:
+            sing_fn = getattr(self, "sing_fn", None)
+            if sing_fn:
+                try:
+                    sing_fn(expr, self.emotion)
+                except Exception:
+                    pass
 
         # Gently nudge emotion state to match what was expressed
         if self.emotion:

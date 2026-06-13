@@ -1,0 +1,20 @@
+[Unit]
+Description=Pucky — presence window
+After=pucky.service
+BindsTo=pucky.service
+
+[Service]
+Type=simple
+User=bmo
+WorkingDirectory=/home/bmo/pucky
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/bmo/.Xauthority
+ExecStart=/usr/bin/python3 /home/bmo/pucky/bmo_bubbles.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pucky-bubbles
+
+[Install]
+WantedBy=graphical.target

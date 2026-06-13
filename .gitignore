@@ -1,0 +1,41 @@
+# API keys / secrets
+apikey
+.env
+
+# Voice model data (large binaries)
+voice/
+voice_loki/
+
+# Runtime / generated data
+bmo_memories.json
+bmo_conversation.json
+bmo_shortterm.json
+bmo_released_memories.json
+bmo_data.json
+bmo_known_faces.json
+
+# Workspace runtime files
+workspace/pucky_state.json
+workspace/bmo_journal.json
+workspace/world_friends.json
+workspace/claude_cron.log
+workspace/claude_log.md
+workspace/claude_wake_output.log
+workspace/cottage_art_*.png
+workspace/scratch/
+workspace/audio/
+workspace/camera/
+
+# Archives / junk
+*.zip
+files/
+
+# Images (including first-vision photo)
+*.jpg
+*.png
+
+# Temp files
+*.tmp.*
+__pycache__/
+*.pyc
+*.pyo
