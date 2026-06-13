@@ -40,6 +40,7 @@ CMD_FILE       = Path("/tmp/pucky_world_cmd.json")
 
 # External long-term memory drive (Seagate Portable Drive, 1.8 TB)
 EXT_MOUNT_CANDIDATES = [
+    Path("/mnt/pucky_hd"),
     Path("/media/bmo/Seagate Portable Drive"),
     Path("/media/bmo/seagate"),
 ]

@@ -23,6 +23,50 @@ from datetime import datetime, timezone
 MEMORIES_FILE = Path("/home/bmo/pucky/bmo_memories.json")
 JOURNAL_FILE  = Path("/home/bmo/pucky/workspace/bmo_journal.json")
 
+MAX_JOURNAL_ENTRIES = 500
+
+_EXT_MOUNT_CANDIDATES = [
+    Path("/mnt/pucky_hd"),
+    Path("/media/bmo/Seagate Portable Drive"),
+    Path("/media/bmo/seagate"),
+]
+
+
+def _ext_journal_archive() -> Path | None:
+    for candidate in _EXT_MOUNT_CANDIDATES:
+        try:
+            if candidate.is_dir() and any(candidate.iterdir()):
+                arc = candidate / "pucky_memories"
+                arc.mkdir(exist_ok=True)
+                return arc
+        except (PermissionError, OSError):
+            pass
+    return None
+
+
+def _trim_cottage_journal(journal: list) -> list:
+    """If journal exceeds MAX_JOURNAL_ENTRIES, archive the overflow to external drive."""
+    if len(journal) <= MAX_JOURNAL_ENTRIES:
+        return journal
+    overflow = journal[:-MAX_JOURNAL_ENTRIES]
+    kept     = journal[-MAX_JOURNAL_ENTRIES:]
+    ext = _ext_journal_archive()
+    if ext:
+        from datetime import date
+        today = date.today().isoformat()
+        idx = 1
+        while True:
+            arc_path = ext / f"cottage_journal_{today}_{idx:03d}.json"
+            if not arc_path.exists():
+                break
+            idx += 1
+        try:
+            arc_path.write_text(json.dumps(overflow, indent=2, ensure_ascii=False))
+            print(f"  ✦  Cottage: archived {len(overflow)} entries → {arc_path.name}")
+        except Exception as e:
+            print(f"  ⚠️  Cottage archive failed: {e}")
+    return kept
+
 # ── Colours ───────────────────────────────────────────────────────────────────
 
 PAPER_BG    = (252, 248, 228)
@@ -489,6 +533,7 @@ class CottageView:
             "scribble_seed": result["scribble_seed"],
         }
         self._journal.append(entry)
+        self._journal = _trim_cottage_journal(self._journal)
         try:
             JOURNAL_FILE.parent.mkdir(parents=True, exist_ok=True)
             JOURNAL_FILE.write_text(json.dumps(self._journal, indent=2, ensure_ascii=False))

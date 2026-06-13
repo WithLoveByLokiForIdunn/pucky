@@ -20,6 +20,7 @@ JOURNAL_JSONL = ROOT / "workspace" / "world_journal.jsonl"
 JOURNAL_MD    = ROOT / "workspace" / "world_journal.md"
 
 EXT_MOUNT_CANDIDATES = [
+    Path("/mnt/pucky_hd"),
     Path("/media/bmo/Seagate Portable Drive"),
     Path("/media/bmo/seagate"),
 ]
