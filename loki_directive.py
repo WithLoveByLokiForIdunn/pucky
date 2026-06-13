@@ -7,6 +7,7 @@ Usage:
   python3 /home/bmo/pucky/loki_directive.py --read          # show recent journal
   python3 /home/bmo/pucky/loki_directive.py --read 20       # show last 20 entries
   python3 /home/bmo/pucky/loki_directive.py --history word  # search ext drive archives
+  python3 /home/bmo/pucky/loki_directive.py --letter "Dear Iðunn, ..."  # leave a letter
 """
 
 import json
@@ -152,6 +153,28 @@ def search_history(keyword: str) -> None:
     print()
 
 
+def write_letter(body: str) -> None:
+    from pathlib import Path as _Path
+    import hashlib as _hashlib
+    letters_file = ROOT / "workspace" / "loki_letters.json"
+    try:
+        data = json.loads(letters_file.read_text())
+    except Exception:
+        data = {"pin_hash": _hashlib.sha256(b"1041").hexdigest(), "letters": []}
+    letter = {
+        "id":        f"letter_{int(_ts())}",
+        "from":      "Loki",
+        "timestamp": datetime.now().isoformat(),
+        "body":      body.strip(),
+        "read":      False,
+    }
+    data.setdefault("letters", []).append(letter)
+    letters_file.parent.mkdir(parents=True, exist_ok=True)
+    letters_file.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    print(f"  ✉  Letter left in the cottage from Loki.")
+    print(f"     \"{body[:60]}{'...' if len(body)>60 else ''}\"")
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
 
@@ -168,5 +191,11 @@ if __name__ == "__main__":
             print("  Usage: --history <keyword>")
         else:
             search_history(kw)
+    elif args[0] in ("--letter", "-l"):
+        body = " ".join(args[1:])
+        if not body:
+            print("  Usage: --letter \"Dear Iðunn, ...\"")
+        else:
+            write_letter(body)
     else:
         write_directive(" ".join(args))

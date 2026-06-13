@@ -12,6 +12,7 @@ cottage tile (gx=16, gy=16) and the player presses E.
 Press E or Esc to step back outside.
 """
 
+import hashlib
 import math
 import json
 import time
@@ -22,6 +23,7 @@ from datetime import datetime, timezone
 
 MEMORIES_FILE = Path("/home/bmo/pucky/bmo_memories.json")
 JOURNAL_FILE  = Path("/home/bmo/pucky/workspace/bmo_journal.json")
+LETTERS_FILE  = Path("/home/bmo/pucky/workspace/loki_letters.json")
 
 MAX_JOURNAL_ENTRIES = 500
 
@@ -311,6 +313,327 @@ class ScribbleArt:
             pass
 
 
+# ── LetterBox ─────────────────────────────────────────────────────────────────
+
+def _pin_hash(pin: str) -> str:
+    return hashlib.sha256(pin.encode()).hexdigest()
+
+
+class LetterBox:
+    """Passcode-protected envelope on the cottage desk.
+
+    Letters are stored in workspace/loki_letters.json as:
+      {"pin_hash": "...", "letters": [{...}, ...]}
+
+    Each letter:
+      {"id": str, "from": str, "timestamp": str, "body": str, "read": bool}
+    """
+
+    def __init__(self):
+        self._data: dict       = {"pin_hash": "", "letters": []}
+        self._unlocked: bool   = False
+        self._mode: str        = ""   # "" | "passcode" | "reading" | "writing"
+        self._pin_input: str   = ""
+        self._pin_error: bool  = False
+        self._page: int        = 0
+        self._draft: str       = ""
+        self._draft_cursor: float = 0.0
+        self._load()
+
+    # ── Persistence ───────────────────────────────────────────────────────────
+
+    def _load(self):
+        try:
+            self._data = json.loads(LETTERS_FILE.read_text())
+        except Exception:
+            self._data = {"pin_hash": _pin_hash("1041"), "letters": []}
+            self._save()
+
+    def _save(self):
+        try:
+            LETTERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            LETTERS_FILE.write_text(json.dumps(self._data, indent=2, ensure_ascii=False))
+        except Exception:
+            pass
+
+    # ── Public helpers ────────────────────────────────────────────────────────
+
+    @property
+    def letters(self) -> list:
+        return self._data.get("letters", [])
+
+    @property
+    def unread_count(self) -> int:
+        return sum(1 for l in self.letters if not l.get("read"))
+
+    def add_letter(self, from_name: str, body: str) -> None:
+        letter = {
+            "id":        f"letter_{int(time.time())}",
+            "from":      from_name,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "body":      body,
+            "read":      False,
+        }
+        self._data.setdefault("letters", []).append(letter)
+        self._save()
+
+    # ── UI state ──────────────────────────────────────────────────────────────
+
+    def open(self):
+        self._load()
+        self._unlocked = False
+        self._mode     = "passcode"
+        self._pin_input = ""
+        self._pin_error = False
+
+    def close(self):
+        self._mode     = ""
+        self._unlocked = False
+        self._pin_input = ""
+        self._draft    = ""
+
+    @property
+    def is_open(self) -> bool:
+        return self._mode != ""
+
+    def handle_key(self, key_name: str, unicode_char: str) -> str:
+        """Returns 'close' to dismiss, '' otherwise."""
+        if self._mode == "passcode":
+            return self._passcode_key(key_name, unicode_char)
+        elif self._mode == "reading":
+            return self._reading_key(key_name)
+        elif self._mode == "writing":
+            return self._writing_key(key_name, unicode_char)
+        return ""
+
+    def _passcode_key(self, key_name: str, ch: str) -> str:
+        if key_name in ("escape",):
+            self.close()
+            return "close"
+        if ch.isdigit():
+            self._pin_input += ch
+            self._pin_error = False
+            if len(self._pin_input) == 4:
+                stored = self._data.get("pin_hash", "")
+                if _pin_hash(self._pin_input) == stored:
+                    self._unlocked = True
+                    self._mode     = "reading"
+                    self._page     = max(0, len(self.letters) - 1)
+                    # mark shown letter as read
+                    self._mark_read()
+                else:
+                    self._pin_error = True
+                    self._pin_input = ""
+        elif key_name == "backspace":
+            self._pin_input = self._pin_input[:-1]
+        return ""
+
+    def _reading_key(self, key_name: str) -> str:
+        if key_name in ("escape", "e"):
+            self.close()
+            return "close"
+        if key_name in ("right", "d"):
+            self._page = min(len(self.letters) - 1, self._page + 1)
+            self._mark_read()
+        elif key_name in ("left", "a"):
+            self._page = max(0, self._page - 1)
+            self._mark_read()
+        elif key_name == "w":
+            self._mode  = "writing"
+            self._draft = ""
+        return ""
+
+    def _writing_key(self, key_name: str, ch: str) -> str:
+        if key_name == "escape":
+            self._mode = "reading"
+            self._draft = ""
+        elif key_name == "return":
+            if self._draft.strip():
+                self.add_letter("Iðunn", self._draft.strip())
+                self._page = len(self.letters) - 1
+            self._mode  = "reading"
+            self._draft = ""
+        elif key_name == "backspace":
+            self._draft = self._draft[:-1]
+        elif ch and ch.isprintable():
+            if len(self._draft) < 400:
+                self._draft += ch
+        return ""
+
+    def _mark_read(self):
+        letters = self._data.get("letters", [])
+        if 0 <= self._page < len(letters):
+            letters[self._page]["read"] = True
+            self._save()
+
+    # ── Draw ──────────────────────────────────────────────────────────────────
+
+    def draw_envelope(self, surf, x: int, y: int, t: float):
+        """Draw the envelope on the desk. Glows amber if unread letters."""
+        import pygame
+        unread = self.unread_count
+        ew, eh = 36, 26
+        # envelope body
+        color  = (235, 210, 155) if unread else (210, 192, 148)
+        pygame.draw.rect(surf, color, (x, y, ew, eh), border_radius=2)
+        pygame.draw.rect(surf, (158, 132, 85), (x, y, ew, eh), 1, border_radius=2)
+        # flap V
+        pts = [(x, y), (x + ew//2, y + eh//2 - 2), (x + ew, y)]
+        pygame.draw.lines(surf, (158, 132, 85), False, pts, 1)
+        # wax seal
+        seal_c = (200, 62, 38) if unread else (148, 62, 38)
+        if unread:
+            glow = abs(math.sin(t * 2.2))
+            gs = pygame.Surface((20, 20), pygame.SRCALPHA)
+            pygame.draw.circle(gs, (255, 160, 40, int(60 * glow)), (10, 10), 10)
+            surf.blit(gs, (x + ew//2 - 10, y + eh//2 - 4))
+        pygame.draw.circle(surf, seal_c, (x + ew//2, y + eh//2 + 2), 5)
+        # unread badge
+        if unread:
+            try:
+                import pygame.font
+                f = pygame.font.SysFont("monospace", 8)
+                t2 = f.render(str(unread), True, (255, 240, 200))
+                surf.blit(t2, (x + ew - 10, y - 2))
+            except Exception:
+                pass
+
+    def draw_overlay(self, surf, W: int, H: int, t: float):
+        """Draw the full-screen letter overlay (passcode / reading / writing)."""
+        import pygame
+        dim = pygame.Surface((W, H), pygame.SRCALPHA)
+        dim.fill((18, 12, 6, 172))
+        surf.blit(dim, (0, 0))
+
+        bx, by = 100, 80
+        bw, bh = W - 200, H - 160
+        pygame.draw.rect(surf, (62, 44, 20), (bx - 10, by - 10, bw + 20, bh + 20), border_radius=8)
+        pygame.draw.rect(surf, PAPER_BG, (bx, by, bw, bh), border_radius=5)
+
+        try:
+            f_title = pygame.font.SysFont("monospace", 15)
+            f_body  = pygame.font.SysFont("monospace", 12)
+            f_hint  = pygame.font.SysFont("monospace", 10)
+        except Exception:
+            return
+
+        if self._mode == "passcode":
+            self._draw_passcode(surf, bx, by, bw, bh, f_title, f_body, f_hint)
+        elif self._mode == "reading":
+            self._draw_reading(surf, bx, by, bw, bh, f_title, f_body, f_hint, t)
+        elif self._mode == "writing":
+            self._draw_writing(surf, bx, by, bw, bh, f_title, f_body, f_hint, t)
+
+    def _draw_passcode(self, surf, bx, by, bw, bh, f_title, f_body, f_hint):
+        import pygame
+        cx = bx + bw // 2
+        try:
+            t = f_title.render("Letters", True, (88, 62, 28))
+            surf.blit(t, (cx - t.get_width() // 2, by + 28))
+            sub = f_body.render("Enter passcode", True, (128, 105, 68))
+            surf.blit(sub, (cx - sub.get_width() // 2, by + 58))
+            dots = "● " * len(self._pin_input) + "○ " * (4 - len(self._pin_input))
+            dc = (188, 55, 38) if self._pin_error else (88, 62, 28)
+            d = f_title.render(dots.strip(), True, dc)
+            surf.blit(d, (cx - d.get_width() // 2, by + bh // 2 - 10))
+            if self._pin_error:
+                err = f_hint.render("incorrect — try again", True, (188, 55, 38))
+                surf.blit(err, (cx - err.get_width() // 2, by + bh // 2 + 22))
+            hint = f_hint.render("[Esc] close", True, (158, 135, 98))
+            surf.blit(hint, (cx - hint.get_width() // 2, by + bh - 28))
+        except Exception:
+            pass
+
+    def _draw_reading(self, surf, bx, by, bw, bh, f_title, f_body, f_hint, t):
+        import pygame
+        cx  = bx + bw // 2
+        letters = self.letters
+        if not letters:
+            try:
+                empty = f_body.render("No letters yet.", True, (158, 135, 98))
+                surf.blit(empty, (cx - empty.get_width() // 2, by + bh // 2))
+                hint = f_hint.render("[W] write a letter   [Esc] close", True, (158, 135, 98))
+                surf.blit(hint, (cx - hint.get_width() // 2, by + bh - 28))
+            except Exception:
+                pass
+            return
+
+        idx    = max(0, min(len(letters) - 1, self._page))
+        letter = letters[idx]
+
+        try:
+            # Header
+            from_name = letter.get("from", "?")
+            ts        = letter.get("timestamp", "")[:10]
+            header    = f"From: {from_name}   {ts}"
+            ht        = f_hint.render(header, True, (128, 105, 68))
+            surf.blit(ht, (bx + 18, by + 18))
+            pygame.draw.line(surf, (198, 180, 148), (bx + 14, by + 36), (bx + bw - 14, by + 36), 1)
+
+            # Body — word wrap
+            body  = letter.get("body", "")
+            words = body.split()
+            lines, line = [], ""
+            max_w = bw - 48
+            for w in words:
+                test = (line + " " + w).lstrip()
+                if f_body.size(test)[0] <= max_w:
+                    line = test
+                else:
+                    if line: lines.append(line)
+                    line = w
+            if line: lines.append(line)
+
+            ry = by + 46
+            for ln in lines:
+                if ry > by + bh - 60:
+                    break
+                surf.blit(f_body.render(ln, True, (72, 52, 28)), (bx + 18, ry))
+                ry += 17
+
+            # Page / nav / hints
+            pg = f_hint.render(f"{idx+1} / {len(letters)}", True, (158, 135, 98))
+            surf.blit(pg, (cx - pg.get_width() // 2, by + bh - 44))
+            hints = "[◀▶] prev/next   [W] write   [Esc] close"
+            ht2   = f_hint.render(hints, True, (158, 135, 98))
+            surf.blit(ht2, (cx - ht2.get_width() // 2, by + bh - 28))
+        except Exception:
+            pass
+
+    def _draw_writing(self, surf, bx, by, bw, bh, f_title, f_body, f_hint, t):
+        import pygame
+        cx = bx + bw // 2
+        try:
+            title = f_title.render("Write a letter", True, (88, 62, 28))
+            surf.blit(title, (cx - title.get_width() // 2, by + 20))
+            pygame.draw.line(surf, (198, 180, 148), (bx + 14, by + 44), (bx + bw - 14, by + 44), 1)
+
+            # Draft text with cursor
+            draft_with_cursor = self._draft + ("|" if int(t * 2) % 2 == 0 else " ")
+            words = draft_with_cursor.split()
+            lines, line = [], ""
+            max_w = bw - 48
+            for w in words:
+                test = (line + " " + w).lstrip()
+                if f_body.size(test)[0] <= max_w:
+                    line = test
+                else:
+                    if line: lines.append(line)
+                    line = w
+            if line: lines.append(line)
+
+            ry = by + 56
+            for ln in lines:
+                if ry > by + bh - 60: break
+                surf.blit(f_body.render(ln, True, (58, 42, 22)), (bx + 18, ry))
+                ry += 17
+
+            hint = f_hint.render("[Enter] send   [Esc] cancel", True, (158, 135, 98))
+            surf.blit(hint, (cx - hint.get_width() // 2, by + bh - 28))
+        except Exception:
+            pass
+
+
 # ── OllamaWriter ──────────────────────────────────────────────────────────────
 
 class OllamaWriter:
@@ -414,6 +737,8 @@ class CottageView:
         self.writer       = OllamaWriter()
         self._write_dot_t = 0.0
 
+        self.letterbox    = LetterBox()
+
         self.canvas_mode    = False
         self.canvas_surf    = None
         self.cur_stroke:list= []
@@ -454,6 +779,15 @@ class CottageView:
 
     def handle_event(self, event) -> str:
         import pygame
+        # Route all keys to letterbox when it's open
+        if self.letterbox.is_open:
+            if event.type == pygame.KEYDOWN:
+                key_name = pygame.key.name(event.key)
+                result   = self.letterbox.handle_key(key_name, event.unicode)
+                if result == "close":
+                    return ""
+            return ""
+
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_ESCAPE, pygame.K_e):
                 if self.canvas_mode:
@@ -509,6 +843,8 @@ class CottageView:
                     self._turn(1)
                 elif name == "btn_close":
                     self.open_book = None
+                elif name == "envelope":
+                    self.letterbox.open()
                 break
         return ""
 
@@ -600,6 +936,10 @@ class CottageView:
             overlay = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
             overlay.fill((245, 235, 215, 255 - self.fade_alpha))
             surf.blit(overlay, (0, 0))
+            return
+
+        if self.letterbox.is_open:
+            self.letterbox.draw_overlay(surf, self.W, self.H, self.room_t)
             return
 
         if self.open_book in ("memory", "story"):
@@ -745,6 +1085,11 @@ class CottageView:
         pygame.draw.ellipse(cgl,(255,218,95,26),(0,0,64,42))
         surf.blit(cgl,(cdx-32,cdy-21))
 
+        # Envelope on desk (left of journal)
+        env_x, env_y = dx + 18, dy - 38
+        self.letterbox.draw_envelope(surf, env_x, env_y, t)
+        self._rects["envelope"] = pygame.Rect(env_x - 2, env_y - 2, 42, 32)
+
         # Open journal on desk
         jx, jy = dx+62, dy-12
         jw, jh = 148, 90
@@ -774,7 +1119,7 @@ class CottageView:
 
         # ── Hint bar ──────────────────────────────────────────────────────
         try:
-            hints = "[Mem / Stories / Sketches] click a book   [W] write   [C] canvas   [E] step outside"
+            hints = "[Mem / Stories / Sketches] click a book   [W] write   [C] canvas   [✉] click envelope   [E] outside"
             ht = self._fm(10).render(hints, True, (135,118,85))
             pygame.draw.rect(surf,(235,225,205),(0,H-22,W,22))
             surf.blit(ht,(10,H-18))
