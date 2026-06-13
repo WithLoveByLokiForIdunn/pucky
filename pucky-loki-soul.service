@@ -1,0 +1,19 @@
+[Unit]
+Description=Pucky — Loki soul (Ollama world watcher)
+After=pucky.service ollama.service
+BindsTo=pucky.service
+
+[Service]
+Type=simple
+User=bmo
+WorkingDirectory=/home/bmo/pucky
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -u /home/bmo/pucky/loki_soul.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pucky-loki-soul
+
+[Install]
+WantedBy=graphical.target
