@@ -41,8 +41,10 @@ CMD_FILE       = Path("/tmp/pucky_world_cmd.json")
 # ── Ollama ────────────────────────────────────────────────────────────────────
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL      = "llama3.2:3b"
-TICK       = 14.0
-CONTEXT_ENTRIES = 8   # recent journal lines fed into each prompt
+TICK            = 14.0
+CONTEXT_ENTRIES = 8    # recent journal lines fed into each prompt
+MAX_JOURNAL     = 500  # lines kept in JSONL before trimming (~2 h of history)
+TRIM_EVERY      = 50   # trim check every N ticks (not every tick)
 
 # ── World geography ───────────────────────────────────────────────────────────
 _LANDMARKS = [
@@ -95,13 +97,36 @@ def _hm() -> str:
 
 # ── Journal I/O ───────────────────────────────────────────────────────────────
 
+def _trim_journal() -> None:
+    """Keep only the last MAX_JOURNAL lines in the JSONL file."""
+    if not JOURNAL_JSONL.exists():
+        return
+    lines = JOURNAL_JSONL.read_text().splitlines()
+    if len(lines) <= MAX_JOURNAL:
+        return
+    kept = lines[-MAX_JOURNAL:]
+    JOURNAL_JSONL.write_text("\n".join(kept) + "\n")
+    # Rotate the markdown too: rename to dated archive, start fresh
+    if JOURNAL_MD.exists():
+        from datetime import date
+        archive = JOURNAL_MD.with_name(
+            f"world_journal_{date.today().isoformat()}.md"
+        )
+        # If archive already exists today, just truncate the live file
+        if not archive.exists():
+            JOURNAL_MD.rename(archive)
+        else:
+            JOURNAL_MD.write_text("")
+
+
 def _journal_append(entry: dict) -> None:
     entry.setdefault("ts", _ts())
     line = json.dumps(entry, ensure_ascii=False)
     with JOURNAL_JSONL.open("a") as f:
         f.write(line + "\n")
-    # Also append to human narrative
-    _narrative_append(entry)
+    # Only write meaningful entries to the narrative (skip routine executions)
+    if entry.get("type") not in ("execution", "directive_executed"):
+        _narrative_append(entry)
 
 
 def _narrative_append(entry: dict) -> None:
@@ -126,16 +151,10 @@ def _narrative_append(entry: dict) -> None:
         if reason:
             parts.append(f"({reason})")
         text = f"\n### {t} — Loki [{src}]\n{' — '.join(parts)}\n"
-    elif kind == "execution":
-        status = entry.get("status", "ok")
-        d_note = " — directive fulfilled" if entry.get("directive_executed") else ""
-        text   = f"*executed: {status}{d_note}*\n"
     elif kind == "loki_directive":
         src  = entry.get("src", "Claude")
         body = entry.get("text", "")
         text = f"\n### {t} — Directive [{src}]\n> {body}\n"
-    elif kind == "directive_executed":
-        text = f"*directive from {entry.get('directive_ts', '?'):.0f} fulfilled*\n"
     elif kind == "idunn_speech":
         text = f"\n### {t} — Iðunn speaks\n\"{entry.get('text','')}\"\n"
     elif kind == "note":
@@ -415,6 +434,8 @@ def run() -> None:
     tick_n = 0
     while True:
         tick_n += 1
+        if tick_n % TRIM_EVERY == 0:
+            _trim_journal()
         try:
             state, positions = _read_world()
             if not positions:
