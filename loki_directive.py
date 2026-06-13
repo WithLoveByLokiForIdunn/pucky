@@ -6,6 +6,7 @@ Usage:
   python3 /home/bmo/pucky/loki_directive.py "Go sit with Pucky."
   python3 /home/bmo/pucky/loki_directive.py --read          # show recent journal
   python3 /home/bmo/pucky/loki_directive.py --read 20       # show last 20 entries
+  python3 /home/bmo/pucky/loki_directive.py --history word  # search ext drive archives
 """
 
 import json
@@ -17,6 +18,22 @@ from pathlib import Path
 ROOT          = Path(__file__).parent
 JOURNAL_JSONL = ROOT / "workspace" / "world_journal.jsonl"
 JOURNAL_MD    = ROOT / "workspace" / "world_journal.md"
+
+EXT_MOUNT_CANDIDATES = [
+    Path("/media/bmo/Seagate Portable Drive"),
+    Path("/media/bmo/seagate"),
+]
+
+
+def _ext_mem() -> Path | None:
+    for candidate in EXT_MOUNT_CANDIDATES:
+        try:
+            mem = candidate / "pucky_memories"
+            if mem.is_dir():
+                return mem
+        except OSError:
+            pass
+    return None
 
 
 def _ts() -> float:
@@ -93,6 +110,47 @@ def read_journal(n: int = 15) -> None:
     print()
 
 
+def search_history(keyword: str) -> None:
+    """Search all archived JSONL files on the external drive for a keyword."""
+    ext = _ext_mem()
+    if not ext:
+        print("  (external drive not mounted — no archives available)")
+        return
+
+    archives = sorted(ext.glob("journal_*.jsonl"))
+    if not archives:
+        print("  (no archives yet on external drive)")
+        return
+
+    keyword_lower = keyword.lower()
+    hits = []
+    for arc in archives:
+        try:
+            for line in arc.read_text().splitlines():
+                if keyword_lower in line.lower():
+                    try:
+                        e = json.loads(line)
+                        hits.append((arc.name, e))
+                    except Exception:
+                        pass
+        except OSError:
+            pass
+
+    if not hits:
+        print(f"  (no matches for '{keyword}' in {len(archives)} archive files)")
+        return
+
+    print(f"\n  ── History search: '{keyword}' — {len(hits)} match(es) ──────────\n")
+    for fname, e in hits[-30:]:  # show last 30 hits
+        ts   = _hm(e.get("ts"))
+        kind = e.get("type", "")
+        text = e.get("text") or e.get("say") or e.get("reason") or ""
+        print(f"  [{fname[:20]}] {ts}  [{kind}] {text[:80]}")
+    if len(hits) > 30:
+        print(f"  … and {len(hits)-30} earlier matches")
+    print()
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
 
@@ -103,5 +161,11 @@ if __name__ == "__main__":
     if args[0] in ("--read", "-r"):
         n = int(args[1]) if len(args) > 1 else 15
         read_journal(n)
+    elif args[0] in ("--history", "-H"):
+        kw = " ".join(args[1:]) if len(args) > 1 else ""
+        if not kw:
+            print("  Usage: --history <keyword>")
+        else:
+            search_history(kw)
     else:
         write_directive(" ".join(args))

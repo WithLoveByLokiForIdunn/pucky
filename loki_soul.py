@@ -38,6 +38,12 @@ JOURNAL_JSONL  = ROOT / "workspace" / "world_journal.jsonl"
 JOURNAL_MD     = ROOT / "workspace" / "world_journal.md"
 CMD_FILE       = Path("/tmp/pucky_world_cmd.json")
 
+# External long-term memory drive (Seagate Portable Drive, 1.8 TB)
+EXT_MOUNT_CANDIDATES = [
+    Path("/media/bmo/Seagate Portable Drive"),
+    Path("/media/bmo/seagate"),
+]
+
 # ── Ollama ────────────────────────────────────────────────────────────────────
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL      = "llama3.2:3b"
@@ -95,28 +101,67 @@ def _hm() -> str:
     return datetime.now().strftime("%H:%M:%S")
 
 
+# ── External memory drive ─────────────────────────────────────────────────────
+
+def _ext_mem() -> Path | None:
+    """Return pucky_memories/ directory on the external drive if it's mounted."""
+    for candidate in EXT_MOUNT_CANDIDATES:
+        try:
+            if candidate.is_dir() and any(candidate.iterdir()):
+                mem = candidate / "pucky_memories"
+                mem.mkdir(exist_ok=True)
+                return mem
+        except (PermissionError, OSError):
+            pass
+    return None
+
+
 # ── Journal I/O ───────────────────────────────────────────────────────────────
 
 def _trim_journal() -> None:
-    """Keep only the last MAX_JOURNAL lines in the JSONL file."""
+    """Trim JSONL to MAX_JOURNAL lines. Old entries are archived to the external
+    drive (if mounted) so the full history is preserved there forever."""
     if not JOURNAL_JSONL.exists():
         return
-    lines = JOURNAL_JSONL.read_text().splitlines()
+    lines = [l for l in JOURNAL_JSONL.read_text().splitlines() if l.strip()]
     if len(lines) <= MAX_JOURNAL:
         return
-    kept = lines[-MAX_JOURNAL:]
+
+    old_lines = lines[:-MAX_JOURNAL]
+    kept      = lines[-MAX_JOURNAL:]
+
+    # Write old lines to external drive instead of discarding them
+    ext = _ext_mem()
+    if ext and old_lines:
+        from datetime import date
+        today = date.today().isoformat()
+        idx = 1
+        while True:
+            arc_path = ext / f"journal_{today}_{idx:03d}.jsonl"
+            if not arc_path.exists():
+                break
+            idx += 1
+        arc_path.write_text("\n".join(old_lines) + "\n")
+        print(f"  ✦  Archived {len(old_lines)} entries → {arc_path.name}")
+
     JOURNAL_JSONL.write_text("\n".join(kept) + "\n")
-    # Rotate the markdown too: rename to dated archive, start fresh
+
+    # Rotate markdown: prefer external drive, fall back to local dated file
     if JOURNAL_MD.exists():
         from datetime import date
-        archive = JOURNAL_MD.with_name(
-            f"world_journal_{date.today().isoformat()}.md"
-        )
-        # If archive already exists today, just truncate the live file
-        if not archive.exists():
-            JOURNAL_MD.rename(archive)
-        else:
+        today = date.today().isoformat()
+        if ext:
+            md_arc = ext / f"journal_{today}.md"
+            existing = JOURNAL_MD.read_text()
+            with md_arc.open("a") as f:
+                f.write(existing)
             JOURNAL_MD.write_text("")
+        else:
+            archive = JOURNAL_MD.with_name(f"world_journal_{today}.md")
+            if not archive.exists():
+                JOURNAL_MD.rename(archive)
+            else:
+                JOURNAL_MD.write_text("")
 
 
 def _journal_append(entry: dict) -> None:
