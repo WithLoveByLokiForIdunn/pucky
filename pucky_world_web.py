@@ -242,8 +242,9 @@ function conn() {
     if (m.type === 'frame') {
       const img = document.getElementById('wi');
       const nf  = document.getElementById('nf');
-      img.src   = 'data:image/jpeg;base64,' + m.data;
-      if (img.style.display === 'none') { img.style.display = ''; nf.style.display = 'none'; }
+      img.src          = 'data:image/jpeg;base64,' + m.data;
+      img.style.display = 'block';
+      nf.style.display  = 'none';
     }
   };
   ws.onerror = () => ws.close();
