@@ -30,6 +30,13 @@ from pathlib import Path
 
 import requests
 
+# Shared Ollama lock (prevents collision with bmo_local.py)
+try:
+    from bmo_local import _acquire_ollama_lock, _release_ollama_lock
+except ImportError:
+    def _acquire_ollama_lock(): pass
+    def _release_ollama_lock(): pass
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 ROOT           = Path(__file__).parent
 POSITIONS_FILE = ROOT / "workspace" / "world_positions.json"
@@ -274,16 +281,19 @@ def _read_world() -> tuple[dict, dict]:
 
 def _ask(prompt: str) -> str | None:
     try:
+        _acquire_ollama_lock()
         r = requests.post(OLLAMA_URL, json={
             "model":   MODEL,
             "messages": [{"role": "user", "content": prompt}],
             "stream":  False,
             "options": {"temperature": 0.78, "num_predict": 110},
-        }, timeout=28)
+        }, timeout=90)
         if r.status_code == 200:
             return r.json()["message"]["content"].strip()
     except Exception as e:
         print(f"  ⚠️  Ollama: {e}")
+    finally:
+        _release_ollama_lock()
     return None
 
 

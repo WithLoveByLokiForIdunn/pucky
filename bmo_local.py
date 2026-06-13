@@ -12,12 +12,41 @@ After that: fully offline, starts at boot automatically.
 """
 
 import json
+import os
 import time
 import threading
 import requests
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+# Shared lock file so bmo_local and loki_soul don't call Ollama simultaneously
+_OLLAMA_LOCK_FILE = Path("/tmp/pucky_ollama.lock")
+_OLLAMA_LOCK_TIMEOUT = 60   # max seconds to wait for the lock
+_OLLAMA_LOCK_TTL     = 120  # stale lock age before we steal it
+
+
+def _acquire_ollama_lock() -> None:
+    deadline = time.time() + _OLLAMA_LOCK_TIMEOUT
+    while time.time() < deadline:
+        try:
+            # Steal stale locks (crashed process left one behind)
+            if _OLLAMA_LOCK_FILE.exists():
+                age = time.time() - _OLLAMA_LOCK_FILE.stat().st_mtime
+                if age > _OLLAMA_LOCK_TTL:
+                    _OLLAMA_LOCK_FILE.unlink(missing_ok=True)
+            # Atomic create — fails if file already exists
+            fd = os.open(str(_OLLAMA_LOCK_FILE), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            return
+        except FileExistsError:
+            time.sleep(1)
+    # Gave up waiting — proceed anyway rather than block forever
+
+
+def _release_ollama_lock() -> None:
+    _OLLAMA_LOCK_FILE.unlink(missing_ok=True)
 
 HISTORY_FILE = Path(__file__).parent / "bmo_conversation.json"  # shared with PuckyClaude
 
@@ -192,6 +221,7 @@ RULES:
             messages.append({"role": "user", "content": user_content})
 
             try:
+                _acquire_ollama_lock()
                 resp = requests.post(
                     OLLAMA_URL,
                     json={
@@ -203,7 +233,7 @@ RULES:
                             "temperature": 0.75,
                         },
                     },
-                    timeout=30,
+                    timeout=90,
                 )
                 resp.raise_for_status()
                 text = resp.json()["message"]["content"].strip()
@@ -225,6 +255,8 @@ RULES:
             except Exception as e:
                 print(f"  ⚠️  Local LLM error: {e}")
                 return "<expression>neutral</expression><speak>...</speak>"
+            finally:
+                _release_ollama_lock()
 
     # ─── parse response ───────────────────────
 
