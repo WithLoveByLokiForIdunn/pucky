@@ -179,12 +179,18 @@ class BMOMemory:
                 self.released = []
 
     def _save(self):
-        with open(MEMORY_FILE, "w") as f:
-            json.dump([asdict(m) for m in self.memories], f, indent=2, ensure_ascii=False)
+        try:
+            with open(MEMORY_FILE, "w") as f:
+                json.dump([asdict(m) for m in self.memories], f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"  ⚠️  Memory save error: {e}")
 
     def _save_releases(self):
-        with open(RELEASE_LOG, "w") as f:
-            json.dump([asdict(r) for r in self.released], f, indent=2, ensure_ascii=False)
+        try:
+            with open(RELEASE_LOG, "w") as f:
+                json.dump([asdict(r) for r in self.released], f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"  ⚠️  Release log save error: {e}")
 
     def storage_status(self) -> dict:
         by_tier = {"core": [], "warm": [], "impression": []}
@@ -320,7 +326,6 @@ class BMOMemory:
             reason = f"Not recalled in {m.days_since_recalled():.0f} days (threshold: {TIER_FADE_DAYS[m.tier]})."
             print(f"     \"{m.description[:50]}\"")
             self._release(m, reason, felt)
-        self.memories = [m for m in self.memories if m not in faded]
         self._save()
 
     def _find(self, memory_id: str) -> Optional[Memory]:

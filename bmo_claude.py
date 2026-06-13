@@ -307,6 +307,7 @@ If you feel quiet, a single soft line is enough."""
                 # Append to persistent history
                 self.history.append({"role": "user",      "content": user_content})
                 self.history.append({"role": "assistant",  "content": text})
+                self.history = self.history[-200:]
                 self._save_history()
 
                 return text

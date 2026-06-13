@@ -63,8 +63,11 @@ def _load_data() -> dict:
 
 def _save_data(data: dict):
     """Save BMO's persistent data to disk."""
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    try:
+        with open(DATA_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f"  ⚠️  Life data save error: {e}")
 
 
 # ─────────────────────────────────────────────
@@ -188,8 +191,7 @@ class BMOLife:
                 self.data.get("interaction_count", 0) + 1
             self.data["last_interaction"] = datetime.now(
                 timezone.utc).isoformat()
-
-        _save_data(self.data)
+            _save_data(self.data)
 
         if was_away:
             # They came back — big relief moment, start anxiety window

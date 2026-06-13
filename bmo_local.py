@@ -203,7 +203,7 @@ RULES:
                             "temperature": 0.75,
                         },
                     },
-                    timeout=180,
+                    timeout=30,
                 )
                 resp.raise_for_status()
                 text = resp.json()["message"]["content"].strip()
@@ -214,6 +214,7 @@ RULES:
 
                 self.history.append({"role": "user",      "content": user_content})
                 self.history.append({"role": "assistant", "content": text})
+                self.history = self.history[-200:]
                 self._save_history()
 
                 return text

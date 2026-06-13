@@ -14,12 +14,14 @@ inner voice was quiet.
 
 import json
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 SHORTTERM_FILE = Path(__file__).parent / "bmo_shortterm.json"
 MAX_ENTRIES    = 100   # rolling buffer — oldest fall off
 PAGE_SIZE      = 10    # entries per "page"
+FLUSH_INTERVAL = 5.0   # seconds between disk writes
 
 
 class ShortTermMemory:
@@ -39,10 +41,13 @@ class ShortTermMemory:
     def __init__(self):
         self._lock    = threading.Lock()
         self._entries = []
+        self._dirty   = False
         self._load()
         n = len(self._entries)
         p = self.page_count()
         print(f"📋 Short-term memory: {n} entries ({p} page{'s' if p != 1 else ''}).")
+        self._flush_thread = threading.Thread(target=self._flush_loop, daemon=True)
+        self._flush_thread.start()
 
     # ─── write ────────────────────────────────
 
@@ -54,7 +59,7 @@ class ShortTermMemory:
             self._entries.append({"ts": ts, "text": f"{label}{text}"})
             if len(self._entries) > MAX_ENTRIES:
                 self._entries = self._entries[-MAX_ENTRIES:]
-            self._save_locked()
+            self._dirty = True
 
     # ─── read ─────────────────────────────────
 
@@ -83,6 +88,7 @@ class ShortTermMemory:
     def clear(self) -> None:
         with self._lock:
             self._entries = []
+            self._dirty = False
             self._save_locked()
         print("📋 Short-term memory cleared.")
 
@@ -91,6 +97,15 @@ class ShortTermMemory:
             return len(self._entries)
 
     # ─── persistence ──────────────────────────
+
+    def _flush_loop(self):
+        """Background thread: flush to disk every FLUSH_INTERVAL seconds if dirty."""
+        while True:
+            time.sleep(FLUSH_INTERVAL)
+            with self._lock:
+                if self._dirty:
+                    self._save_locked()
+                    self._dirty = False
 
     def _save_locked(self):
         try:

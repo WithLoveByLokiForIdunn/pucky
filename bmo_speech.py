@@ -146,7 +146,7 @@ class PuckyVoice:
                         play_file = raw
                     subprocess.run(
                         ["pw-play", play_file],
-                        timeout=60
+                        timeout=15
                     )
                 finally:
                     for p in [raw, out]:
