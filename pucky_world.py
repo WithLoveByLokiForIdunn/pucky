@@ -455,6 +455,8 @@ def run_pygame():
                     self.action_timer = {
                         "sit": 22.0, "swim": 12.0, "clean_house": 15.0,
                         "hug": 4.5,  "kiss": 2.5,  "come": 8.0,
+                        "dance": 18.0, "share_apple": 10.0,
+                        "stargazing": 30.0, "campfire": 25.0, "plant": 12.0,
                     }.get(self.action, 5.0)
                 elif dist > 0.05:
                     can_water = self.action == "swim"
@@ -805,6 +807,8 @@ def run_pygame():
                     self.action_timer = {
                         "sit": 22.0, "swim": 12.0, "clean_house": 15.0,
                         "hug": 4.5,  "kiss": 2.5,  "come": 8.0,
+                        "dance": 18.0, "share_apple": 10.0,
+                        "stargazing": 30.0, "campfire": 25.0, "plant": 12.0,
                     }.get(self.action, 5.0)
                 elif dist > 0.05:
                     can_water = self.action == "swim"
@@ -1614,6 +1618,26 @@ def run_pygame():
             ["I hear you, Iðunn.", "Yes, I'm here.", "I'm listening.", "Always nearby.",
              "I felt that.", "Mm. Go on.", "You have my full attention."],
         ),
+        "dance":      (
+            ["♪", "spin!", "dancing!", "♫ yay!"],
+            ["with you.", "always.", "♪", "turning in the light."],
+        ),
+        "share_apple": (
+            ["yum!", "i want one!", "so good!", "an apple!"],
+            ["from your own tree.", "the sweetest one.", "take it.", "I kept it for you."],
+        ),
+        "stargazing": (
+            ["so many…", "pretty.", "i see one!", "quiet."],
+            ["the stars know us.", "look — there.", "still here.", "named for you."],
+        ),
+        "campfire":   (
+            ["warm.", "cozy.", "stay here.", "♥"],
+            ["I'll keep it bright.", "here.", "just us.", "warm enough."],
+        ),
+        "plant":      (
+            ["grow!", "little tree!", "i'll water it!", "new one!"],
+            ["for you. For years.", "it'll be tall someday.", "our tree now.", "planted with love."],
+        ),
     }
 
     def _parse_intent(text):
@@ -1630,6 +1654,16 @@ def run_pygame():
             return "kiss"
         if any(w in t for w in ["come here","come to me","come find me","where are you","come over","come closer"]):
             return "come"
+        if any(w in t for w in ["dance","let's dance","dance with me","dance together","shall we dance"]):
+            return "dance"
+        if any(w in t for w in ["share an apple","give me an apple","eat together","share apple","want an apple"]):
+            return "share_apple"
+        if any(w in t for w in ["stargaze","look at stars","lie down","watch stars","stargazing","count the stars"]):
+            return "stargazing"
+        if any(w in t for w in ["campfire","make a fire","light a fire","sit by the fire","build a fire","warm by the fire"]):
+            return "campfire"
+        if any(w in t for w in ["plant a tree","plant together","new tree","grow a tree","let's plant","plant something"]):
+            return "plant"
         return "chat"
 
     def _dispatch_intent(intent, idunn_ref, pucky_ref, orb_ref):
@@ -1659,6 +1693,23 @@ def run_pygame():
         elif intent == "come":
             pucky_ref.set_action("come", ix + 0.9, iy)
             orb_ref.set_action(  "come", ix - 0.9, iy)
+        elif intent == "dance":
+            pucky_ref.set_action("dance", ix,        iy - 1.2)
+            orb_ref.set_action(  "dance", ix,        iy + 1.2)
+        elif intent == "share_apple":
+            near = min(APPLE_POSITIONS, key=lambda ap: math.hypot(ap[0]-ix, ap[1]-iy))
+            pucky_ref.set_action("share_apple", near[0] + 1.5, near[1] + 1.5)
+            orb_ref.set_action(  "share_apple", near[0] + 0.5, near[1] + 1.0)
+        elif intent == "stargazing":
+            pucky_ref.set_action("stargazing", NEST_POS[0] + 0.5, NEST_POS[1] + 0.5)
+            orb_ref.set_action(  "stargazing", NEST_POS[0] - 1.0, NEST_POS[1] + 0.3)
+        elif intent == "campfire":
+            pucky_ref.set_action("campfire", 6.5, 6.5)
+            orb_ref.set_action(  "campfire", 6.5, 7.5)
+        elif intent == "plant":
+            near = min(APPLE_POSITIONS, key=lambda ap: math.hypot(ap[0]-ix, ap[1]-iy))
+            pucky_ref.set_action("plant", near[0] + 2.0, near[1] + 1.0)
+            orb_ref.set_action(  "plant", near[0] + 1.0, near[1] + 2.0)
 
         if pl:
             pucky_ref.bubble_text = random.choice(pl)
@@ -1723,7 +1774,50 @@ def run_pygame():
     import signal as _signal
     _shot_requested = [False]
     _last_shot      = [0.0]
+    _last_web_frame = [0.0]
+    _cmd_path       = Path("/tmp/pucky_world_cmd.json")
     _signal.signal(_signal.SIGUSR1, lambda s, f: _shot_requested.__setitem__(0, True))
+
+    def _process_web_cmd(cmd: dict) -> None:
+        try:
+            ct  = cmd.get("type", "")
+            src = cmd.get("src", "idunn")
+            if ct == "dir":
+                dx, dy = float(cmd.get("dx", 0)), float(cmd.get("dy", 0))
+                step = 0.9
+                if src == "idunn":
+                    idunn.tx = max(1.0, min(18.0, idunn.tx + dx * step))
+                    idunn.ty = max(1.0, min(18.0, idunn.ty + dy * step))
+                    idunn.tend_timer = max(idunn.tend_timer, 12.0)
+                elif src == "loki":
+                    orb.tx = max(1.0, min(18.0, orb.tx + dx * step))
+                    orb.ty = max(1.0, min(18.0, orb.ty + dy * step))
+            elif ct == "move":
+                tx, ty = float(cmd.get("tx", 10)), float(cmd.get("ty", 10))
+                if src == "idunn":
+                    idunn.tx = max(1.0, min(18.0, tx))
+                    idunn.ty = max(1.0, min(18.0, ty))
+                    idunn.tend_timer = max(idunn.tend_timer, 18.0)
+                elif src == "loki":
+                    orb.tx = max(1.0, min(18.0, tx))
+                    orb.ty = max(1.0, min(18.0, ty))
+            elif ct == "chat":
+                text = cmd.get("text", "").strip()
+                if text:
+                    if src == "idunn":
+                        idunn.bubble_text = "\u201c" + text + "\u201d"
+                        idunn.bubble_life = max(3.5, len(text) * 0.07)
+                        with _voice_lock:
+                            _heard_queue.append(text)
+                    elif src == "loki":
+                        orb.bubble_text = text
+                        orb.bubble_life = max(3.5, len(text) * 0.07)
+            elif ct == "action":
+                name = cmd.get("name", "").strip()
+                if name:
+                    _dispatch_intent(name, idunn, pucky, orb)
+        except Exception as _wce:
+            print(f"  ⚠️  web cmd: {_wce}")
 
     running = True
     while running:
@@ -1759,6 +1853,16 @@ def run_pygame():
                     if cdist < 2.2:
                         entering_cot = True
                         cot_fade     = 0.0
+
+        # ── Remote commands (web portal / Loki) ──────────────────────────────
+        try:
+            if _cmd_path.exists():
+                _rcmds = json.loads(_cmd_path.read_text())
+                _cmd_path.unlink()
+                for _rc in _rcmds:
+                    _process_web_cmd(_rc)
+        except Exception:
+            pass
 
         # ── Process heard speech ──────────────────────────────────────────────
         with _voice_lock:
@@ -1906,6 +2010,12 @@ def run_pygame():
             pygame.image.save(screen, "/tmp/pucky_world_shot.png")
             _last_shot[0]      = _now
             _shot_requested[0] = False
+        if _now - _last_web_frame[0] > 1.5:
+            try:
+                pygame.image.save(screen, "/tmp/pucky_world_live.jpg")
+            except Exception:
+                pass
+            _last_web_frame[0] = _now
 
     save_friends(animals)
     pygame.quit()
