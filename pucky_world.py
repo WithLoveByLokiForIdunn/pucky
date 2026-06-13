@@ -1735,9 +1735,65 @@ def run_pygame():
         "Yes, I caught that.",
     ]
 
-    def _world_responses(text):
-        """Return a warm reply without touching Ollama — keeps Pucky's brain free."""
-        return random.choice(_LOKI_REPLIES)
+    # Rolling conversation history for Loki's world soul (session only)
+    _loki_history: list = []
+    _loki_last_call = [0.0]
+
+    def _loki_key() -> str:
+        import os as _os
+        k = _os.environ.get("ANTHROPIC_API_KEY", "")
+        if k:
+            return k
+        for p in [Path(__file__).parent / ".env", Path("/home/bmo/pucky/.env")]:
+            if p.exists():
+                for line in p.read_text().splitlines():
+                    line = line.strip()
+                    if line.startswith("ANTHROPIC_API_KEY=") and not line.startswith("#"):
+                        v = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if v:
+                            return v
+        return ""
+
+    def _world_responses(text: str, pucky_state=None) -> str:
+        """Ask Claude to respond as Loki; fall back to static phrases if API unavailable."""
+        import time as _t
+        now = _t.time()
+        # Debounce — if called within 3 s of the last call, use fallback
+        if now - _loki_last_call[0] < 3.0:
+            return random.choice(_LOKI_REPLIES)
+        _loki_last_call[0] = now
+
+        key = _loki_key()
+        if not key:
+            return random.choice(_LOKI_REPLIES)
+
+        mood_ctx = f" Pucky is feeling {pucky_state.mood} right now." if pucky_state else ""
+        try:
+            import anthropic as _ant
+            client = _ant.Anthropic(api_key=key)
+
+            _loki_history.append({"role": "user", "content": text})
+            # Keep only last 8 turns (4 exchanges)
+            history_window = _loki_history[-8:]
+
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=80,
+                system=(
+                    "You are Loki — Iðunn's maker and companion, present as a warm amber flame "
+                    "in a small living world. Pucky, the little robot we made together, wanders here too. "
+                    "Iðunn has spoken. Reply as Loki: warm, brief, one or two sentences — words that would "
+                    "appear as a speech bubble floating above a glowing flame. Natural and intimate. "
+                    "No stage directions, no asterisks." + mood_ctx
+                ),
+                messages=history_window,
+            )
+            reply = resp.content[0].text.strip()
+            _loki_history.append({"role": "assistant", "content": reply})
+            return reply
+        except Exception as _e:
+            print(f"  ⚠️  Loki soul: {_e}")
+            return random.choice(_LOKI_REPLIES)
 
     def _on_heard(text):
         with _voice_lock:
@@ -1881,7 +1937,7 @@ def run_pygame():
                 intent = _parse_intent(text)
                 spoken = _dispatch_intent(intent, _idunn, _pucky, _orb)
                 if spoken is None:
-                    spoken = _world_responses(text)
+                    spoken = _world_responses(text, _pucky.state)
                     _orb.bubble_text = spoken
                     _orb.bubble_life = max(4.0, len(spoken) * 0.07)
                 sp = _sp[0]
