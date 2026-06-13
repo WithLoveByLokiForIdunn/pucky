@@ -135,6 +135,12 @@ async def _ws_handler(connection) -> None:
                     text = str(msg.get("text", "")).strip()
                     if text:
                         _push_cmd({"src": src, "type": "chat", "text": text})
+                elif t == "enter_cottage":
+                    _push_cmd({"src": src, "type": "enter_cottage"})
+                elif t == "cottage_key":
+                    _push_cmd({"src": src, "type": "cottage_key",
+                               "key": str(msg.get("key", "")),
+                               "char": str(msg.get("char", ""))})
             except Exception as e:
                 print(f"  ⚠️  msg: {e}")
     except Exception:
@@ -204,6 +210,26 @@ body{background:#1a1512;color:#e8dcc8;font-family:monospace;height:100dvh;displa
       <button class="ab" onclick="act('stargazing')">&#9733; stars</button>
       <button class="ab" onclick="act('plant')">&#10047; plant</button>
       <button class="ab" onclick="act('come')">come to me</button>
+      <hr style="border:none;border-top:1px solid rgba(170,130,60,.2);margin:3px 0">
+      <button class="ab" onclick="enterCottage()">&#127968; enter cottage</button>
+      <button class="ab" onclick="cottageKey('escape','')">&#x2715; exit cottage</button>
+      <button class="ab" onclick="cottageKey('w','')">&#9998; write letter</button>
+      <button class="ab" onclick="cottageKey('left','')">&#9664; prev</button>
+      <button class="ab" onclick="cottageKey('right','')">&#9654; next</button>
+      <div id="pinpad" style="display:flex;flex-wrap:wrap;gap:3px;width:120px;margin-top:3px">
+        <div style="width:100%;font-size:9px;color:#6a5a45;letter-spacing:1px;margin-bottom:2px">PIN</div>
+        <button class="ab" style="width:35px;padding:4px" onclick="cottageKey('1','1')">1</button>
+        <button class="ab" style="width:35px;padding:4px" onclick="cottageKey('2','2')">2</button>
+        <button class="ab" style="width:35px;padding:4px" onclick="cottageKey('3','3')">3</button>
+        <button class="ab" style="width:35px;padding:4px" onclick="cottageKey('4','4')">4</button>
+        <button class="ab" style="width:35px;padding:4px" onclick="cottageKey('5','5')">5</button>
+        <button class="ab" style="width:35px;padding:4px" onclick="cottageKey('6','6')">6</button>
+        <button class="ab" style="width:35px;padding:4px" onclick="cottageKey('7','7')">7</button>
+        <button class="ab" style="width:35px;padding:4px" onclick="cottageKey('8','8')">8</button>
+        <button class="ab" style="width:35px;padding:4px" onclick="cottageKey('9','9')">9</button>
+        <button class="ab" style="width:35px;padding:4px" onclick="cottageKey('backspace','')">&#9003;</button>
+        <button class="ab" style="width:35px;padding:4px" onclick="cottageKey('0','0')">0</button>
+      </div>
     </div>
     <div id="dp">
       <div class="db" id="du">&#9650;</div>
@@ -253,6 +279,8 @@ function snd(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 
 /* ── Actions ── */
 function act(n) { snd({type:'action', name:n}); }
+function enterCottage() { snd({type:'enter_cottage'}); }
+function cottageKey(key, ch) { snd({type:'cottage_key', key:key, char:ch}); }
 
 /* ── D-pad with repeat-fire ── */
 function dpStart(dx, dy) {

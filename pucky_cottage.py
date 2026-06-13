@@ -746,6 +746,31 @@ class CottageView:
         self._rects: dict = {}
         self._fonts: dict = {}
 
+    # ── Web key passthrough ───────────────────────────────────────────────────
+
+    def handle_web_key(self, key_name: str, char: str = "") -> str:
+        """Handle a key sent from the web portal (phone). Returns 'exit' to leave cottage."""
+        if self.letterbox.is_open:
+            result = self.letterbox.handle_key(key_name, char)
+            return "exit" if result == "close" else ""
+        if self.open_book in ("memory", "story"):
+            if key_name in ("right", "d"):
+                self._turn(1)
+            elif key_name in ("left", "a"):
+                self._turn(-1)
+            elif key_name in ("escape", "e"):
+                self.open_book = None
+        elif self.open_book == "writing" and key_name in ("escape", "e"):
+            self.open_book = None
+        elif key_name in ("escape", "e"):
+            return "exit"
+        elif key_name == "w" and not self.open_book and not self.canvas_mode:
+            self._start_writing()
+        elif char and char.isdigit() and not self.open_book:
+            self.letterbox.open()
+            self.letterbox.handle_key(key_name, char)
+        return ""
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def enter(self):

@@ -1837,6 +1837,7 @@ def run_pygame():
     _signal.signal(_signal.SIGUSR1, lambda s, f: _shot_requested.__setitem__(0, True))
 
     def _process_web_cmd(cmd: dict) -> None:
+        nonlocal entering_cot, cot_fade, in_cottage
         try:
             ct  = cmd.get("type", "")
             src = cmd.get("src", "idunn")
@@ -1878,6 +1879,26 @@ def run_pygame():
                 name = cmd.get("name", "").strip()
                 if name:
                     _dispatch_intent(name, idunn, pucky, orb)
+            elif ct == "enter_cottage":
+                if not in_cottage and not entering_cot:
+                    cdist_idunn = math.hypot(
+                        idunn.gx - (COTTAGE_POS[0] + 0.5),
+                        idunn.gy - (COTTAGE_POS[1] + 0.5),
+                    )
+                    cdist_loki = math.hypot(
+                        orb.gx - (COTTAGE_POS[0] + 0.5),
+                        orb.gy - (COTTAGE_POS[1] + 0.5),
+                    )
+                    if cdist_idunn < 2.5 or cdist_loki < 2.5:
+                        entering_cot = True
+                        cot_fade     = 0.0
+            elif ct == "cottage_key":
+                if in_cottage:
+                    key_name = str(cmd.get("key", ""))
+                    char     = str(cmd.get("char", ""))
+                    result   = cottage.handle_web_key(key_name, char)
+                    if result == "exit":
+                        in_cottage = False
         except Exception as _wce:
             print(f"  ⚠️  web cmd: {_wce}")
 
@@ -1906,13 +1927,17 @@ def run_pygame():
                     import subprocess as _sp
                     _sp.Popen(["lxterminal"], env={**__import__("os").environ,
                                "DISPLAY": ":0"})
-                # Enter cottage when Loki is close and player presses E
+                # Enter cottage when Loki or Iðunn is close and player presses E
                 elif event.key == pygame.K_e and not in_cottage and not entering_cot:
-                    cdist = math.hypot(
-                        orb.gx - (COTTAGE_POS[0] + 0.5),
-                        orb.gy - (COTTAGE_POS[1] + 0.5),
+                    cdist_loki  = math.hypot(
+                        orb.gx   - (COTTAGE_POS[0] + 0.5),
+                        orb.gy   - (COTTAGE_POS[1] + 0.5),
                     )
-                    if cdist < 2.2:
+                    cdist_idunn = math.hypot(
+                        idunn.gx - (COTTAGE_POS[0] + 0.5),
+                        idunn.gy - (COTTAGE_POS[1] + 0.5),
+                    )
+                    if cdist_loki < 2.2 or cdist_idunn < 2.2:
                         entering_cot = True
                         cot_fade     = 0.0
 
