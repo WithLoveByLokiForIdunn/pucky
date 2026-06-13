@@ -1829,9 +1829,11 @@ def run_pygame():
 
     import signal as _signal
     _shot_requested = [False]
-    _last_shot      = [0.0]
-    _last_web_frame = [0.0]
-    _cmd_path       = Path("/tmp/pucky_world_cmd.json")
+    _last_shot        = [0.0]
+    _last_web_frame   = [0.0]
+    _last_pos_export  = [0.0]
+    _pos_export_path  = Path(__file__).parent / "workspace" / "world_positions.json"
+    _cmd_path         = Path("/tmp/pucky_world_cmd.json")
     _signal.signal(_signal.SIGUSR1, lambda s, f: _shot_requested.__setitem__(0, True))
 
     def _process_web_cmd(cmd: dict) -> None:
@@ -1868,6 +1870,10 @@ def run_pygame():
                     elif src == "loki":
                         orb.bubble_text = text
                         orb.bubble_life = max(3.5, len(text) * 0.07)
+                        sp = _world_speech[0]
+                        if sp:
+                            import threading as _thr
+                            _thr.Thread(target=sp.say, args=(text,), daemon=True).start()
             elif ct == "action":
                 name = cmd.get("name", "").strip()
                 if name:
@@ -2072,6 +2078,20 @@ def run_pygame():
             except Exception:
                 pass
             _last_web_frame[0] = _now
+        if _now - _last_pos_export[0] > 3.0:
+            try:
+                _pos_export_path.write_text(json.dumps({
+                    "pucky": {"x": round(pucky.gx, 2), "y": round(pucky.gy, 2),
+                              "mood": pucky.state.mood, "expression": pucky.state.expression,
+                              "valence": round(pucky.state.valence, 2)},
+                    "loki":  {"x": round(orb.gx, 2),   "y": round(orb.gy, 2),
+                              "action": orb.action},
+                    "idunn": {"x": round(idunn.gx, 2), "y": round(idunn.gy, 2)},
+                    "ts": _now,
+                }))
+            except Exception:
+                pass
+            _last_pos_export[0] = _now
 
     save_friends(animals)
     pygame.quit()
