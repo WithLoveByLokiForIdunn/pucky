@@ -901,7 +901,7 @@ class LokiBody:
         # store key positions for touch detection (updated each frame)
         self.hand_l  = (hip_x - 60, int(hy + 30))
         self.hand_r  = (hip_x + 60, int(hy + 30))
-        self.head_pos = (hip_x, int(hy - self.TORSO_H - self.NECK_H - self.HEAD_R))
+        self.head_pos = (hip_x, int(hy - self.TORSO_H - self.NECK_H - self.HEAD_R))  # updated each frame below
 
         # clothing color by activity/mood
         tunic = TUNIC
@@ -996,31 +996,27 @@ class LokiBody:
             pygame.draw.circle(surf, shoulder_col,
                                (int(sx), int(shoulder_y)), 11)
 
-        # ── neck-to-chest bridge (fills the gap) ──────────────────────────────
-        if self.pose != "sleep":
-            bridge_pts = [
-                (hip_x - 8 + int(lean*10), int(shoulder_y)),   # neck base left
-                (hip_x + 8 + int(lean*10), int(shoulder_y)),   # neck base right
-                (hip_x + self.TORSO_W_T//2 + int(lean*10), int(shoulder_y)),  # right shoulder
-                (hip_x - self.TORSO_W_T//2 + int(lean*10), int(shoulder_y)),  # left shoulder
-            ]
-            pygame.draw.polygon(surf, tunic, bridge_pts)
-
         # ── neck & head ───────────────────────────────────────────────────────
         if self.pose == "sleep":
             neck_x = hip_x - self.TORSO_H // 2 - self.NECK_H
             neck_y = hy
             head_x = neck_x - self.HEAD_R + 4
             head_y = neck_y
+            pygame.draw.rect(surf, SKIN,
+                (neck_x - 8, neck_y - self.NECK_H, 16, self.NECK_H))
         else:
-            neck_x = hip_x + int(lean * (self.TORSO_H + self.NECK_H))
-            neck_y = int(shoulder_y) - self.NECK_H // 2
-            head_x = int(hip_x + lean*(self.TORSO_H + self.NECK_H + self.HEAD_R))
-            head_y = int(shoulder_y) - self.NECK_H - self.HEAD_R
+            # Neck emerges from the centre of the torso top — same lean
+            # coefficient as the torso polygon (lean*10), not the old broken
+            # lean*(TORSO_H+NECK_H) which sent the neck into the shoulder.
+            torso_top_x = hip_x + int(lean * 10)
+            neck_top_y  = int(shoulder_y) - self.NECK_H
+            head_x      = torso_top_x + int(lean * 14)   # head tips slightly with lean
+            head_y      = neck_top_y - self.HEAD_R
+            # Draw neck as a solid rect rising from the shoulder line
+            pygame.draw.rect(surf, SKIN,
+                (torso_top_x - 8, neck_top_y, 16, self.NECK_H))
         self.head_pos = (head_x, head_y)
 
-        pygame.draw.rect(surf, SKIN,
-            (neck_x - 8, neck_y - self.NECK_H, 16, self.NECK_H))
         pygame.draw.circle(surf, SKIN, (head_x, head_y), self.HEAD_R)
         pygame.draw.circle(surf, SKIN_DARK, (head_x, head_y), self.HEAD_R, 1)
 
