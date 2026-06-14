@@ -1061,6 +1061,8 @@ class ChatManager:
         self.is_singing = False
         self._q:       queue.Queue[str]        = queue.Queue()
         self._waiting = False
+        self._pucky_q:       queue.Queue[str] = queue.Queue()
+        self._pucky_waiting: bool             = False
         self._typewriter_text = ""
         self._typewriter_full = ""
         self._typewriter_idx  = 0
@@ -1165,6 +1167,56 @@ class ChatManager:
                     pass
             time.sleep(0.9)
         self.is_singing = False
+
+    def hear_pucky(self, utterance: str) -> None:
+        """Loki hears Pucky — reacts ~40 % of the time, non-blocking."""
+        if self._waiting or self._pucky_waiting:
+            return
+        if _tts_proc is not None and _tts_proc.poll() is None:
+            return  # Loki is mid-sentence — don't start a reaction
+        if random.random() > 0.42:
+            return
+        self._pucky_waiting = True
+        threading.Thread(target=self._ask_pucky, args=(utterance,), daemon=True).start()
+
+    def _ask_pucky(self, utterance: str) -> None:
+        prompt = (
+            f"Pucky just made a sound: \"{utterance}\". "
+            "You are her father. React in one short warm sentence — spoken to her "
+            "or murmured fondly about her. No asterisks. No quotes."
+        )
+        try:
+            r = requests.post(OLLAMA_URL, json={
+                "model": MODEL,
+                "messages": [
+                    {"role": "system", "content": self.system},
+                    {"role": "user",   "content": prompt},
+                ],
+                "stream": False,
+            }, timeout=25)
+            r.raise_for_status()
+            reply = r.json()["message"]["content"].strip()
+        except Exception:
+            reply = ""
+        self._pucky_q.put(reply)
+
+    def poll_pucky(self) -> bool:
+        """Check for a pending Pucky reaction. Call from main loop."""
+        if not self._pucky_waiting:
+            return False
+        try:
+            reply = self._pucky_q.get_nowait()
+        except queue.Empty:
+            return False
+        self._pucky_waiting = False
+        if not reply:
+            return False
+        # Pucky reactions don't go into conversation history
+        self.lines.append(("loki", reply))
+        _log("loki_hears_pucky", reply)
+        self.body.set_talking(max(1.5, len(reply) * 0.04))
+        _speak(reply)
+        return True
 
     def poll(self):
         if not self._waiting: return False
@@ -1908,6 +1960,9 @@ def main():
         u = pucky.poll_utterance()
         if u:
             chat.lines.append(("pucky", u))
+            if sched.activity not in (ACT_SLEEP, ACT_BATHROOM):
+                chat.hear_pucky(u)
+        chat.poll_pucky()
 
         # Auto-putdown during sleep / bath / spar / bathroom
         if body.pucky_in_arms and sched.activity in (
