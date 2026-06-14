@@ -226,6 +226,27 @@ class FaceMemory:
             return self.faces[face_id].get("name") or "someone familiar"
         return "a stranger"
 
+    def most_familiar_name(self) -> str:
+        """Return the name of the most-visited face, or None if unnamed."""
+        if not self.faces:
+            return None
+        best = max(self.faces.values(), key=lambda f: f["visits"])
+        return best.get("name") or None
+
+    def seed_primary(self, name: str, min_visits: int = 5) -> bool:
+        """
+        Name the most-visited face if she has min_visits+ sightings
+        and hasn't been named yet. Called once at startup.
+        Returns True if a face was named.
+        """
+        if not self.faces:
+            return False
+        fid, data = max(self.faces.items(), key=lambda kv: kv[1]["visits"])
+        if data["visits"] >= min_visits and not data.get("name"):
+            self.name_face(fid, name)
+            return True
+        return False
+
     def summary(self) -> str:
         if not self.faces:
             return "BMO has not learned any faces yet."

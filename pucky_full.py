@@ -63,6 +63,7 @@ def main():
 
     life      = BMOLife()
     vision    = BMOVision()
+    vision.face_memory.seed_primary("Iðunn")   # most familiar face is always Iðunn
     memory    = BMOMemory()
     storage   = BMOStorage()
     speech    = PuckyVoice(who="pucky")
@@ -187,16 +188,17 @@ def main():
             maintenance.observe("vision", f"familiar face — {frame.description}")
             return
         life.register_interaction()
-        shortterm.log(f"familiar face appeared — {frame.description}", source="vision")
+        _who = vision.face_memory.most_familiar_name() or "someone familiar"
+        shortterm.log(f"{_who} appeared — {frame.description}", source="vision")
         memory.remember(
-            f"A familiar face appeared — {frame.description}",
+            f"{_who} is here — {frame.description}",
             tier         = "warm",
             memory_type  = "vision",
             joy          = 7.0,
             pleasantness = 7.0,
             peacefulness = 5.0,
         )
-        soul.autonomous_thought("a familiar face just appeared in your view")
+        soul.autonomous_thought(f"{_who} just appeared in your view")
 
     def on_alone(frame):
         if maintenance.is_muted("vision"):
