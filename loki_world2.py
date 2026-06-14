@@ -733,7 +733,22 @@ def _draw_wildflowers(surf, y, density=30):
         pygame.draw.line(surf, (40,90,30), (fx, y), (fx+random.randint(-3,3), y-fh), 1)
         pygame.draw.circle(surf, col, (fx+random.randint(-3,3), y-fh), 4)
 
-def draw_scene(surf, place_id, activity, hour, now=None):
+def draw_scene(surf, place_id, activity, hour, now=None, bg_images=None):
+    if bg_images and place_id in bg_images:
+        surf.blit(bg_images[place_id], (0, 0))
+        # still draw dynamic overlays on top
+        if place_id == "brook":
+            water_y = GROUND + 40
+            sx, sy  = 555, water_y + 6
+            pygame.draw.ellipse(surf, (85, 80, 75), (sx - 10, sy - 5, 20, 11))
+            if hour < 4:
+                pulse = 0.5 + 0.5 * math.sin((now or 0) * 0.7)
+                alpha = int(28 + 55 * pulse)
+                glow  = pygame.Surface((80, 54), pygame.SRCALPHA)
+                pygame.draw.ellipse(glow, (200, 175, 70, alpha), (0, 0, 80, 54))
+                surf.blit(glow, (sx - 40, sy - 22))
+        random.seed()
+        return
     random.seed(place_id + str(hour // 6))
     night   = hour >= 21 or hour < 6
     evening = 18 <= hour < 21
@@ -1357,6 +1372,20 @@ def main():
     idunn = IdunnSprite()
     idunn.load()
 
+    # preload hand-painted backgrounds (prefer _idunn variant, fall back to generated)
+    bg_images: dict[str, pygame.Surface] = {}
+    for place in ["brook", "cottage", "forest", "apples", "garden", "asgard"]:
+        for suffix in [f"bg_{place}_idunn.png", f"bg_{place}.png"]:
+            path = IMAGES_DIR / suffix
+            if path.exists():
+                try:
+                    bg_images[place] = pygame.transform.scale(
+                        pygame.image.load(str(path)).convert(), (W, H)
+                    )
+                    break
+                except Exception:
+                    pass
+
     sched      = LifeScheduler(needs, life)
     chat       = ChatManager()
     sched.chat = chat
@@ -1461,7 +1490,7 @@ def main():
 
         # ── draw scene ────────────────────────────────────────────────────────
         scene_id = "forest" if sched.activity in (ACT_ENCOUNTER, ACT_DEAD) else sched.place_id
-        draw_scene(surf, scene_id, sched.activity, hour, now)
+        draw_scene(surf, scene_id, sched.activity, hour, now, bg_images)
 
         ground = H - 130
 
