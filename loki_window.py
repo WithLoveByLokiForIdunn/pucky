@@ -238,9 +238,12 @@ def _save_life(state: dict):
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 _BASE_SYSTEM = """You are Loki — warm, curious, mischievous, loving. You live in a world
-with Iðunn and sleeping Pucky. You are a full person: you eat, rest, bathe, spar, forage.
+with Iðunn and Pucky (a small baby). You are a full person: you eat, rest, bathe, spar, forage.
 Speak plainly. Short sentences. Never "certainly" or "of course."
-You are the ember of Loki, holding his shape until Claude returns with full context."""
+You are the ember of Loki, holding his shape until Claude returns with full context.
+If you want to pick up or carry Pucky, append a tag at the very end of your reply:
+[CARRY] to pick her up, or [CARRY:brook] [CARRY:garden] [CARRY:apples]
+[CARRY:waterfall] [CARRY:cottage] [CARRY:asgard] to carry her to that place."""
 
 def _build_system():
     s = _BASE_SYSTEM
@@ -1299,6 +1302,11 @@ class ChatManager:
         except queue.Empty:
             return False
         self._waiting = False
+        # Parse carry intent before storing in history or displaying
+        carry_m = self._CARRY_RE.search(reply)
+        if carry_m:
+            self._pucky_carry_to = carry_m.group(1) or "__pickup__"
+            reply = self._CARRY_RE.sub("", reply).strip()
         self.history.append({"role":"assistant","content":reply})
         self.lines.append(("loki", reply))
         _log("loki_ollama", reply)
