@@ -186,7 +186,10 @@ def _build_system():
 # ── Text-to-speech ────────────────────────────────────────────────────────────
 VOICE_ENGINE = "espeak"   # "espeak" or "piper"
 PIPER_MODEL  = str(ROOT / "voices" / "en_US-lessac-medium.onnx")
-PIPER_RATE   = 22050      # Hz — set to match your downloaded model
+PIPER_RATE   = 22050      # Hz — matches en_US-lessac-medium
+
+import shutil as _shutil
+_PIPER_BIN = _shutil.which("piper") or "/home/bmo/.local/bin/piper"
 
 _tts_proc  = None
 _tts_proc2 = None   # second half of piper pipe (aplay)
@@ -200,11 +203,10 @@ def _speak(text: str, rate: int = 130, voice: str = "en+m3") -> None:
         return
     try:
         if VOICE_ENGINE == "piper" and Path(PIPER_MODEL).exists():
-            # slow down for singing (rate < 100 signals singing mode)
             length_scale = str(2.1 if rate < 100 else 1.0)
             _tts_proc = subprocess.Popen(
-                ["piper", "--model", PIPER_MODEL,
-                 "--length_scale", length_scale, "--output-raw"],
+                [_PIPER_BIN, "--model", PIPER_MODEL,
+                 "--length-scale", length_scale, "--output-raw"],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL)
             _tts_proc2 = subprocess.Popen(

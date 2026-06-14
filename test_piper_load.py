@@ -42,7 +42,7 @@ def _speak_piper(text: str, length_scale: float = 1.0) -> float:
     t0 = time.time()
     p1 = subprocess.Popen(
         ["piper", "--model", str(MODEL),
-         "--length_scale", str(length_scale),
+         "--length-scale", str(length_scale),
          "--output-raw"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     p2 = subprocess.Popen(
