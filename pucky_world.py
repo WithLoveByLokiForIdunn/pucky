@@ -25,6 +25,14 @@ from typing import List, Tuple, Optional
 STATE_FILE   = Path("/home/bmo/pucky/workspace/pucky_state.json")
 FRIENDS_FILE = Path("/home/bmo/pucky/workspace/world_friends.json")
 
+try:
+    from pucky_zones  import ZoneManager, WALKABLE_ZONE as _WALKABLE_ZONE
+    from bmo_calendar import BMOCalendar
+    from bmo_inventory import Inventory, Inventory as _Inv
+    _ZONES_AVAILABLE = True
+except ImportError:
+    _ZONES_AVAILABLE = False
+
 # ── Tile types ────────────────────────────────────────────────────────────────
 GRASS       = 0
 PATH        = 1
@@ -36,8 +44,10 @@ APPLE_TREE  = 6   # impassable, but apples within reach
 STRAWBERRY  = 7   # walkable patch
 NEST        = 8   # the resting place
 COTTAGE     = 9   # the writing cottage
+MEADOW      = 10  # flower meadow (dense, walkable)
+SHORE       = 11  # lake shore (sandy, walkable)
 
-WALKABLE = {GRASS, PATH, FLOWER, STONE, STRAWBERRY, NEST}
+WALKABLE = {GRASS, PATH, FLOWER, STONE, STRAWBERRY, NEST, MEADOW, SHORE, WATER}
 
 # ── Food source positions (grid coords) ───────────────────────────────────────
 APPLE_POSITIONS      = [(4,3), (15,3), (4,15), (15,15)]
@@ -191,6 +201,14 @@ def run_pygame():
         "idunn_inner":  (200, 240, 140),
         "idunn_gold":   (240, 220,  80),
         "idunn_bloom":  (255, 240, 180),
+        # Meadow (dense golden-green, warmer than grass)
+        "meadow_top":   (148, 196,  76),
+        "meadow_left":  (108, 152,  52),
+        "meadow_right": (128, 172,  60),
+        # Shore (sandy beige with slight warmth)
+        "shore_top":    (210, 192, 150),
+        "shore_left":   (172, 154, 112),
+        "shore_right":  (190, 170, 128),
         # Night overlay
         "night":        ( 10,  14,  40),
         # UI
@@ -360,6 +378,32 @@ def run_pygame():
                 pygame.draw.circle(ss2, (198, 192, 186, sa), (srr+1, srr+1), srr)
                 surf.blit(ss2, (chx-srr-1, sry-srr-1))
 
+        elif tile == MEADOW:
+            pygame.draw.polygon(surf, col("meadow_top"), pts)
+            pygame.draw.line(surf, col("meadow_left"),  pts[3], pts[2], 1)
+            pygame.draw.line(surf, col("meadow_right"), pts[1], pts[2], 1)
+            # Dense flower clusters — more varied colours than plain FLOWER
+            _rng = random.Random(int(gx * 23 + gy * 11))
+            for _i in range(5):
+                _fx = cx + _rng.randint(-16, 16)
+                _fy = cy + hh + _rng.randint(-5, 4)
+                _fc = [(255,100,160),(255,210,60),(200,120,255),(255,160,80),(160,240,100)][_i % 5]
+                pygame.draw.circle(surf, _fc, (_fx, _fy), 2)
+                pygame.draw.circle(surf, (255,255,255), (_fx, _fy), 1)
+
+        elif tile == SHORE:
+            pygame.draw.polygon(surf, col("shore_top"), pts)
+            pygame.draw.line(surf, col("shore_left"),  pts[3], pts[2], 1)
+            pygame.draw.line(surf, col("shore_right"), pts[1], pts[2], 1)
+            # A few smooth pebble dots
+            _rng = random.Random(int(gx * 17 + gy * 31))
+            for _i in range(3):
+                _px2 = cx + _rng.randint(-14, 14)
+                _py2 = cy + hh + _rng.randint(-4, 3)
+                _pr  = _rng.randint(1, 2)
+                _pc  = [(168,155,138),(195,182,160),(148,138,125)][_i % 3]
+                pygame.draw.circle(surf, _pc, (_px2, _py2), _pr)
+
         # no diamond grid — individual edge lines per tile type give enough depth
 
     # ── Pucky sprite ───────────────────────────────────────────────────────
@@ -504,7 +548,8 @@ def run_pygame():
                 ny = self.gy + random.uniform(-radius, radius)
                 nx = max(1, min(MAP_W-2, nx))
                 ny = max(1, min(MAP_H-2, ny))
-                if WORLD_MAP[int(ny)][int(nx)] in WALKABLE:
+                t2 = WORLD_MAP[int(ny)][int(nx)]
+                if t2 in WALKABLE and t2 != WATER:  # Pucky stays dry
                     self.tx, self.ty = nx, ny
                     return
             self.tx, self.ty = 9.5, 9.5
@@ -1644,6 +1689,29 @@ def run_pygame():
     orb   = ClaudeOrb()
     idunn = IdunnSprite()
 
+    # ── Zone system, calendar, inventory ──────────
+    if _ZONES_AVAILABLE:
+        zone_mgr    = ZoneManager()
+        world_cal   = BMOCalendar()
+        inv_loki    = Inventory("loki")
+        inv_idunn   = Inventory("idunn")
+    else:
+        zone_mgr    = None
+        world_cal   = None
+        inv_loki    = None
+        inv_idunn   = None
+
+    # Zone transition state
+    _zone_transitioning = [False]   # True while fading in/out for zone swap
+    _zone_fade          = [0.0]     # 0→1 fade to black; then swap; then 1→0 fade in
+    _zone_phase         = ["out"]   # "out" = fading to black; "in" = fading back in
+    _zone_gate          = [None]    # the gate being entered
+    _last_cal_tick      = [0.0]
+
+    # Pebble card overlay state
+    _pebble_card        = [None]    # WorldItem currently shown; None = hidden
+    _pebble_card_life   = [0.0]     # seconds remaining
+
     # ── Voice I/O ─────────────────────────────────
     _heard_queue  = []
     _voice_lock   = threading.Lock()
@@ -1979,6 +2047,13 @@ def run_pygame():
                     cottage.letterbox.add_letter("Iðunn", text)
                     idunn.bubble_text = "✉ letter sent."
                     idunn.bubble_life = 4.0
+            elif ct == "enter_gate" and zone_mgr and not _zone_transitioning[0]:
+                _g = zone_mgr.gate_near(idunn.gx, idunn.gy)
+                if _g and zone_mgr.request_transition(_g):
+                    _zone_transitioning[0] = True
+                    _zone_fade[0]  = 0.0
+                    _zone_phase[0] = "out"
+                    _zone_gate[0]  = _g
         except Exception as _wce:
             print(f"  ⚠️  web cmd: {_wce}")
 
@@ -2007,8 +2082,9 @@ def run_pygame():
                     import subprocess as _sp
                     _sp.Popen(["lxterminal"], env={**__import__("os").environ,
                                "DISPLAY": ":0"})
-                # Enter cottage when Loki or Iðunn is close and player presses E
-                elif event.key == pygame.K_e and not in_cottage and not entering_cot:
+                # E key: cottage → gate → pebble (priority order)
+                elif event.key == pygame.K_e and not in_cottage and not entering_cot \
+                        and not _zone_transitioning[0]:
                     cdist_loki  = math.hypot(
                         orb.gx   - (COTTAGE_POS[0] + 0.5),
                         orb.gy   - (COTTAGE_POS[1] + 0.5),
@@ -2020,6 +2096,22 @@ def run_pygame():
                     if cdist_loki < 2.2 or cdist_idunn < 2.2:
                         entering_cot = True
                         cot_fade     = 0.0
+                    elif zone_mgr:
+                        # Check gate proximity for Loki or Iðunn
+                        _g = zone_mgr.gate_near(orb.gx, orb.gy) \
+                            or zone_mgr.gate_near(idunn.gx, idunn.gy)
+                        if _g and zone_mgr.request_transition(_g):
+                            _zone_transitioning[0] = True
+                            _zone_fade[0]  = 0.0
+                            _zone_phase[0] = "out"
+                            _zone_gate[0]  = _g
+                        else:
+                            # Pebble pickup
+                            _pb = zone_mgr.pebbles_near(orb.gx, orb.gy) \
+                                or zone_mgr.pebbles_near(idunn.gx, idunn.gy)
+                            if _pb:
+                                _pebble_card[0]      = _pb[0]
+                                _pebble_card_life[0] = 8.0
 
         # ── Remote commands (web portal / Loki) ──────────────────────────────
         try:
@@ -2082,6 +2174,47 @@ def run_pygame():
                 exiting_cot = False
                 cot_fade    = 0.0
 
+        # Zone transition fade
+        if _zone_transitioning[0] and zone_mgr:
+            if _zone_phase[0] == "out":
+                _zone_fade[0] = min(1.0, _zone_fade[0] + dt * 2.0)
+                if _zone_fade[0] >= 1.0:
+                    # Swap zone map and reposition characters
+                    arr_x, arr_y = zone_mgr.apply_transition(WORLD_MAP, WALKABLE)
+                    orb.gx  = orb.tx  = arr_x
+                    orb.gy  = orb.ty  = arr_y
+                    idunn.gx = idunn.tx = arr_x + 0.5
+                    idunn.gy = idunn.ty = arr_y + 0.5
+                    pucky.gx = pucky.tx = 9.5   # Pucky stays at a safe centre
+                    pucky.gy = pucky.ty = 9.5
+                    _zone_phase[0] = "in"
+            else:
+                _zone_fade[0] = max(0.0, _zone_fade[0] - dt * 2.0)
+                if _zone_fade[0] <= 0.0:
+                    _zone_transitioning[0] = False
+
+        # Calendar tick (~once per minute, very cheap)
+        if world_cal:
+            _now2 = time.time()
+            if _now2 - _last_cal_tick[0] > 58:
+                world_cal.tick(_now2)
+                _last_cal_tick[0] = _now2
+
+        # Pebble card timer
+        if _pebble_card_life[0] > 0:
+            _pebble_card_life[0] -= dt
+            if _pebble_card_life[0] <= 0:
+                _pebble_card[0] = None
+
+        # Pucky gate-gazing when lonely: occasionally walk toward the NE gate
+        if (zone_mgr and zone_mgr.current_name == "home"
+                and pucky.action == "wander"
+                and pucky.state.mood in ("lonely", "sad", "crying")
+                and random.random() < dt * 0.005):
+            pucky.tx, pucky.ty = 17.0, 2.0   # NE gate tile
+            pucky.bubble_text = "..."
+            pucky.bubble_life = 4.0
+
         if in_cottage:
             cottage.update(dt)
 
@@ -2105,11 +2238,9 @@ def run_pygame():
                 tile = WORLD_MAP[gy][gx]
                 draw_tile(screen, gx, gy, tile, t)
 
-            # ── Gates — stone arches hinting at zones beyond the tree border ──
-            _GATES = [
-                (17.5, 1.5, "wilds ↗"),   # northeast gate
-                (1.5,  2.5, "wilds ↖"),   # northwest gate
-            ]
+            # ── Gates — stone arches from the current zone's gate list ──────
+            _GATES = [(g.gx, g.gy, g.label) for g in zone_mgr.current.gates] \
+                if zone_mgr else [(17.5, 1.5, "wilds ↗"), (1.5, 2.5, "wilds ↖")]
             for _gx, _gy, _glabel in _GATES:
                 _gpx, _gpy = to_screen(_gx, _gy)
                 _gpy -= 4
@@ -2143,6 +2274,24 @@ def run_pygame():
                         screen.blit(_gt, (_gpx - _gt.get_width() // 2, _gpy - 34))
                     except Exception:
                         pass
+
+            # ── Pebble glints ──────────────────────────────────────────────
+            if zone_mgr:
+                for _pb in zone_mgr.current._pebbles:
+                    _pbsx, _pbsy = to_screen(_pb.gx, _pb.gy)
+                    _pbsy += TILE_H // 2 - 2
+                    _pb_a = int(140 + math.sin(t * 2.1 + _pb.gx) * 70)
+                    _pbs = pygame.Surface((10, 6), pygame.SRCALPHA)
+                    pygame.draw.ellipse(_pbs, (200, 188, 170, _pb_a), (0, 0, 10, 6))
+                    pygame.draw.ellipse(_pbs, (230, 220, 200, _pb_a // 2), (2, 1, 4, 3))
+                    screen.blit(_pbs, (_pbsx - 5, _pbsy - 3))
+                    # nearby glow hint
+                    _near_pb = (math.hypot(orb.gx - _pb.gx, orb.gy - _pb.gy) < 1.2
+                               or math.hypot(idunn.gx - _pb.gx, idunn.gy - _pb.gy) < 1.2)
+                    if _near_pb:
+                        _pg = pygame.Surface((14, 8), pygame.SRCALPHA)
+                        pygame.draw.ellipse(_pg, (220, 210, 180, 80), (0, 0, 14, 8))
+                        screen.blit(_pg, (_pbsx - 7, _pbsy - 4))
 
             sprites = []
             for a in animals:
@@ -2210,6 +2359,46 @@ def run_pygame():
             fade_surf.fill((245, 235, 212, fade_a))
             screen.blit(fade_surf, (0, 0))
 
+        # Zone transition fade (dark emerald — feels like passing through a gate)
+        if _zone_transitioning[0]:
+            _zf_a = int(_zone_fade[0] * 255)
+            _zf_s = pygame.Surface((WIN_W, WIN_H), pygame.SRCALPHA)
+            _zf_s.fill((12, 30, 18, _zf_a))
+            screen.blit(_zf_s, (0, 0))
+
+        # Pebble memory card overlay
+        if _pebble_card[0] is not None:
+            try:
+                _mem = _pebble_card[0].item.memory or {}
+                _card_lines = [
+                    _pebble_card[0].item.name,
+                    "",
+                    _mem.get("summary", "A smooth pebble."),
+                    "",
+                    _mem.get("details", ""),
+                    "",
+                    f"  found at: {_mem.get('found_at', 'the brook')}",
+                    "",
+                    "  [E] to return to the brook",
+                ]
+                _cw, _ch = 340, len(_card_lines) * 16 + 24
+                _cs = pygame.Surface((_cw, _ch), pygame.SRCALPHA)
+                _cs.fill((18, 14, 10, 220))
+                pygame.draw.rect(_cs, (140, 120, 90, 160), (0, 0, _cw, _ch), 1, border_radius=6)
+                _cf = pygame.font.SysFont("monospace", 11)
+                _cf_title = pygame.font.SysFont("monospace", 13)
+                for _li, _ln in enumerate(_card_lines):
+                    if _li == 0:
+                        _ct = _cf_title.render(_ln, True, (230, 210, 160))
+                    else:
+                        # wrap long lines
+                        _ln = _ln[:42]
+                        _ct = _cf.render(_ln, True, (200, 192, 178))
+                    _cs.blit(_ct, (12, 12 + _li * 16))
+                screen.blit(_cs, (WIN_W // 2 - _cw // 2, WIN_H // 2 - _ch // 2))
+            except Exception:
+                pass
+
         pygame.display.flip()
 
         _now = time.time()
@@ -2225,15 +2414,20 @@ def run_pygame():
             _last_web_frame[0] = _now
         if _now - _last_pos_export[0] > 3.0:
             try:
-                _pos_export_path.write_text(json.dumps({
+                _pos_json = json.dumps({
                     "pucky": {"x": round(pucky.gx, 2), "y": round(pucky.gy, 2),
                               "mood": pucky.state.mood, "expression": pucky.state.expression,
                               "valence": round(pucky.state.valence, 2)},
                     "loki":  {"x": round(orb.gx, 2),   "y": round(orb.gy, 2),
                               "action": orb.action},
-                    "idunn": {"x": round(idunn.gx, 2), "y": round(idunn.gy, 2)},
+                    "idunn": {"x": round(idunn.gx, 2), "y": round(idunn.gy, 2),
+                              "present": idunn.present},
+                    "zone":  zone_mgr.current_name if zone_mgr else "home",
                     "ts": _now,
-                }))
+                })
+                _pos_tmp = _pos_export_path.with_suffix(".tmp")
+                _pos_tmp.write_text(_pos_json)
+                _pos_tmp.replace(_pos_export_path)
             except Exception:
                 pass
             _last_pos_export[0] = _now
@@ -2259,6 +2453,8 @@ def run_terminal():
         APPLE_TREE: ("", ""),
         STRAWBERRY: ("✦", "✦"),
         NEST:       ("~", "~"),
+        MEADOW:     ("❀", "❀"),
+        SHORE:      ("∙", "∙"),
     }
 
     # Terminal isometric: each tile = 4 chars wide, 2 lines tall
