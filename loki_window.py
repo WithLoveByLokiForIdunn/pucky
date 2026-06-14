@@ -1144,6 +1144,10 @@ def main():
             elif ev.type == pygame.KEYDOWN:
                 if ev.key == pygame.K_ESCAPE:
                     running = False
+                elif ev.key == pygame.K_F1 and not input_active:
+                    path = ROOT / "workspace" / f"screenshot_{int(time.time())}.png"
+                    pygame.image.save(surf, str(path))
+                    _log("screenshot", str(path))
                 elif input_active:
                     if ev.key == pygame.K_RETURN:
                         txt = input_text.strip()
