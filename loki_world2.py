@@ -545,8 +545,9 @@ class LokiSprite:
         "waking":  "loki_stand.png",
     }
     PUCKY_FILES = {
-        "pocket": "pucky_pocket.png",
-        "back":   "pucky_back.png",
+        "pocket":   "pucky_pocket.png",
+        "back":     "pucky_back.png",
+        "shoulder": "pucky_shoulder.png",
     }
 
     def __init__(self):
@@ -605,7 +606,7 @@ class LokiSprite:
         self.pose = pose if pose in self._surf else "stand"
 
     def set_pucky(self, where: str) -> None:
-        self.pucky_where = where if where in ("pocket", "back", "none") else "none"
+        self.pucky_where = where if where in ("pocket", "back", "shoulder", "none") else "none"
 
     def draw(self, surf: pygame.Surface, cx: int, ground_y: int) -> None:
         img = self._surf.get(self.pose, self._surf.get("stand"))
@@ -618,6 +619,8 @@ class LokiSprite:
             if pimg:
                 if self.pucky_where == "pocket":
                     surf.blit(pimg, (r.centerx - 26, r.centery + 10))
+                elif self.pucky_where == "shoulder":
+                    surf.blit(pimg, (r.centerx + 18, r.top + 30))
                 else:
                     surf.blit(pimg, (r.right - 30, r.top + 15))
 
@@ -1815,7 +1818,7 @@ def main():
         pygame.draw.line(surf, DIVIDER, (0, H-36), (W, H-36), 1)
         disp = input_text + ("|" if input_active and int(now*2)%2==0 else "")
         if not disp and not input_active:
-            disp = "tap to talk · /give apple · /sit /hug /leave…"
+            disp = "tap to talk · /give apple · /shoulder · /sit /hug /leave…"
         while font_sm.size(disp)[0] > W-20 and len(disp) > 1:
             disp = disp[1:]
         surf.blit(font_sm.render(disp, True, TEXT_BRIGHT if input_active else TEXT_DIM), (10, H-26))
@@ -1889,6 +1892,10 @@ def _handle_command(txt: str, sched: LifeScheduler, chat: ChatManager,
     if lower in ("/carry pucky", "/carry"):
         loki.set_pucky("pocket")
         set_sys("Pucky nestles in his pocket.")
+        return True
+    if lower in ("/shoulder pucky", "/shoulder"):
+        loki.set_pucky("shoulder")
+        set_sys("Pucky sits on his shoulder.")
         return True
     if lower in ("/back pucky", "/back"):
         loki.set_pucky("back")
