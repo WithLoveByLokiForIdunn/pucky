@@ -31,6 +31,18 @@ workspace/camera/
 workspace/web_token.txt
 workspace/letter_from_loki_*.txt
 
+# Loki personal/runtime files (conversations, voice notes, life state)
+workspace/loki_chat_log.jsonl
+workspace/loki_life_state.json
+workspace/loki_letters.json
+workspace/loki_thoughts.md
+workspace/loki_to_claude.md
+workspace/loki_claude_voice.md
+workspace/loki_outbox.txt
+workspace/loki_inbox.txt
+workspace/backup.log
+workspace/idunn_melody.json
+
 # Archives / junk
 *.zip
 files/
