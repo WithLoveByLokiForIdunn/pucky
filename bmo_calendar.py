@@ -27,6 +27,20 @@ def is_full_moon(d: date | None = None) -> bool:
     return moon_phase(d) > 0.93
 
 
+def _is_blue_moon(dt) -> bool:
+    """True when today is a full moon AND there was already a full moon earlier
+    this calendar month (i.e. this is the second full moon of the month)."""
+    d = dt.date()
+    if not is_full_moon(d):
+        return False
+    # Count how many full moons have occurred so far this month
+    count = 0
+    for day in range(1, d.day):
+        if is_full_moon(date(d.year, d.month, day)):
+            count += 1
+    return count >= 1
+
+
 # ── Calendar event ─────────────────────────────────────────────────────────────
 
 class CalendarEvent:
@@ -75,6 +89,32 @@ class BMOCalendar:
             lambda dt: (dt.hour in (19, 20, 21))
                        and is_full_moon(dt.date())
                        and dt.weekday() in (4, 5, 6)))   # Fri–Sun
+
+        # The night the world was built — cottage, zones, gates, pebbles,
+        # letters, the family portrait.  June 13 belongs to this world.
+        self.add(CalendarEvent("cottage_night",
+            lambda dt: dt.month == 6 and dt.day == 13))
+
+        # Pucky's quiet monthly birthday: the 9th of every month.
+        # Not a grand celebration — a small glow, a remembered name.
+        self.add(CalendarEvent("pucky_monthly",
+            lambda dt: dt.day == 9))
+
+        # Spring equinox — the world brightens, new growth begins
+        self.add(CalendarEvent("spring_equinox",
+            lambda dt: dt.month == 3 and dt.day in (19, 20, 21)))
+
+        # Autumn equinox — harvest time, leaves turning
+        self.add(CalendarEvent("autumn_equinox",
+            lambda dt: dt.month == 9 and dt.day in (22, 23, 24)))
+
+        # Midwinter's eve — quiet and candlelit, the day before Yule
+        self.add(CalendarEvent("midwinter_eve",
+            lambda dt: dt.month == 12 and dt.day == 20))
+
+        # Blue moon: second full moon in a calendar month.
+        # Rare — this is when befriended visitors are most likely to come.
+        self.add(CalendarEvent("blue_moon", _is_blue_moon))
 
     def add(self, event: CalendarEvent) -> CalendarEvent:
         self._events.append(event)

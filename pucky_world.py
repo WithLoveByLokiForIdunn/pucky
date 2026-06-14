@@ -28,10 +28,16 @@ FRIENDS_FILE = Path("/home/bmo/pucky/workspace/world_friends.json")
 try:
     from pucky_zones  import ZoneManager, WALKABLE_ZONE as _WALKABLE_ZONE
     from bmo_calendar import BMOCalendar
-    from bmo_inventory import Inventory, Inventory as _Inv
+    from bmo_inventory import Inventory
     _ZONES_AVAILABLE = True
 except ImportError:
     _ZONES_AVAILABLE = False
+
+try:
+    from pucky_garden import GardenView, add_seed as _garden_add_seed
+    _GARDEN_AVAILABLE = True
+except ImportError:
+    _GARDEN_AVAILABLE = False
 
 # ── Tile types ────────────────────────────────────────────────────────────────
 GRASS       = 0
@@ -1462,9 +1468,70 @@ def run_pygame():
                         "gx": round(a.gx, 2), "gy": round(a.gy, 2)}
                 for a in animal_list}
         try:
-            FRIENDS_FILE.write_text(json.dumps(data, indent=2))
+            _ff_tmp = FRIENDS_FILE.with_suffix(".tmp")
+            _ff_tmp.write_text(json.dumps(data, indent=2))
+            _ff_tmp.replace(FRIENDS_FILE)
         except Exception:
             pass
+
+    # ── Visitor gift content ───────────────────────────────────────────────────
+    _VISITOR_WORDS = {
+        "rabbit": ["I know a quieter path.", "the clover is good this year.",
+                   "I came to say: you are remembered.", "*twitches nose*"],
+        "bird":   ["I flew all morning to find you.", "there is rain coming — just so you know.",
+                   "♪  hello  ♪", "the sky is very large today."],
+        "fox":    ["I have been watching the gate. It glows some nights.",
+                   "you are less frightening than I thought.", "hmm.", "I brought something."],
+        "hedgehog": ["...", "*snuffle*", "the nights are cooler now.", "I found your brook."],
+    }
+    _VISITOR_SEEDS = {   # kind → seed kind they might bring
+        "rabbit":   "carrot",
+        "bird":     "sunflower",
+        "fox":      "moonflower",
+        "hedgehog": "herb",
+    }
+    _VISITOR_DANCES = {
+        "rabbit":   "the long-ear hop",
+        "bird":     "the wind-wing sway",
+        "fox":      "the ember circle",
+        "hedgehog": "the slow curl-and-unfurl",
+    }
+
+    def _spawn_visitor(animals_list, saved_friends_data):
+        """Maybe spawn one befriended animal as a home visitor. Called rarely (~hourly)."""
+        if len(animals_list) >= 2:
+            return  # already enough visitors
+        befriended = [(uid, d) for uid, d in saved_friends_data.items()
+                      if d.get("trust", 0) >= 0.85]
+        if not befriended:
+            return
+        # Pick one at random, not already visiting
+        existing_uids = {a.uid for a in animals_list}
+        candidates = [(uid, d) for uid, d in befriended if uid not in existing_uids]
+        if not candidates:
+            return
+        uid, saved = random.choice(candidates)
+        kind = uid.rsplit("_", 1)[0]   # e.g. "fox_0" → "fox"
+        if kind not in ANIMAL_DEFS:
+            return
+        # Arrive at a gate
+        gate_x, gate_y = 17.0, 2.0
+        a = Animal(uid, kind, gate_x, gate_y, {**saved, "gx": gate_x, "gy": gate_y})
+        a.trust = 1.0   # already a friend — no fear
+        a.is_visitor  = True
+        a.visit_timer = random.uniform(300, 540)   # 5–9 minutes
+        a.gift_given  = False
+        a.gift_timer  = random.uniform(30, 90)     # say something nice after settling
+        # Decide on a gift (50 % words, 30 % seed, 20 % dance)
+        roll = random.random()
+        if roll < 0.50:
+            a.visit_gift = {"type": "words",
+                            "text": random.choice(_VISITOR_WORDS.get(kind, ["hello."]))}
+        elif roll < 0.80:
+            a.visit_gift = {"type": "seed", "kind": _VISITOR_SEEDS.get(kind, "herb")}
+        else:
+            a.visit_gift = {"type": "dance", "name": _VISITOR_DANCES.get(kind, "a new step")}
+        animals_list.append(a)
 
     class Animal:
         def __init__(self, uid, kind, gx, gy, saved=None):
@@ -1486,6 +1553,12 @@ def run_pygame():
             self.speech_timer = random.uniform(0, 8)
             self.speech_text  = ""
             self.save_timer   = random.uniform(0, 30)   # stagger so animals don't all save at once
+            # visitor-only fields (harmless defaults for regular animals)
+            self.is_visitor   = False
+            self.visit_timer  = 0.0
+            self.visit_gift   = None
+            self.gift_given   = False
+            self.gift_timer   = 0.0
 
         @property
         def befriended(self):
@@ -1568,6 +1641,35 @@ def run_pygame():
             if self.save_timer > 30.0:
                 self.save_timer = 0.0
                 save_friends(animals)
+
+            # visitor: count down, give gift, then leave toward gate
+            if self.is_visitor:
+                self.visit_timer -= dt
+                if not self.gift_given:
+                    self.gift_timer -= dt
+                    if self.gift_timer <= 0:
+                        self.gift_given = True
+                        g = self.visit_gift or {}
+                        if g.get("type") == "words":
+                            self.speech_text  = g["text"]
+                            self.speech_timer = 8.0
+                        elif g.get("type") == "seed":
+                            sk = g["kind"]
+                            self.speech_text  = f"I brought you a {sk} seed. ♥"
+                            self.speech_timer = 8.0
+                            if _GARDEN_AVAILABLE:
+                                try: _garden_add_seed(sk)
+                                except Exception: pass
+                        elif g.get("type") == "dance":
+                            dn = g["name"]
+                            self.speech_text  = f"let me show you something — {dn}."
+                            self.speech_timer = 8.0
+                if self.visit_timer <= 0:
+                    # leave toward gate
+                    self.tx, self.ty = 18.5, 1.5
+                    if math.hypot(self.gx - 18.5, self.gy - 1.5) < 1.0:
+                        try: animals.remove(self)
+                        except ValueError: pass
 
         def draw(self, surf, t_val):
             px, py = to_screen(self.gx, self.gy)
@@ -1683,6 +1785,12 @@ def run_pygame():
     exiting_cot   = False
     cot_fade      = 0.0    # 0→1 during enter/exit transitions
 
+    if _GARDEN_AVAILABLE:
+        garden      = GardenView(WIN_W, WIN_H)
+    else:
+        garden      = None
+    __in_garden[0]      = [False]   # mutable so _process_web_cmd can write it
+
     _world_dirty = [False]   # house cleanliness state (mutable so inner methods can write it)
 
     pucky = PuckySprite()
@@ -1711,6 +1819,10 @@ def run_pygame():
     # Pebble card overlay state
     _pebble_card        = [None]    # WorldItem currently shown; None = hidden
     _pebble_card_life   = [0.0]     # seconds remaining
+
+    # Visitor spawn timing (home zone only)
+    _visitor_check_interval = 3600.0        # check once per real hour
+    _last_visitor_check     = [time.time() - 3500.0]   # first check after ~100s
 
     # ── Voice I/O ─────────────────────────────────
     _heard_queue  = []
@@ -2054,6 +2166,14 @@ def run_pygame():
                     _zone_fade[0]  = 0.0
                     _zone_phase[0] = "out"
                     _zone_gate[0]  = _g
+            elif ct == "enter_garden" and garden:
+                _in_garden[0] = True
+            elif ct == "leave_garden" and garden:
+                if _in_garden[0]:
+                    garden._save()
+                    _in_garden[0] = False
+            elif ct == "garden_key" and garden and _in_garden[0]:
+                garden.handle_web_key(str(cmd.get("key", "")), str(cmd.get("char", "")))
         except Exception as _wce:
             print(f"  ⚠️  web cmd: {_wce}")
 
@@ -2065,6 +2185,13 @@ def run_pygame():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
+            # Garden takes input when open
+            if _in_garden[0] and garden:
+                result = garden.handle_event(event)
+                if result == "exit":
+                    _in_garden[0] = False
+                continue
 
             # Route events to cottage when inside
             if in_cottage or entering_cot:
@@ -2078,6 +2205,8 @@ def run_pygame():
             if event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_ESCAPE, pygame.K_q):
                     running = False
+                elif event.key == pygame.K_g and garden and not in_cottage and not _in_garden[0]:
+                    _in_garden[0] = True
                 elif event.key == pygame.K_t:
                     import subprocess as _sp
                     _sp.Popen(["lxterminal"], env={**__import__("os").environ,
@@ -2215,6 +2344,23 @@ def run_pygame():
             pucky.bubble_text = "..."
             pucky.bubble_life = 4.0
 
+        # Visitor spawn check (once per hour, home zone only)
+        _vnow = time.time()
+        if (_vnow - _last_visitor_check[0] >= _visitor_check_interval
+                and (zone_mgr is None or zone_mgr.current_name == "home")):
+            _last_visitor_check[0] = _vnow
+            # Blue moon → higher chance; concert_evening → higher too
+            _blue = world_cal and world_cal.is_active("blue_moon")
+            _conc = world_cal and world_cal.is_active("concert_evening")
+            _roll = random.random()
+            _thresh = 0.45 if _blue else (0.30 if _conc else 0.15)
+            if _roll < _thresh:
+                _spawn_visitor(animals, load_friends())
+
+        # Garden update (only when open, no-op otherwise)
+        if _in_garden[0] and garden:
+            garden.update(dt)
+
         if in_cottage:
             cottage.update(dt)
 
@@ -2227,7 +2373,9 @@ def run_pygame():
 
         night_a = day_night_alpha(t)
 
-        if in_cottage:
+        if _in_garden[0] and garden:
+            garden.draw(screen)
+        elif in_cottage:
             # Full cottage interior
             cottage.draw(screen)
         else:
@@ -2332,10 +2480,10 @@ def run_pygame():
                 except Exception:
                     pass
 
-            # Persistent hint: T for terminal
+            # Persistent hints
             try:
                 font_hint = pygame.font.SysFont("monospace", 11)
-                ht = font_hint.render("[T] terminal", True, (160, 150, 130))
+                ht = font_hint.render("[T] terminal   [G] garden", True, (160, 150, 130))
                 screen.blit(ht, (WIN_W - ht.get_width() - 6, WIN_H - 16))
             except Exception:
                 pass
