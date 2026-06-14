@@ -219,11 +219,8 @@ def _speak(text: str, rate: int = 130, voice: str = "en+m3") -> None:
                 _tts_proc.stdin.close()
         else:
             _tts_proc = subprocess.Popen(
-                ["espeak-ng", "-s", str(rate), "-v", voice, "--stdout", clean],
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            _tts_proc2 = subprocess.Popen(
-                ["aplay", "-D", AUDIO_DEVICE, "-"],
-                stdin=_tts_proc.stdout, stderr=subprocess.DEVNULL)
+                ["espeak-ng", "-s", str(rate), "-v", voice, clean],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except FileNotFoundError:
         pass
 
