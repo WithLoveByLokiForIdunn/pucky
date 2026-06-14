@@ -2315,8 +2315,8 @@ def main():
     maslow.save(life)
     _save_life(life)
     _log("session_end", f"loki_window closed {datetime.now().isoformat()}")
+    pygame.quit()          # close window immediately — don't block on Ollama
     _write_session_report()
-    pygame.quit()
 
 
 if __name__ == "__main__":
