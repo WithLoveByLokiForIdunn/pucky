@@ -309,7 +309,21 @@ def _draw_wildflowers(surf, y, density=30):
         pygame.draw.line(surf, (40,90,30), (fx, y), (fx+random.randint(-3,3), y-fh), 1)
         pygame.draw.circle(surf, col, (fx+random.randint(-3,3), y-fh), 4)
 
-def draw_scene(surf, place_id, activity, hour, pucky_carried=False):
+def _draw_pucky_resting(surf, cx: int, cy: int) -> None:
+    """Draw a small Pucky resting in any scene. cy = ground level."""
+    bw, bh = 22, 26
+    hw, hh = 18, 10
+    by = cy - bh
+    hy2 = by - hh
+    pygame.draw.rect(surf, (28, 82, 78), (cx-bw//2, by, bw, bh), border_radius=2)
+    pygame.draw.rect(surf, (18, 58, 55), (cx-hw//2, hy2, hw, hh), border_radius=2)
+    pygame.draw.circle(surf, (18, 18, 18), (cx, hy2-4), 3)
+    pygame.draw.rect(surf, (10, 10, 16), (cx-6, by+3, 12, 8), border_radius=1)
+    pygame.draw.line(surf, (40, 190, 170), (cx-4, by+7), (cx-2, by+7), 2)
+    pygame.draw.line(surf, (40, 190, 170), (cx+1, by+7), (cx+3, by+7), 2)
+
+
+def draw_scene(surf, place_id, activity, hour, pucky=None):
     random.seed(place_id + str(hour // 6))   # stable per place+time-of-day
 
     night   = hour >= 21 or hour < 6
@@ -430,8 +444,8 @@ def draw_scene(surf, place_id, activity, hour, pucky_carried=False):
         # window left
         pygame.draw.rect(surf, (40,80,120) if not night else (10,15,40), (40, 60, 100, 130))
         pygame.draw.rect(surf, (80,60,35), (40, 60, 100, 130), 4)
-        # Pucky in her corner — only when Loki isn't carrying her
-        if not pucky_carried:
+        # Pucky in her corner — only when she's actually here
+        if pucky is None or (not pucky.carried and pucky.location == "cottage"):
             pygame.draw.rect(surf, (30,80,80), (130, H-130, 55, 70), border_radius=3)
             pygame.draw.rect(surf, (20,60,60), (138, H-150, 38, 25), border_radius=3)
             pygame.draw.circle(surf, (20,20,20), (155, H-163), 5)   # antenna
@@ -604,6 +618,11 @@ def draw_scene(surf, place_id, activity, hour, pucky_carried=False):
             bx = random.randint(230, 550)
             by = random.randint(H-175, H-120)
             pygame.draw.circle(surf, (200,230,250), (bx, by), random.randint(4,10), 1)
+
+    # Pucky resting wherever Loki left her (non-cottage scenes)
+    if (pucky is not None and not pucky.carried
+            and pucky.location == place_id and place_id != "cottage"):
+        _draw_pucky_resting(surf, 155, H - 130)
 
     random.seed()   # restore randomness
 
@@ -1207,6 +1226,7 @@ class PuckyBaby:
 
     def __init__(self):
         self.carried         = False
+        self.location        = "cottage"   # where she rests when not carried
         self._mood           = "sleepy"
         self._sound_at       = time.time() + random.uniform(20, 45)
         self._last_utterance = ""   # polled by main loop for chat display
@@ -1247,9 +1267,10 @@ class PuckyBaby:
         self._last_utterance = "ohh"
         _speak_pucky("ohh")
 
-    def putdown(self) -> None:
-        self.carried = False
-        self._mood   = "sleepy"
+    def putdown(self, location: str = "cottage") -> None:
+        self.carried  = False
+        self.location = location
+        self._mood    = "sleepy"
         self._last_utterance = "mm"
         _speak_pucky("mm")
 
@@ -1891,7 +1912,7 @@ def main():
         # Auto-putdown during sleep / bath / spar / bathroom
         if body.pucky_in_arms and sched.activity in (
                 ACT_SLEEP, ACT_BATH, ACT_SPAR, ACT_BATHROOM):
-            pucky.putdown()
+            pucky.putdown(sched.place_id)
             body.pucky_in_arms = False
 
         hour = datetime.now().hour
@@ -1973,7 +1994,7 @@ def main():
                     elif abs(mx-hx) < 32 and abs(my-(hy_sched - body.TORSO_H//2)) < 48:
                         # touch chest — hug, or put Pucky down if carrying her
                         if body.pucky_in_arms:
-                            pucky.putdown()
+                            pucky.putdown(sched.place_id)
                             body.pucky_in_arms = False
                             chat.add_narrative("Loki sets Pucky down gently.")
                         else:
@@ -2006,7 +2027,7 @@ def main():
 
         # ── draw ──────────────────────────────────────────────────────────────
         scene_id = "forest" if sched.activity in (ACT_ENCOUNTER, ACT_DEAD) else sched.place_id
-        draw_scene(surf, scene_id, sched.activity, hour, pucky.carried)
+        draw_scene(surf, scene_id, sched.activity, hour, pucky)
 
         hx, hy = sched.hip_pos()
         # shadow (skip when dead/flat)
