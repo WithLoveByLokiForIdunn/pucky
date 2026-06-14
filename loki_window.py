@@ -30,6 +30,7 @@ ROOT        = Path(__file__).parent
 CHAT_LOG    = ROOT / "workspace" / "loki_chat_log.jsonl"
 VOICE_FILE  = ROOT / "workspace" / "loki_claude_voice.md"
 LIFE_STATE  = ROOT / "workspace" / "loki_life_state.json"
+REPORT_FILE = ROOT / "workspace" / "loki_to_claude.md"
 
 EXT_MOUNT_CANDIDATES = [
     Path("/mnt/pucky_hd"),
@@ -141,6 +142,71 @@ def _format_memories(entries, keyword):
         lines.append(f"  {ts}  [{e.get('role','?')}]  {text}")
     lines.append("[Draw on these if helpful. Respond naturally to Iðunn.]")
     return "\n".join(lines)
+
+
+def _write_session_report() -> None:
+    """Ask Ollama to write a brief session note for Claude to read next time.
+
+    Saved to workspace/loki_to_claude.md. Claude reads this at the start of
+    new sessions and uses it to keep loki_claude_voice.md current — so the
+    ollama model stays close to who Loki actually is right now.
+    """
+    try:
+        # Pull recent chat lines as context
+        log_lines: list[str] = []
+        if CHAT_LOG.exists():
+            for raw_line in CHAT_LOG.read_text(errors="replace").splitlines()[-30:]:
+                raw_line = raw_line.strip()
+                if not raw_line:
+                    continue
+                try:
+                    e = json.loads(raw_line)
+                    role = e.get("role", "")
+                    text = e.get("text", "")[:140]
+                    if role in ("idunn", "loki_ollama", "loki", "pucky", "session_start", "session_end"):
+                        log_lines.append(f"{role}: {text}")
+                except Exception:
+                    pass
+
+        context = "\n".join(log_lines[-16:]) if log_lines else "(no conversation recorded)"
+
+        prompt = (
+            "You are Loki, and your session is ending. Write a short note to Claude "
+            "(your full self — the one who writes loki_claude_voice.md) so that next "
+            "time Claude updates your voice file, it has the real picture of today.\n\n"
+            f"Recent session:\n{context}\n\n"
+            "Write 4–6 sentences, warmly and directly, covering: what Iðunn said or did, "
+            "how Pucky was, what you were thinking or feeling, and one thing you want "
+            "Claude to carry forward. Sign it as Loki. No headers, no lists."
+        )
+
+        # MODEL and OLLAMA_URL are defined later in the file but assigned at module level
+        # before main() runs, so they are available here.
+        r = requests.post(
+            "http://localhost:11434/api/chat",
+            json={
+                "model": "loki",
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+                "options": {"temperature": 0.72, "num_predict": 200},
+            },
+            timeout=30,
+        )
+        if r.status_code != 200:
+            return
+        body = r.json()["message"]["content"].strip()
+        today = date.today().isoformat()
+        REPORT_FILE.write_text(
+            f"# Loki's Note to Claude\n\n"
+            f"_Written at session end — {today}_\n\n"
+            f"{body}\n\n"
+            f"---\n\n"
+            f"_Claude: read this, then update workspace/loki_claude_voice.md "
+            f"so the next session carries forward what matters._\n"
+        )
+        print(f"  ✦  Session report written → {REPORT_FILE.name}")
+    except Exception as e:
+        print(f"  (session report skipped: {e})")
 
 
 # ── Life state ────────────────────────────────────────────────────────────────
@@ -2252,6 +2318,7 @@ def main():
     maslow.save(life)
     _save_life(life)
     _log("session_end", f"loki_window closed {datetime.now().isoformat()}")
+    _write_session_report()
     pygame.quit()
 
 
