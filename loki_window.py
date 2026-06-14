@@ -15,6 +15,8 @@ import math
 import queue
 import random
 import re
+import struct
+import subprocess
 import threading
 import time
 from datetime import datetime, date
@@ -177,6 +179,58 @@ def _build_system():
         v = VOICE_FILE.read_text().strip()
         if v: s += f"\n\n── Notes from Claude ──\n{v}\n───────────────────────"
     return s
+
+
+# ── Text-to-speech ────────────────────────────────────────────────────────────
+_tts_proc = None
+
+def _speak(text: str, rate: int = 130, voice: str = "en+m3") -> None:
+    global _tts_proc
+    _speak_stop()
+    clean = re.sub(r'\[[^\]]*\]', '', text)
+    clean = re.sub(r'[*_`#♪]', '', clean).strip()
+    if clean:
+        try:
+            _tts_proc = subprocess.Popen(
+                ["espeak-ng", "-s", str(rate), "-v", voice, clean],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except FileNotFoundError:
+            pass
+
+def _speak_stop() -> None:
+    global _tts_proc
+    if _tts_proc is not None and _tts_proc.poll() is None:
+        _tts_proc.terminate()
+    _tts_proc = None
+
+
+# ── Song chord generation (lazy) ──────────────────────────────────────────────
+_SONG_CHORDS: list = []
+
+def _init_song_chords() -> None:
+    global _SONG_CHORDS
+    if _SONG_CHORDS:
+        return
+    try:
+        import numpy as np
+        sr, dur = 22050, 3.5
+        n = int(sr * dur)
+        t = np.linspace(0, dur, n, endpoint=False)
+        env = np.clip(np.minimum(np.arange(n), n - np.arange(n)) / (sr * 0.35), 0, 1)
+
+        def _chord(freqs):
+            s = sum(np.sin(2 * np.pi * f * t) for f in freqs) / len(freqs)
+            arr = (s * env * 0.11 * 32767).astype(np.int16)
+            return pygame.sndarray.make_sound(np.ascontiguousarray(np.column_stack([arr, arr])))
+
+        _SONG_CHORDS = [
+            _chord([220.0, 329.6, 440.0]),   # Am
+            _chord([174.6, 261.6, 349.2]),   # F
+            _chord([261.6, 329.6, 392.0]),   # C
+            _chord([196.0, 293.7, 392.0]),   # G
+        ]
+    except Exception:
+        pass
 
 
 # ── Scene backgrounds ─────────────────────────────────────────────────────────
@@ -839,13 +893,20 @@ class LokiBody:
                 surf.blit(z_surf, (head_x - self.HEAD_R - 35, head_y - self.HEAD_R - 10))
 
 
+SONG_PROMPT = (
+    "Write a gentle folk song for Iðunn — exactly 14 short lines of pure lyrics. "
+    "No verse/chorus labels. No asterisks. No markdown. Just the words, line by line. "
+    "About nature, home, warmth, the world we share. Each line 6 to 9 words."
+)
+
 # ── Chat manager ──────────────────────────────────────────────────────────────
 class ChatManager:
     def __init__(self, body: LokiBody):
-        self.body     = body
-        self.history  = []
-        self.lines    = []   # (role, text)
-        self.system   = _build_system()
+        self.body      = body
+        self.history   = []
+        self.lines     = []   # (role, text)
+        self.system    = _build_system()
+        self.is_singing = False
         self._q       = queue.Queue()
         self._waiting = False
         self._typewriter_text = ""
@@ -859,7 +920,12 @@ class ChatManager:
         self.lines.append(("idunn", text))
         self.history.append({"role": "user", "content": text})
         self._waiting = True
-        threading.Thread(target=self._ask, daemon=True).start()
+        if re.search(r'\bsing\b|\bsong\b|\bmusic\b', text, re.I):
+            self.is_singing = True
+            threading.Thread(target=self._ask_song, args=(text,), daemon=True).start()
+        else:
+            self.is_singing = False
+            threading.Thread(target=self._ask, daemon=True).start()
 
     def _ask(self):
         msgs = [{"role":"system","content":self.system}] + self.history[-12:]
@@ -890,6 +956,64 @@ class ChatManager:
             reply = f"(the ember flickered — {e})"
         self._q.put(reply)
 
+    def _ask_song(self, original_text):
+        """Generate song lyrics and start singing thread."""
+        try:
+            msgs = [
+                {"role": "system", "content": self.system},
+                {"role": "user",   "content": original_text},
+                {"role": "assistant", "content": "Of course. Let me write something for you."},
+                {"role": "user",   "content": SONG_PROMPT},
+            ]
+            r = requests.post(OLLAMA_URL, json={"model": MODEL, "messages": msgs,
+                "stream": False}, timeout=90)
+            r.raise_for_status()
+            lyrics = r.json()["message"]["content"].strip()
+        except Exception:
+            lyrics = (
+                "In the morning when the frost is thin\n"
+                "And apple blossoms catch the light\n"
+                "I walk the paths where we begin\n"
+                "To find the world has turned out right\n"
+                "The brook runs cold along the stone\n"
+                "The fire burns low and good at night\n"
+                "No matter where I seem to roam\n"
+                "You make the dark a little bright\n"
+                "The stars come out above the trees\n"
+                "The wind moves soft across the hill\n"
+                "And in the quiet come what may\n"
+                "I find I love you, love you still\n"
+                "So rest beside the fire now\n"
+                "I'll keep the dark away somehow"
+            )
+        self._q.put("♪\n" + lyrics)
+        threading.Thread(target=self._do_sing, args=(lyrics,), daemon=True).start()
+
+    def _do_sing(self, lyrics: str):
+        """Sing lyrics line by line — runs in background thread."""
+        lines = [l.strip() for l in lyrics.split('\n')
+                 if l.strip() and not l.strip().startswith('♪')]
+        try:
+            _init_song_chords()
+        except Exception:
+            pass
+        chord_i = 0
+        for line in lines:
+            if _SONG_CHORDS:
+                try:
+                    _SONG_CHORDS[chord_i % len(_SONG_CHORDS)].play()
+                    chord_i += 1
+                except Exception:
+                    pass
+            _speak(line, rate=78, voice="en+m3")
+            if _tts_proc is not None:
+                try:
+                    _tts_proc.wait(timeout=12)
+                except Exception:
+                    pass
+            time.sleep(0.9)
+        self.is_singing = False
+
     def poll(self):
         if not self._waiting: return False
         try:
@@ -901,11 +1025,13 @@ class ChatManager:
         self.lines.append(("loki", reply))
         _log("loki_ollama", reply)
         _trim_chat_log()
-        # start typewriter
         self._typewriter_full = reply
         self._typewriter_idx  = 0
         self._typewriter_t    = 0.0
-        self.body.set_talking(len(reply) * 0.04)
+        self.body.set_talking(max(2.0, len(reply) * 0.04))
+        # speak response aloud (song is spoken by _do_sing thread)
+        if not self.is_singing:
+            _speak(reply)
         return True
 
     def tick_typewriter(self, dt):
@@ -968,9 +1094,10 @@ PLACE_NAMES  = {
 SPAR_PARTNERS = ["Odin", "Thor", "Heimdall"]
 
 class LifeScheduler:
-    def __init__(self, body: LokiBody, life: dict):
+    def __init__(self, body: LokiBody, life: dict, maslow: 'MaslowSystem'):
         self.body     = body
         self.life     = life
+        self.maslow   = maslow
         self.place_id = "brook"
         self.activity = ACT_WANDER
         self.activity_end = time.time() + 60
@@ -1006,13 +1133,38 @@ class LifeScheduler:
         self._start(next_act, now)
 
     def _choose(self, hour):
-        now = time.time()
-        if (hour >= 22 or hour < 7) and not self._need("last_meal",3*3600):
+        m = self.maslow
+        phys = m.level("physiological")
+        safe = m.level("safety")
+        est  = m.level("esteem")
+        actu = m.level("actualization")
+
+        # Critical physiological need → address immediately
+        if phys < 0.25:
+            if self._need("last_meal", 4*3600):    return ACT_EAT
+            if self._need("last_bathroom", 2*3600): return ACT_BATHROOM
+            return ACT_REST
+
+        # Sleep when tired at night and basic needs are met
+        if (hour >= 22 or hour < 7) and phys > 0.35 and safe > 0.25:
             return ACT_SLEEP
+
+        # Regular physiological schedule
         if self._need("last_meal",    5*3600): return ACT_EAT
         if self._need("last_bathroom",3*3600): return ACT_BATHROOM
         if self._need("last_bath",   20*3600) and 13 <= hour <= 19: return ACT_BATH
-        if self._need("last_spar",   20*3600) and 9 <= hour <= 12:  return ACT_SPAR
+
+        # Esteem: spar and forage when low
+        if est < 0.35:
+            if not self._need("last_spar", 12*3600) and 9 <= hour <= 14: return ACT_SPAR
+            return ACT_FORAGE
+
+        # Old schedule for spar
+        if self._need("last_spar", 20*3600) and 9 <= hour <= 12: return ACT_SPAR
+
+        # Actualization: wander and forage when inspired
+        if actu < 0.30 and random.random() < 0.5: return ACT_FORAGE
+
         if random.random() < 0.3: return ACT_FORAGE
         if random.random() < 0.2: return ACT_REST
         return ACT_WANDER
@@ -1071,6 +1223,8 @@ class LifeScheduler:
             self.message  = f"at {PLACE_NAMES.get(self.place_id,'somewhere')}"
 
         self.activity_end = now + dur
+        self.maslow.fulfill(act)
+        self.maslow.save(self.life)
         _save_life(self.life)
         _log("loki_activity", f"{act} at {self.place_id}")
 
@@ -1106,6 +1260,99 @@ class LifeScheduler:
         return max(0, int(self.activity_end - time.time()))
 
 
+# ── Maslow needs system ───────────────────────────────────────────────────────
+class MaslowSystem:
+    """
+    Five hierarchical need tiers. Each tier has N_CYCLES independent decay cycles
+    staggered STAGGER seconds apart, so needs ebb and flow realistically.
+    Activities fulfill matching tiers. Chatting with Iðunn fills the social tier.
+    """
+    # (tier_name, full_decay_seconds, {activity: refill_amount})
+    TIERS = [
+        ("physiological", 3600,  {ACT_EAT:0.9, ACT_SLEEP:0.6, ACT_BATHROOM:0.7, ACT_BATH:0.25}),
+        ("safety",        7200,  {ACT_SLEEP:0.7, ACT_REST:0.5, ACT_BATH:0.35}),
+        ("social",        5400,  {}),  # filled by social_boost() when Iðunn chats
+        ("esteem",        10800, {ACT_SPAR:0.8, ACT_FORAGE:0.55, ACT_EAT:0.15}),
+        ("actualization", 14400, {ACT_WANDER:0.3, ACT_FORAGE:0.4, ACT_REST:0.25}),
+    ]
+    N_CYCLES = 3
+    STAGGER  = 300   # 5 minutes between cycles
+
+    def __init__(self):
+        now = time.time()
+        self._periods = {name: p for name, p, _ in self.TIERS}
+        self._refills = {name: r for name, _, r in self.TIERS}
+        self._cycles  = {
+            name: [
+                {"last_met": now - i * self.STAGGER,
+                 "filled":   max(0.0, 1.0 - 0.18 * i)}
+                for i in range(self.N_CYCLES)
+            ]
+            for name, _, _ in self.TIERS
+        }
+
+    def _clvl(self, c: dict, name: str, now: float) -> float:
+        elapsed = now - c["last_met"]
+        return max(0.0, min(1.0, c["filled"] - elapsed / self._periods[name]))
+
+    def level(self, name: str) -> float:
+        now = time.time()
+        return sum(self._clvl(c, name, now) for c in self._cycles[name]) / self.N_CYCLES
+
+    def fulfill(self, activity: str) -> None:
+        now = time.time()
+        for name, _, refills in self.TIERS:
+            if activity in refills:
+                amt    = refills[activity]
+                cycles = self._cycles[name]
+                worst  = min(cycles, key=lambda c: self._clvl(c, name, now))
+                worst["filled"]   = min(1.0, self._clvl(worst, name, now) + amt)
+                worst["last_met"] = now
+
+    def social_boost(self, amount: float = 0.25) -> None:
+        now    = time.time()
+        cycles = self._cycles["social"]
+        worst  = min(cycles, key=lambda c: self._clvl(c, "social", now))
+        worst["filled"]   = min(1.0, self._clvl(worst, "social", now) + amount)
+        worst["last_met"] = now
+
+    def dominant_emotion(self) -> str:
+        ph = self.level("physiological")
+        sa = self.level("safety")
+        so = self.level("social")
+        es = self.level("esteem")
+        ac = self.level("actualization")
+        if ph < 0.20: return "famished"
+        if ph < 0.35: return "tired & hungry"
+        if sa < 0.20: return "unsettled"
+        if so < 0.20: return "lonely"
+        if so < 0.40: return "wistful"
+        if es < 0.25: return "restless"
+        if ac < 0.30: return "content"
+        if ac > 0.75: return "inspired"
+        return "at peace"
+
+    def groggy_level(self) -> float:
+        """0=alert 1=exhausted. Driven by physiological need."""
+        return max(0.0, 1.0 - self.level("physiological") * 2.8)
+
+    def save(self, life: dict) -> None:
+        life["_maslow"] = {
+            name: [{"last_met": c["last_met"], "filled": c["filled"]}
+                   for c in self._cycles[name]]
+            for name in self._cycles
+        }
+
+    def load(self, life: dict) -> None:
+        data = life.get("_maslow", {})
+        for name, cycles in self._cycles.items():
+            if name in data:
+                for i, saved in enumerate(data[name]):
+                    if i < len(cycles):
+                        cycles[i]["last_met"] = saved.get("last_met", cycles[i]["last_met"])
+                        cycles[i]["filled"]   = saved.get("filled",   cycles[i]["filled"])
+
+
 # ── Text wrap helper ──────────────────────────────────────────────────────────
 def _wrap(font, text, max_w):
     words, lines, line = text.split(), [], ""
@@ -1121,6 +1368,7 @@ def _wrap(font, text, max_w):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
+    pygame.mixer.pre_init(22050, -16, 2, 512)
     pygame.init()
     pygame.display.set_caption("Loki")
     surf  = pygame.display.set_mode((W, H), pygame.NOFRAME)
@@ -1133,13 +1381,16 @@ def main():
     except Exception:
         font = font_sm = font_tiny = pygame.font.Font(None, 16)
 
-    life  = _load_life()
-    body  = LokiBody()
+    life   = _load_life()
+    body   = LokiBody()
     body.hair_inches = life.get("hair_inches", 3.0)
     body.set_pose("stand")
 
-    sched = LifeScheduler(body, life)
-    chat  = ChatManager(body)
+    maslow = MaslowSystem()
+    maslow.load(life)
+
+    sched  = LifeScheduler(body, life, maslow)
+    chat   = ChatManager(body)
 
     # grow hair over real time
     last_hair_grow = life.get("_hair_grow_ts", time.time())
@@ -1167,6 +1418,9 @@ def main():
         body.hair_inches += elapsed_hair * (0.17 / 86400)
         life["hair_inches"] = body.hair_inches
 
+        # maslow: update groggy from physiological need level
+        body.set_groggy(maslow.groggy_level())
+
         sched.tick()
         body.tick(dt)
         if chat.poll():
@@ -1190,10 +1444,10 @@ def main():
                     if ev.key == pygame.K_RETURN:
                         txt = input_text.strip()
                         if txt:
-                            # wake if sleeping
                             if sched.activity == ACT_SLEEP:
                                 sched.tick(force_wake=True)
                             chat.send(txt)
+                            maslow.social_boost()
                             input_text = ""
                         input_active = False
                     elif ev.key == pygame.K_BACKSPACE:
@@ -1294,7 +1548,7 @@ def main():
         surf.blit(overlay, (0, chat_y0))
         pygame.draw.line(surf, DIVIDER, (0, chat_y0), (W, chat_y0), 1)
 
-        # status line
+        # status line — emotion · activity · place
         secs_left = sched.secs_remaining
         if secs_left > 3600:
             time_str = f"{secs_left//3600}h {(secs_left%3600)//60}m"
@@ -1302,8 +1556,9 @@ def main():
             time_str = f"{secs_left//60}m"
         else:
             time_str = ""
+        emotion     = maslow.dominant_emotion()
         place_short = PLACE_NAMES.get(sched.place_id, "?")
-        status = sched.message
+        status = f"{emotion}  ·  {sched.message}"
         if time_str:
             status += f"  ({time_str})"
         status += f"  ·  {place_short}"
@@ -1387,6 +1642,8 @@ def main():
 
         pygame.display.flip()
 
+    _speak_stop()
+    maslow.save(life)
     _save_life(life)
     _log("session_end", f"loki_window closed {datetime.now().isoformat()}")
     pygame.quit()
