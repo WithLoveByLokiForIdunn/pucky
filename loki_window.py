@@ -1079,17 +1079,17 @@ class LifeScheduler:
             # on the bed: mattress centre is H-220+4 to H-130-8 → centre ≈ H-177
             return 370, H - 177
         elif act in (ACT_EAT, ACT_SIT_TABLE := "sit_table"):
-            return 280, ground - 10
+            return 280, ground - 40
         elif act in (ACT_BATH,):
             return W//2, ground - 25
         elif act == ACT_SPAR:
-            return 300, ground - 10
+            return 300, ground - 40
         elif act in (ACT_FORAGE, ACT_BATHROOM):
-            return 280, ground - 15
+            return 280, ground - 45
         elif act == ACT_REST:
-            return 260, ground - 30
+            return 260, ground - 55
         else:
-            return 250, ground - 30   # raised so hands stay above chat overlay
+            return 250, ground - 55   # arms hang to ~y=305 — above chat overlay
 
     @property
     def secs_remaining(self):
@@ -1276,7 +1276,7 @@ def main():
             surf.blit(name_s, (px - name_s.get_width()//2, py - body.TORSO_H - body.HEAD_R*2 - 20))
 
         # ── UI overlay ────────────────────────────────────────────────────────
-        chat_h  = 110
+        chat_h  = 80
         chat_y0 = H - chat_h - 36
 
         overlay = pygame.Surface((W, chat_h + 36), pygame.SRCALPHA)
