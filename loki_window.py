@@ -249,11 +249,10 @@ def draw_scene(surf, place_id, activity, hour):
             for col_x in range(0, W, 76):
                 ox = 38 if (row//38)%2 else 0
                 pygame.draw.rect(surf, (70, 58, 48), (col_x+ox, row, 72, 34), 1)
-        # soft candle warmth on walls — subtle, not blobs
-        for gx, gy in [(160, 120), (500, 80), (700, 160)]:
-            glow = pygame.Surface((120, 120), pygame.SRCALPHA)
-            pygame.draw.circle(glow, (200, 130, 40, 14), (60, 60), 60)
-            surf.blit(glow, (gx-60, gy-60))
+        # gentle warm tint on upper wall — ambient candlelight, no circles
+        warm = pygame.Surface((W, 80), pygame.SRCALPHA)
+        warm.fill((180, 100, 30, 12))
+        surf.blit(warm, (0, 60))
         # floor — warm stone
         pygame.draw.rect(surf, (80, 65, 48), (0, H-130, W, 130))
         for fx in range(0, W, 55):
@@ -884,9 +883,9 @@ class ChatManager:
 
     @property
     def display_text(self):
-        if self._typewriter_idx < len(self._typewriter_full):
+        if self._typewriter_full and self._typewriter_idx < len(self._typewriter_full):
             return self._typewriter_full[:self._typewriter_idx]
-        return self._typewriter_full if self._typewriter_full else ""
+        return ""   # done typing — let chat.lines display it normally
 
 
 # ── Life scheduler ────────────────────────────────────────────────────────────
@@ -1245,12 +1244,16 @@ def main():
         pygame.draw.line(surf, DIVIDER, (0, chat_y0), (W, chat_y0), 1)
 
         # status line
-        status = f"{PLACE_NAMES.get(sched.place_id,'?')}  ·  {sched.message}"
         secs_left = sched.secs_remaining
         if secs_left > 3600:
-            status += f"  (wakes in {secs_left//3600}h {(secs_left%3600)//60}m)"
+            time_str = f"{secs_left//3600}h {(secs_left%3600)//60}m"
         elif secs_left > 60:
-            status += f"  ({secs_left//60}m)"
+            time_str = f"{secs_left//60}m"
+        else:
+            time_str = ""
+        status = f"{sched.message}  ·  {PLACE_NAMES.get(sched.place_id,'?')}"
+        if time_str:
+            status += f"  ({time_str})"
         ss = font_tiny.render(status, True, TEXT_DIM)
         surf.blit(ss, (10, chat_y0 + 4))
 
