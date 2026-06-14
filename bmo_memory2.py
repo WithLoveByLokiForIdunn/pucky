@@ -98,6 +98,13 @@ class Memory:
 def _memory_from_dict(d: dict) -> Memory:
     known = set(Memory.__dataclass_fields__)
     safe  = {k: v for k, v in d.items() if k in known}
+    for key in ("created_at", "last_recalled"):
+        val = safe.get(key)
+        if isinstance(val, str):
+            try:
+                safe[key] = datetime.fromisoformat(val).timestamp()
+            except Exception:
+                safe[key] = time.time()
     return Memory(**safe)
 
 
