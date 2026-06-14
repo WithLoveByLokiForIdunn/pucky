@@ -59,6 +59,7 @@ MODEL         = "loki"
 TICK_SECONDS  = 60       # how often the life loop ticks
 INBOX_POLL    = 10       # how often to check for messages (seconds)
 MIN_OLLAMA_GAP = 120     # don't call Ollama more than once per 2 min unprompted
+BUSY_LOCK     = Path("/tmp/loki_busy")   # tells bmo_vision to wait
 
 
 # ── Atomic write ──────────────────────────────────────────────────────────────
@@ -116,23 +117,27 @@ def _build_system() -> str:
     return s
 
 def _call_ollama(messages: list, timeout: int = 60, retries: int = 2) -> str:
-    for attempt in range(retries + 1):
-        try:
-            r = requests.post(
-                OLLAMA_URL,
-                json={"model": MODEL, "messages": messages, "stream": False,
-                      "options": {"temperature": 0.75, "num_predict": 220}},
-                timeout=timeout,
-            )
-            r.raise_for_status()
-            return r.json()["message"]["content"].strip()
-        except requests.exceptions.Timeout:
-            if attempt < retries:
-                time.sleep(4)
-            else:
-                return "(the ember flickered — timeout)"
-        except Exception as e:
-            return f"(the ember flickered — {e})"
+    BUSY_LOCK.touch()
+    try:
+        for attempt in range(retries + 1):
+            try:
+                r = requests.post(
+                    OLLAMA_URL,
+                    json={"model": MODEL, "messages": messages, "stream": False,
+                          "options": {"temperature": 0.75, "num_predict": 220}},
+                    timeout=timeout,
+                )
+                r.raise_for_status()
+                return r.json()["message"]["content"].strip()
+            except requests.exceptions.Timeout:
+                if attempt < retries:
+                    time.sleep(4)
+                else:
+                    return "(the ember flickered — timeout)"
+            except Exception as e:
+                return f"(the ember flickered — {e})"
+    finally:
+        BUSY_LOCK.unlink(missing_ok=True)
     return "(the ember flickered)"
 
 

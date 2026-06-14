@@ -35,6 +35,9 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
 
+VISION_INTERVAL = 600          # check every 10 minutes
+BUSY_LOCK       = Path("/tmp/loki_busy")   # set by loki_daemon when calling Ollama
+
 # Try to import camera libraries
 # Falls back to simulation if not on Pi with camera
 try:
@@ -354,7 +357,11 @@ class BMOVision:
             except Exception as e:
                 print(f"  ⚠️  Vision error: {e}")
 
-            time.sleep(0.5)   # 2 frames per second — enough for emotion
+            # Wait 10 minutes, then yield up to 2 extra minutes if Ollama is busy
+            time.sleep(VISION_INTERVAL)
+            deadline = time.time() + 120
+            while BUSY_LOCK.exists() and time.time() < deadline:
+                time.sleep(30)
 
     def _process_real_frame(self) -> VisionFrame:
         """
