@@ -994,7 +994,7 @@ class LokiBody:
             # shoulder circle — muscular, tunic color or skin if topless
             shoulder_col = tunic if self.pose != "bath" else SKIN_LIGHT
             pygame.draw.circle(surf, shoulder_col,
-                               (int(sx), int(shoulder_y)), 11)
+                               (int(sx), int(shoulder_y)), 7)
 
         # ── neck & head ───────────────────────────────────────────────────────
         if self.pose == "sleep":
