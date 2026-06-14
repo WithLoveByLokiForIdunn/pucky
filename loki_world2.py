@@ -738,7 +738,7 @@ def draw_scene(surf, place_id, activity, hour, now=None, bg_images=None):
         surf.blit(bg_images[place_id], (0, 0))
         # still draw dynamic overlays on top
         if place_id == "brook":
-            water_y = GROUND + 40
+            water_y = (H - 130) + 40
             sx, sy  = 555, water_y + 6
             pygame.draw.ellipse(surf, (85, 80, 75), (sx - 10, sy - 5, 20, 11))
             if hour < 4:
