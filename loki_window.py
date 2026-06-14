@@ -242,36 +242,63 @@ def draw_scene(surf, place_id, activity, hour):
         _draw_wildflowers(surf, ground, 15)
 
     elif place_id == "asgard":
-        # Stone room
-        surf.fill((25,22,35))
-        pygame.draw.rect(surf, (40,36,55), (0, 0, W, H))
-        # stone wall texture
-        for row in range(0, H-100, 40):
-            for col_x in range(0, W, 80):
-                ox = 40 if (row//40)%2 else 0
-                pygame.draw.rect(surf, (48,44,62), (col_x+ox, row, 75, 36), 1)
-        # floor
-        pygame.draw.rect(surf, (55,48,40), (0, H-130, W, 130))
-        for fx in range(0, W, 60):
-            pygame.draw.line(surf, (45,38,30), (fx, H-130), (fx, H), 1)
-        # tall window — stars or daylight
-        win_rect = pygame.Rect(580, 30, 90, 200)
-        win_col  = (20,30,80) if night else (100,160,220)
+        # Stone room — warmer, lit by candles
+        surf.fill((55, 45, 38))
+        # stone wall texture — warm amber-grey
+        for row in range(0, H-100, 38):
+            for col_x in range(0, W, 76):
+                ox = 38 if (row//38)%2 else 0
+                pygame.draw.rect(surf, (70, 58, 48), (col_x+ox, row, 72, 34), 1)
+        # candle glow on walls (warm wash)
+        for gx, gy in [(160, 120), (500, 80), (700, 160)]:
+            glow = pygame.Surface((220, 220), pygame.SRCALPHA)
+            pygame.draw.circle(glow, (200, 130, 40, 28), (110, 110), 110)
+            surf.blit(glow, (gx-110, gy-110))
+        # floor — warm stone
+        pygame.draw.rect(surf, (80, 65, 48), (0, H-130, W, 130))
+        for fx in range(0, W, 55):
+            pygame.draw.line(surf, (68, 54, 38), (fx, H-130), (fx, H), 1)
+        # tall window
+        win_rect = pygame.Rect(590, 25, 85, 190)
+        win_col  = (28, 38, 90) if night else (120, 170, 230)
         pygame.draw.rect(surf, win_col, win_rect)
-        pygame.draw.rect(surf, (80,70,60), win_rect, 3)
+        pygame.draw.rect(surf, (95, 78, 58), win_rect, 4)
         if night:
-            for _ in range(12):
+            for _ in range(14):
                 sx = win_rect.x + random.randint(5, win_rect.w-5)
                 sy = win_rect.y + random.randint(5, win_rect.h-5)
-                pygame.draw.circle(surf, (255,255,200), (sx,sy), 1)
+                pygame.draw.circle(surf, (255, 255, 200), (sx, sy), 1)
+        # wall candle sconce
+        sconce_x, sconce_y = 700, 140
+        pygame.draw.rect(surf, (80, 60, 30), (sconce_x-4, sconce_y, 8, 18))
+        pygame.draw.circle(surf, (255, 200, 60), (sconce_x, sconce_y), 9)
+        sc_glow = pygame.Surface((60, 60), pygame.SRCALPHA)
+        pygame.draw.circle(sc_glow, (255, 180, 40, 50), (30, 30), 30)
+        surf.blit(sc_glow, (sconce_x-30, sconce_y-30))
         # bookshelf
-        pygame.draw.rect(surf, (55,40,25), (50, 80, 80, 200))
+        pygame.draw.rect(surf, (70, 50, 28), (30, 70, 85, 210))
         for shelf in range(4):
-            pygame.draw.line(surf, (45,32,18), (50, 80+shelf*48), (130, 80+shelf*48), 2)
-            for bk in range(random.randint(3,5)):
-                bkcol = random.choice([(100,40,30),(40,80,50),(60,60,120),(120,90,30)])
-                bx = 55 + bk*14
-                pygame.draw.rect(surf, bkcol, (bx, 85+shelf*48, 12, 40))
+            pygame.draw.line(surf, (55, 38, 18), (30, 70+shelf*50), (115, 70+shelf*50), 2)
+            for bk in range(random.randint(3, 5)):
+                bkcol = random.choice([(130,50,35),(55,95,60),(75,75,140),(140,105,35)])
+                bx = 36 + bk*14
+                pygame.draw.rect(surf, bkcol, (bx, 74+shelf*50, 11, 42))
+        # BED — dark wood frame with deep green blanket, pillow
+        bed_x1, bed_x2 = 155, 590
+        bed_y1, bed_y2 = H-195, H-130
+        # frame
+        pygame.draw.rect(surf, (55, 35, 18), (bed_x1, bed_y1, bed_x2-bed_x1, bed_y2-bed_y1), border_radius=6)
+        # headboard
+        pygame.draw.rect(surf, (65, 42, 22), (bed_x1, bed_y1-35, 28, bed_y2-bed_y1+35), border_radius=4)
+        # footboard
+        pygame.draw.rect(surf, (60, 38, 20), (bed_x2-22, bed_y1-15, 22, bed_y2-bed_y1+15), border_radius=4)
+        # mattress
+        pygame.draw.rect(surf, (140, 120, 90), (bed_x1+28, bed_y1+4, bed_x2-bed_x1-50, bed_y2-bed_y1-6), border_radius=4)
+        # blanket (deep green, covers lower 2/3 of bed)
+        blanket_x = bed_x1 + 28 + (bed_x2-bed_x1-50)//3
+        pygame.draw.rect(surf, (35, 70, 42), (blanket_x, bed_y1+4, bed_x2-bed_x1-50 - (bed_x2-bed_x1-50)//3, bed_y2-bed_y1-6), border_radius=4)
+        # pillow
+        pygame.draw.ellipse(surf, (210, 195, 165), (bed_x1+32, bed_y1+8, 80, 30))
 
     elif place_id == "cottage":
         # Warm wooden interior
@@ -1020,7 +1047,9 @@ class LifeScheduler:
         ground = H - 130
         act    = self.activity
         if act == ACT_SLEEP:
-            return W//2, ground - 20
+            # on the bed: head toward headboard (left), body stretching right
+            # bed mattress is at y = H-195+4 to H-130-6, centre ≈ H-168
+            return 370, H - 168
         elif act in (ACT_EAT, ACT_SIT_TABLE := "sit_table"):
             return 280, ground - 10
         elif act in (ACT_BATH,):
