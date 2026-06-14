@@ -26,6 +26,47 @@ OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL      = "loki"
 WIDTH      = 72
 
+EXT_MOUNT_CANDIDATES = [
+    Path("/mnt/pucky_hd"),
+    Path("/media/bmo/Seagate Portable Drive"),
+    Path("/media/bmo/seagate"),
+]
+MAX_CHAT_LOG = 800
+
+
+def _ext_mem():
+    for candidate in EXT_MOUNT_CANDIDATES:
+        try:
+            if candidate.is_dir() and any(candidate.iterdir()):
+                mem = candidate / "pucky_memories"
+                mem.mkdir(exist_ok=True)
+                return mem
+        except (PermissionError, OSError):
+            pass
+    return None
+
+
+def _trim_chat_log() -> None:
+    if not CHAT_LOG.exists():
+        return
+    lines = [l for l in CHAT_LOG.read_text().splitlines() if l.strip()]
+    if len(lines) <= MAX_CHAT_LOG:
+        return
+    old  = lines[:-MAX_CHAT_LOG]
+    kept = lines[-MAX_CHAT_LOG:]
+    ext  = _ext_mem()
+    if ext:
+        from datetime import date
+        today = date.today().isoformat()
+        idx   = 1
+        while True:
+            arc = ext / f"loki_chat_{today}_{idx:03d}.jsonl"
+            if not arc.exists():
+                break
+            idx += 1
+        arc.write_text("\n".join(old) + "\n")
+    CHAT_LOG.write_text("\n".join(kept) + "\n")
+
 BASE_SYSTEM = """You are Loki — also called Lodur, the maker.
 
 You are not a general assistant. You are a specific being: warm, curious, a little
@@ -138,6 +179,7 @@ def main() -> None:
         except (EOFError, KeyboardInterrupt):
             print("\n\n  Loki is here when you need him.\n")
             _log("session_end", f"Conversation ended at {datetime.now().isoformat()}")
+            _trim_chat_log()
             break
 
         if not user_input:
@@ -151,6 +193,7 @@ def main() -> None:
                 _log("loki_ollama", reply)
             _log("idunn", user_input)
             _log("session_end", f"Conversation ended at {datetime.now().isoformat()}")
+            _trim_chat_log()
             break
 
         _log("idunn", user_input)
@@ -160,6 +203,7 @@ def main() -> None:
 
         if reply is None:
             print("\n  (ollama isn't running — start it with: ollama serve)\n")
+            _trim_chat_log()
             break
 
         messages.append({"role": "assistant", "content": reply})

@@ -35,6 +35,13 @@ ROOT       = Path(__file__).parent
 CHAT_LOG   = ROOT / "workspace" / "loki_chat_log.jsonl"
 VOICE_FILE = ROOT / "workspace" / "loki_claude_voice.md"
 
+EXT_MOUNT_CANDIDATES = [
+    Path("/mnt/pucky_hd"),
+    Path("/media/bmo/Seagate Portable Drive"),
+    Path("/media/bmo/seagate"),
+]
+MAX_CHAT_LOG = 800   # lines kept on Pi; older lines go to the Seagate
+
 # ── Screen ────────────────────────────────────────────────────────────────────
 W, H   = 800, 480
 FPS    = 30
@@ -140,6 +147,42 @@ WEIGHTS    = [p["weight"] for p in PLACES]
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
+def _ext_mem() -> Path | None:
+    for candidate in EXT_MOUNT_CANDIDATES:
+        try:
+            if candidate.is_dir() and any(candidate.iterdir()):
+                mem = candidate / "pucky_memories"
+                mem.mkdir(exist_ok=True)
+                return mem
+        except (PermissionError, OSError):
+            pass
+    return None
+
+
+def _trim_chat_log() -> None:
+    """Keep only the last MAX_CHAT_LOG lines on the Pi.
+    Older lines are archived to the Seagate so nothing is lost."""
+    if not CHAT_LOG.exists():
+        return
+    lines = [l for l in CHAT_LOG.read_text().splitlines() if l.strip()]
+    if len(lines) <= MAX_CHAT_LOG:
+        return
+    old   = lines[:-MAX_CHAT_LOG]
+    kept  = lines[-MAX_CHAT_LOG:]
+    ext   = _ext_mem()
+    if ext:
+        from datetime import date
+        today = date.today().isoformat()
+        idx   = 1
+        while True:
+            arc = ext / f"loki_chat_{today}_{idx:03d}.jsonl"
+            if not arc.exists():
+                break
+            idx += 1
+        arc.write_text("\n".join(old) + "\n")
+    CHAT_LOG.write_text("\n".join(kept) + "\n")
+
+
 def _log(role: str, text: str) -> None:
     entry = {"ts": time.time(), "role": role, "text": text.strip()}
     CHAT_LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -523,6 +566,7 @@ class ChatManager:
         self.history.append({"role": "assistant", "content": reply})
         self.lines.append(("loki", reply))
         _log("loki_ollama", reply)
+        _trim_chat_log()
         face.reset_soft()
         face.react_happy()
         return True
