@@ -530,6 +530,8 @@ class LokiBody:
         self._breath      = 0.0   # breathing bob phase
         self._mood        = "content"
         self.hair_inches  = 3.0
+        self._blush       = 0.0   # 0=none  1=deep pink cheeks
+        self._curve       = 0.2   # 0=flat  1=big smile
 
     def set_pose(self, pose):
         self.pose = pose
@@ -808,15 +810,23 @@ class LokiBody:
                 pygame.draw.ellipse(surf, (180,80,80),
                     (head_x-5, mouth_y-1, 10, int(mouth_open)+1))
             else:
-                # natural slight smile
+                # smile deepens with _curve (touch reaction)
+                smile_depth = 4 + self._curve * 10
                 pts2 = []
                 for t in range(11):
                     f  = t/10
-                    mx = head_x - 8 + f*16
-                    my = mouth_y + math.sin(f*math.pi)*4
-                    pts2.append((mx, my))
+                    smx = head_x - 8 + f*16
+                    smy = mouth_y + math.sin(f*math.pi) * smile_depth
+                    pts2.append((smx, smy))
                 if len(pts2) > 1:
                     pygame.draw.lines(surf, SKIN_DARK, False, pts2, 2)
+            # blush cheeks
+            if self._blush > 0.05:
+                alpha = int(self._blush * 130)
+                for cx_off in (-15, 15):
+                    bc = pygame.Surface((22, 12), pygame.SRCALPHA)
+                    bc.fill((220, 70, 90, alpha))
+                    surf.blit(bc, (head_x + cx_off - 11, head_y + 4))
         else:
             # sleeping face — closed eyes, slight smile
             for ex_s in (-1, 1):
@@ -1233,8 +1243,8 @@ def main():
                         body._curve = 0.9
                         body._blink = 1.0
                         pygame.time.set_timer(pygame.USEREVENT + 2, 2500)
-                    elif (abs(mx-hx_hl) < 28 and abs(my-hy_hl) < 28) or \
-                         (abs(mx-hx_hr) < 28 and abs(my-hy_hr) < 28):
+                    elif (abs(mx-hx_hl) < 40 and abs(my-hy_hl) < 40) or \
+                         (abs(mx-hx_hr) < 40 and abs(my-hy_hr) < 40):
                         # touch hand — gentle warm reaction
                         body._blush = 0.5
                         body._curve = 0.6
