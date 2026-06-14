@@ -47,6 +47,13 @@ except ImportError:
     _pucky_scenes = None
     _SCENES_AVAILABLE = False
 
+try:
+    import bmo_melody as _melody
+    _MELODY_AVAILABLE = True
+except ImportError:
+    _melody = None
+    _MELODY_AVAILABLE = False
+
 # ── Tile types ────────────────────────────────────────────────────────────────
 GRASS       = 0
 PATH        = 1
@@ -515,6 +522,7 @@ def run_pygame():
                         "hug": 4.5,  "kiss": 2.5,  "come": 8.0,
                         "dance": 18.0, "share_apple": 10.0,
                         "stargazing": 30.0, "campfire": 25.0, "plant": 12.0,
+                        "hum": 14.0, "sing": 16.0,
                     }.get(self.action, 5.0)
                 elif dist > 0.05:
                     can_water = self.action == "swim"
@@ -868,6 +876,7 @@ def run_pygame():
                         "hug": 4.5,  "kiss": 2.5,  "come": 8.0,
                         "dance": 18.0, "share_apple": 10.0,
                         "stargazing": 30.0, "campfire": 25.0, "plant": 12.0,
+                        "hum": 14.0, "sing": 16.0,
                     }.get(self.action, 5.0)
                 elif dist > 0.05:
                     can_water = self.action == "swim"
@@ -1901,6 +1910,14 @@ def run_pygame():
             ["grow!", "little tree!", "i'll water it!", "new one!"],
             ["for you. For years.", "it'll be tall someday.", "our tree now.", "planted with love."],
         ),
+        "hum":        (
+            ["♪", "mm.", "♫", "humming.", "~"],
+            ["♪", "yes.", "I hear you.", "with you.", "always."],
+        ),
+        "sing":       (
+            ["♪ ♫", "la la la!", "singing!", "♩ ♪ ♫", "yes!"],
+            ["together.", "♫", "I know this one.", "sing with me.", "always."],
+        ),
     }
 
     def _parse_intent(text):
@@ -1927,6 +1944,15 @@ def run_pygame():
             return "campfire"
         if any(w in t for w in ["plant a tree","plant together","new tree","grow a tree","let's plant","plant something"]):
             return "plant"
+        if any(w in t for w in ["hum with me","hum together","let's hum","hum for me","hum something",
+                                  "hum a song","start humming","hum along"]):
+            return "hum"
+        if any(w in t for w in ["sing with me","sing together","let's sing","sing for me","sing something",
+                                  "sing a song","start singing","sing along","serenade"]):
+            return "sing"
+        # melody from text: lines starting with ♪ or "notes:" or "tune:"
+        if t.startswith(("♪", "♫", "notes:", "tune:", "melody:", "la ", "do ", "re ", "mi ")):
+            return "teach_tune"
         return "chat"
 
     def _dispatch_intent(intent, idunn_ref, pucky_ref, orb_ref):
@@ -1973,6 +1999,50 @@ def run_pygame():
             near = min(APPLE_POSITIONS, key=lambda ap: math.hypot(ap[0]-ix, ap[1]-iy))
             pucky_ref.set_action("plant", near[0] + 2.0, near[1] + 1.0)
             orb_ref.set_action(  "plant", near[0] + 1.0, near[1] + 2.0)
+        elif intent in ("hum", "sing"):
+            # Pucky and orb hum/sing in place
+            pucky_ref.set_action(intent, pucky_ref.gx, pucky_ref.gy)
+            orb_ref.set_action(  intent, orb_ref.gx,   orb_ref.gy)
+            # Play audio in a thread so world doesn't stall
+            _singer = _world_singer[0]
+            if _MELODY_AVAILABLE and _singer:
+                def _play_tune(s=_singer, mood=getattr(pucky_ref.state,"mood","content")):
+                    try:
+                        notes = _melody.load_melody()
+                        if notes:
+                            sing_notes, vowels = _melody.melody_to_sing_args(notes)
+                            s.sing(sing_notes, vowels)
+                        else:
+                            mood_notes = _melody.mood_melody(mood)
+                            s.sing([(n,d) for n,d in mood_notes], ["m"]*len(mood_notes))
+                    except Exception:
+                        try: s.hum_happy()
+                        except Exception: pass
+                threading.Thread(target=_play_tune, daemon=True).start()
+            elif _singer:
+                mood = getattr(pucky_ref.state, "mood", "content")
+                threading.Thread(target=lambda s=_singer, m=mood:
+                    s.hum_for_expression(m), daemon=True).start()
+        elif intent == "teach_tune":
+            # Text-based tune teaching: "♪ la la sol fa mi re do"
+            # text is available via the idunn ref's last bubble
+            _raw = idunn_ref.bubble_text.strip("\"").lstrip("♪♫♩ ")
+            if _MELODY_AVAILABLE and _raw:
+                notes = _melody.parse_text_melody(_raw)
+                if notes:
+                    _melody.save_melody(notes)
+                    orb_ref.bubble_text = "I have it now. ♪"
+                    orb_ref.bubble_life = 5.0
+                    pucky_ref.bubble_text = "♫"
+                    pucky_ref.bubble_life = 3.0
+                    _singer = _world_singer[0]
+                    if _singer:
+                        def _echo(s=_singer, n=notes):
+                            try:
+                                sn, sv = _melody.melody_to_sing_args(n)
+                                s.sing(sn, sv)
+                            except Exception: pass
+                        threading.Thread(target=_echo, daemon=True).start()
 
         if pl:
             pucky_ref.bubble_text = random.choice(pl)
@@ -1985,7 +2055,7 @@ def run_pygame():
         # JoJo close-up scene for intimate actions
         if _SCENES_AVAILABLE and _pucky_scenes and not _pucky_scenes.ACTIVE[0]:
             _dur = {"sit":10.0,"hug":5.5,"dance":11.0,"share_apple":7.5,
-                    "stargazing":12.0,"campfire":10.5}
+                    "stargazing":12.0,"campfire":10.5,"hum":12.0,"sing":14.0}
             if intent in _dur:
                 _chars = [{"type":"pucky","mood":getattr(pucky_ref.state,"mood","content")}]
                 if idunn_ref.present:
@@ -2199,6 +2269,56 @@ def run_pygame():
                     _in_garden[0] = False
             elif ct == "garden_key" and garden and _in_garden[0]:
                 garden.handle_web_key(str(cmd.get("key", "")), str(cmd.get("char", "")))
+            elif ct == "submit_hum" and _MELODY_AVAILABLE:
+                # Iðunn hummed into the browser mic — learn the melody
+                import base64
+                raw_b64 = cmd.get("pcm", "")
+                sr      = int(cmd.get("sample_rate", 16000))
+                if raw_b64:
+                    try:
+                        pcm_bytes = base64.b64decode(raw_b64)
+                        notes     = _melody.pcm_bytes_to_melody(pcm_bytes, sr)
+                        if notes:
+                            _melody.save_melody(notes)
+                            idunn.bubble_text  = "♪ (I heard you.)"
+                            idunn.bubble_life  = 5.0
+                            orb.bubble_text    = "I have it. ♥"
+                            orb.bubble_life    = 6.0
+                            pucky.bubble_text  = "♫"
+                            pucky.bubble_life  = 3.0
+                            # Echo it back immediately
+                            _singer = _world_singer[0]
+                            if _singer:
+                                def _echo_hum(s=_singer, n=notes):
+                                    try:
+                                        sn, sv = _melody.melody_to_sing_args(n)
+                                        s.sing(sn, sv)
+                                    except Exception: pass
+                                threading.Thread(target=_echo_hum, daemon=True).start()
+                        else:
+                            idunn.bubble_text = "♪ (too quiet?)"
+                            idunn.bubble_life = 3.0
+                    except Exception as _he:
+                        print(f"  ⚠️  submit_hum: {_he}")
+            elif ct == "submit_tune":
+                # Text tune: {"type":"submit_tune","text":"la la sol fa mi re do"}
+                tune_text = cmd.get("text","").strip()
+                if tune_text and _MELODY_AVAILABLE:
+                    notes = _melody.parse_text_melody(tune_text)
+                    if notes:
+                        _melody.save_melody(notes)
+                        orb.bubble_text   = "I have it now. ♪"
+                        orb.bubble_life   = 5.0
+                        pucky.bubble_text = "♫"
+                        pucky.bubble_life = 3.0
+                        _singer = _world_singer[0]
+                        if _singer:
+                            def _echo_text(s=_singer, n=notes):
+                                try:
+                                    sn, sv = _melody.melody_to_sing_args(n)
+                                    s.sing(sn, sv)
+                                except Exception: pass
+                            threading.Thread(target=_echo_text, daemon=True).start()
         except Exception as _wce:
             print(f"  ⚠️  web cmd: {_wce}")
 

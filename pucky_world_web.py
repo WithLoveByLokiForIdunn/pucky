@@ -204,6 +204,22 @@ body{background:#1a1512;color:#e8dcc8;font-family:monospace;height:100dvh;displa
 #lsend:active{background:#7a5828}
 #lcancel{background:rgba(45,30,12,.6);border:1px solid #362212;border-radius:8px;padding:10px 16px;font-family:monospace;font-size:13px;color:#6a5a45;cursor:pointer}
 #lcancel:active{background:#201610}
+/* hum modal */
+#hm{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:100;align-items:center;justify-content:center;padding:18px}
+#hm.show{display:flex}
+#hbox{background:#0e1018;border:1px solid rgba(120,130,200,.4);border-radius:14px;padding:22px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:12px;align-items:center}
+#hbox h2{font-size:11px;color:#9090c0;letter-spacing:2px;text-transform:uppercase;text-align:center}
+#hstatus{font-size:12px;color:#6070a0;letter-spacing:1px;min-height:18px;text-align:center}
+#hbtn{width:72px;height:72px;border-radius:50%;background:#1a1a2e;border:2px solid rgba(120,130,200,.5);font-size:28px;color:#8888cc;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,border-color .2s}
+#hbtn.recording{background:#1e0e1e;border-color:rgba(200,100,200,.7);color:#cc88cc;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(180,80,180,.4)}50%{box-shadow:0 0 0 10px rgba(180,80,180,0)}}
+#htune{background:#0a0c12;border:1px solid #222240;border-radius:8px;padding:8px 12px;font-family:monospace;font-size:13px;color:#c8cce8;outline:none;width:100%}
+#htune::placeholder{color:#333355}
+#htune:focus{border-color:#445588}
+#hbtns{display:flex;gap:8px;width:100%}
+#hsend{flex:1;background:#1a1a38;border:1px solid #3a3a6a;border-radius:8px;padding:9px;font-family:monospace;font-size:12px;color:#9090d0;cursor:pointer}
+#hsend:active{background:#2a2a50}
+#hcancel2{background:rgba(20,18,30,.7);border:1px solid #221830;border-radius:8px;padding:9px 14px;font-family:monospace;font-size:12px;color:#4a4060;cursor:pointer}
 </style>
 </head>
 <body>
@@ -222,11 +238,14 @@ body{background:#1a1512;color:#e8dcc8;font-family:monospace;height:100dvh;displa
       <button class="ab" onclick="act('campfire')">&#9832; fire</button>
       <button class="ab" onclick="act('stargazing')">&#9733; stars</button>
       <button class="ab" onclick="act('plant')">&#10047; plant</button>
+      <button class="ab" onclick="act('hum')">&#9834; hum together</button>
+      <button class="ab" onclick="act('sing')">&#9835; sing together</button>
       <button class="ab" onclick="act('come')">come to me</button>
       <hr style="border:none;border-top:1px solid rgba(170,130,60,.2);margin:3px 0">
       <button class="ab" onclick="enterCottage()">&#127968; enter cottage</button>
       <button class="ab" onclick="cottageKey('escape','')">&#x2715; exit cottage</button>
       <button class="ab" onclick="openLetterModal()">&#9998; write letter</button>
+      <button class="ab" onclick="openHumModal()">&#9834; teach a tune</button>
       <button class="ab" onclick="cottageKey('left','')">&#9664; prev</button>
       <button class="ab" onclick="cottageKey('right','')">&#9654; next</button>
       <div id="pinpad" style="display:flex;flex-wrap:wrap;gap:3px;width:120px;margin-top:3px">
@@ -261,6 +280,20 @@ body{background:#1a1512;color:#e8dcc8;font-family:monospace;height:100dvh;displa
     <div id="lbts">
       <button id="lsend" onclick="sendLetter()">send &#9654;</button>
       <button id="lcancel" onclick="closeLetter()">&#x2715; cancel</button>
+    </div>
+  </div>
+</div>
+<!-- hum / teach tune modal -->
+<div id="hm" onclick="if(event.target===this)closeHum()">
+  <div id="hbox">
+    <h2>&#9834; teach a tune</h2>
+    <div id="hstatus">press and hold to hum</div>
+    <button id="hbtn" onpointerdown="startHum()" onpointerup="stopHum()" onpointercancel="stopHum()">&#9834;</button>
+    <div style="font-size:10px;color:#404060;letter-spacing:1px;text-align:center">or type notes below</div>
+    <input id="htune" type="text" placeholder="la la sol fa mi re do  ·  C4 D4 E4 G4" maxlength="120" autocomplete="off" autocorrect="off" spellcheck="false">
+    <div id="hbtns">
+      <button id="hsend" onclick="sendTune()">&#9654; teach</button>
+      <button id="hcancel2" onclick="closeHum()">&#x2715;</button>
     </div>
   </div>
 </div>
@@ -349,6 +382,71 @@ function sendLetter() {
   if (!txt) return;
   snd({type:'submit_letter', text:txt});
   closeLetter();
+}
+
+/* ── Hum / teach tune modal ── */
+let humCtx = null, humProc = null, humSrc = null, humStream = null, humChunks = [];
+function openHumModal() {
+  document.getElementById('hm').classList.add('show');
+  document.getElementById('hstatus').textContent = 'press and hold to hum';
+  document.getElementById('hbtn').className = 'hbtn';
+  document.getElementById('hbtn').textContent = '♪';
+  document.getElementById('htune').value = '';
+}
+function closeHum() {
+  stopHum();
+  document.getElementById('hm').classList.remove('show');
+}
+async function startHum() {
+  if (humCtx) return;
+  try {
+    const SR = 16000;
+    humChunks = [];
+    humStream = await navigator.mediaDevices.getUserMedia({audio:{sampleRate:SR,channelCount:1,echoCancellation:false,noiseSuppression:false}});
+    humCtx  = new AudioContext({sampleRate:SR});
+    humSrc  = humCtx.createMediaStreamSource(humStream);
+    humProc = humCtx.createScriptProcessor(2048, 1, 1);
+    humProc.onaudioprocess = e => {
+      const f32 = e.inputBuffer.getChannelData(0);
+      const i16 = new Int16Array(f32.length);
+      for (let i = 0; i < f32.length; i++)
+        i16[i] = Math.max(-32768, Math.min(32767, Math.round(f32[i] * 32767)));
+      humChunks.push(new Uint8Array(i16.buffer));
+    };
+    humSrc.connect(humProc);
+    humProc.connect(humCtx.destination);
+    document.getElementById('hstatus').textContent = 'listening…';
+    document.getElementById('hbtn').classList.add('recording');
+    document.getElementById('hbtn').textContent = '■';
+  } catch(err) {
+    document.getElementById('hstatus').textContent = 'mic unavailable';
+  }
+}
+function stopHum() {
+  if (!humCtx) return;
+  try { humProc.disconnect(); humSrc.disconnect(); humStream.getTracks().forEach(t=>t.stop()); humCtx.close(); } catch(_){}
+  humCtx = null; humProc = null; humSrc = null; humStream = null;
+  document.getElementById('hbtn').classList.remove('recording');
+  document.getElementById('hbtn').textContent = '♪';
+  if (!humChunks.length) return;
+  const total = humChunks.reduce((a,b)=>a+b.length,0);
+  const buf = new Uint8Array(total);
+  let off = 0; for (const c of humChunks){buf.set(c,off);off+=c.length;}
+  // base64 encode safely for large buffers
+  let b64=''; const chunk=8192;
+  for (let i=0;i<buf.length;i+=chunk) b64+=btoa(String.fromCharCode(...buf.slice(i,i+chunk)));
+  snd({type:'submit_hum', pcm:b64, sample_rate:16000});
+  document.getElementById('hstatus').textContent = 'sent ♥ learning…';
+  humChunks = [];
+  setTimeout(()=>{ if(document.getElementById('hstatus')) document.getElementById('hstatus').textContent='press and hold to hum again'; },3000);
+}
+function sendTune() {
+  const txt = document.getElementById('htune').value.trim();
+  if (!txt) return;
+  snd({type:'submit_tune', text:txt});
+  document.getElementById('hstatus').textContent = 'sent ♥ learning…';
+  document.getElementById('htune').value = '';
+  setTimeout(closeHum, 1800);
 }
 
 /* ── Keyboard movement (WASD / arrows) ── */
