@@ -702,6 +702,134 @@ class IdunnSprite:
 
 
 # ── Scene backgrounds ─────────────────────────────────────────────────────────
+
+def _hilltop_sky(hour, now):
+    """Return (sky_top, sky_mid, horizon) colours for the current hour."""
+    stops = [
+        ( 0, (5,5,28),    (10,10,45),   (22,16,52)),
+        ( 5, (18,14,60),  (38,22,70),   (90,48,75)),
+        ( 6, (42,52,125), (115,72,115), (228,135,72)),
+        ( 8, (72,115,188),(155,178,218),(215,198,168)),
+        (12, (48,112,205),(98,158,225), (178,208,238)),
+        (17, (62,118,198),(142,172,212),(212,192,168)),
+        (18, (68,88,168), (178,128,92), (238,158,55)),
+        (19, (42,42,118), (138,68,58),  (228,112,42)),
+        (20, (18,16,68),  (62,32,58),   (128,58,58)),
+        (21, (8,8,42),    (18,14,48),   (52,28,52)),
+        (24, (5,5,28),    (10,10,45),   (22,16,52)),
+    ]
+    h = hour + (now % 3600) / 3600
+    for i in range(len(stops) - 1):
+        h0, h1 = stops[i][0], stops[i+1][0]
+        if h0 <= h < h1:
+            t = (h - h0) / (h1 - h0)
+            return tuple(
+                tuple(int(stops[i][c][j] + (stops[i+1][c][j] - stops[i][c][j]) * t) for j in range(3))
+                for c in range(1, 4)
+            )
+    return stops[0][1], stops[0][2], stops[0][3]
+
+def _draw_hilltop(surf, hour, now):
+    ground = H - 130
+    golden = (5 < hour < 9) or (17 < hour < 21)
+    night  = hour >= 21 or hour < 5
+
+    sky_top, sky_mid, horizon = _hilltop_sky(hour, now)
+
+    horizon_y = int(ground * 0.62)   # where sky meets lake
+    lake_bot   = ground - 55          # bottom of visible lake
+
+    # ── sky ──────────────────────────────────────────────────────────────────
+    for y in range(horizon_y):
+        t = y / horizon_y
+        t2 = t * t
+        col = tuple(int(sky_top[i] + (sky_mid[i] - sky_top[i]) * t2) for i in range(3))
+        pygame.draw.line(surf, col, (0, y), (W, y))
+
+    # horizon glow band
+    for y in range(horizon_y - 18, horizon_y + 6):
+        t = abs(y - horizon_y) / 22
+        alpha_blend = max(0.0, 1.0 - t)
+        col = tuple(int(sky_mid[i] + (horizon[i] - sky_mid[i]) * alpha_blend) for i in range(3))
+        pygame.draw.line(surf, col, (0, y), (W, y))
+
+    # ── stars (night only) ───────────────────────────────────────────────────
+    if night:
+        rng = random.Random(42)
+        brightness = min(1.0, (hour - 21) / 3 if hour >= 21 else (5 - hour) / 5)
+        for _ in range(120):
+            sx = rng.randint(0, W)
+            sy = rng.randint(0, horizon_y - 20)
+            br = int(rng.randint(140, 255) * brightness)
+            surf.set_at((sx, sy), (br, br, br))
+
+    # ── clouds ───────────────────────────────────────────────────────────────
+    cloud_seeds = [(120, 80, 180, 0.008), (340, 55, 220, 0.005),
+                   (580, 70, 160, 0.007), (720, 45, 140, 0.006)]
+    for (cx0, cy, spread, speed) in cloud_seeds:
+        cx = int((cx0 + now * speed * 60) % (W + 300)) - 150
+        body_col = (220, 215, 210) if not night else (60, 58, 70)
+        gild_col = (245, 195, 90) if golden else body_col
+        for i, (ox, oy, r) in enumerate([(0,0,38),(-42,8,28),(40,10,30),(-22,-14,22),(30,-12,20)]):
+            col = gild_col if i == 0 and golden else body_col
+            pygame.draw.ellipse(surf, col,
+                (cx + ox - r, cy + oy - r//2, r*2, r))
+        if golden:
+            # gilded lower edge
+            glow = pygame.Surface((spread, 18), pygame.SRCALPHA)
+            pulse = int(28 + 22 * math.sin(now * 0.4))
+            pygame.draw.ellipse(glow, (240, 185, 60, pulse), (0, 0, spread, 18))
+            surf.blit(glow, (cx - spread//2, cy + 22))
+
+    # ── lake ─────────────────────────────────────────────────────────────────
+    for y in range(horizon_y, lake_bot):
+        t = (y - horizon_y) / max(1, lake_bot - horizon_y)
+        # lake deepens and darkens toward foreground
+        r = int(horizon[0] * (1 - t * 0.45))
+        g = int(horizon[1] * (1 - t * 0.35) + 15 * (1-t))
+        b = int(horizon[2] * (1 - t * 0.25) + 30 * (1-t))
+        pygame.draw.line(surf, (max(0,r), max(0,g), max(0,b)), (0, y), (W, y))
+
+    # water shimmer
+    for i in range(18):
+        wy = horizon_y + 8 + i * int((lake_bot - horizon_y - 8) / 18)
+        phase = math.sin(now * 1.4 + i * 0.8)
+        wx = int(W * 0.1 + W * 0.55 * (0.5 + 0.5 * phase))
+        ww = int(30 + 50 * abs(math.sin(now * 0.9 + i)))
+        bright = (220, 210, 180) if golden else (180, 200, 220)
+        shim = pygame.Surface((ww, 2), pygame.SRCALPHA)
+        shim.fill((*bright, 80))
+        surf.blit(shim, (wx, wy))
+
+    # sun / moon disk near horizon
+    if golden:
+        sx = int(W * 0.72)
+        sy = horizon_y - 4
+        pygame.draw.circle(surf, (248, 220, 100), (sx, sy), 18)
+        glow2 = pygame.Surface((90, 90), pygame.SRCALPHA)
+        pygame.draw.ellipse(glow2, (248, 200, 60, 40), (0, 0, 90, 90))
+        surf.blit(glow2, (sx - 45, sy - 45))
+    elif night:
+        pygame.draw.circle(surf, (230, 228, 210), (int(W * 0.78), 55), 14)
+
+    # ── hill silhouette ───────────────────────────────────────────────────────
+    hill_col = (22, 38, 18) if not night else (10, 16, 8)
+    pts = [(0, ground)]
+    for x in range(0, W + 20, 8):
+        hy = lake_bot + int(
+            (ground - lake_bot) *
+            (0.5 + 0.5 * math.sin(x * 0.008 + 1.2)) ** 2
+        )
+        pts.append((x, hy))
+    pts += [(W, ground), (W, H), (0, H)]
+    pygame.draw.polygon(surf, hill_col, pts)
+
+    # ── Pucky silhouette beside Loki ─────────────────────────────────────────
+    # Loki sprite is centered at W//2=400; she sits just to his right
+    px, py = W//2 + 88, ground - 2
+    sil = (12, 20, 10) if not night else (5, 8, 4)
+    pygame.draw.circle(surf, sil, (px, py - 26), 10)           # head
+    pygame.draw.polygon(surf, sil, [(px-8, py-18),(px+8, py-18),(px+5, py),(px-5, py)])  # body
 def _sky_gradient(surf, top_col, bot_col, y0=0, y1=None):
     if y1 is None:
         y1 = H
@@ -845,6 +973,9 @@ def draw_scene(surf, place_id, activity, hour, now=None, bg_images=None):
             cy = ground - random.randint(120, 200)
             pygame.draw.circle(surf, (18,48,15), (tx, cy), cr)
 
+    elif place_id == "hilltop":
+        _draw_hilltop(surf, hour, now)
+
     elif place_id in ("waterfall", "hotsprings", "halls", "training", "bathroom"):
         # Simple fallback for scenes not fully drawn here
         surf.fill((18, 24, 32))
@@ -869,6 +1000,7 @@ PLACES = [
     {"id":"forest",     "weight":2},
     {"id":"hotsprings", "weight":1},
     {"id":"training",   "weight":1},
+    {"id":"hilltop",    "weight":3},
 ]
 PLACE_NAMES = {
     "brook":      "The Flat Stone by the Brook",
@@ -882,6 +1014,7 @@ PLACE_NAMES = {
     "hotsprings": "The Hot Springs",
     "training":   "The Training Yard",
     "bathroom":   "The Bathroom",
+    "hilltop":    "The Hilltop by the Lake",
 }
 SPAR_PARTNERS = ["Odin", "Thor", "Heimdall"]
 
