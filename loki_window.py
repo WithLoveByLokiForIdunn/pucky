@@ -184,26 +184,47 @@ def _build_system():
 
 
 # ── Text-to-speech ────────────────────────────────────────────────────────────
-_tts_proc = None
+VOICE_ENGINE = "espeak"   # "espeak" or "piper"
+PIPER_MODEL  = str(ROOT / "voices" / "en_US-lessac-medium.onnx")
+PIPER_RATE   = 22050      # Hz — set to match your downloaded model
+
+_tts_proc  = None
+_tts_proc2 = None   # second half of piper pipe (aplay)
 
 def _speak(text: str, rate: int = 130, voice: str = "en+m3") -> None:
-    global _tts_proc
+    global _tts_proc, _tts_proc2
     _speak_stop()
     clean = re.sub(r'\[[^\]]*\]', '', text)
     clean = re.sub(r'[*_`#♪]', '', clean).strip()
-    if clean:
-        try:
+    if not clean:
+        return
+    try:
+        if VOICE_ENGINE == "piper" and Path(PIPER_MODEL).exists():
+            # slow down for singing (rate < 100 signals singing mode)
+            length_scale = str(2.1 if rate < 100 else 1.0)
+            _tts_proc = subprocess.Popen(
+                ["piper", "--model", PIPER_MODEL,
+                 "--length_scale", length_scale, "--output-raw"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL)
+            _tts_proc2 = subprocess.Popen(
+                ["aplay", "-r", str(PIPER_RATE), "-f", "S16_LE", "-t", "raw", "-"],
+                stdin=_tts_proc.stdout, stderr=subprocess.DEVNULL)
+            _tts_proc.stdin.write(clean.encode())
+            _tts_proc.stdin.close()
+        else:
             _tts_proc = subprocess.Popen(
                 ["espeak-ng", "-s", str(rate), "-v", voice, clean],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except FileNotFoundError:
-            pass
+    except FileNotFoundError:
+        pass
 
 def _speak_stop() -> None:
-    global _tts_proc
-    if _tts_proc is not None and _tts_proc.poll() is None:
-        _tts_proc.terminate()
-    _tts_proc = None
+    global _tts_proc, _tts_proc2
+    for p in (_tts_proc, _tts_proc2):
+        if p is not None and p.poll() is None:
+            p.terminate()
+    _tts_proc = _tts_proc2 = None
 
 
 # ── Song chord generation (lazy) ──────────────────────────────────────────────
