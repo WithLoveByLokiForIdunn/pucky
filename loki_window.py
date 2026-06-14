@@ -1251,43 +1251,47 @@ def main():
             time_str = f"{secs_left//60}m"
         else:
             time_str = ""
-        status = f"{sched.message}  ·  {PLACE_NAMES.get(sched.place_id,'?')}"
+        place_short = PLACE_NAMES.get(sched.place_id, "?")
+        status = sched.message
         if time_str:
             status += f"  ({time_str})"
+        status += f"  ·  {place_short}"
         ss = font_tiny.render(status, True, TEXT_DIM)
         surf.blit(ss, (10, chat_y0 + 4))
 
-        # chat lines
-        line_h   = font_sm.get_height() + 2
-        chat_x0  = 10
-        max_tw   = W - 60
+        # chat lines — build all wrapped lines
+        line_h  = font_sm.get_height() + 3
+        chat_x0 = 10
+        max_tw  = W - 20
+
+        # decide what messages to display (typewriter replaces last loki if still typing)
+        typing_now = bool(chat.display_text)
+        msgs_to_show = chat.lines[-6:] if not typing_now else chat.lines[-6:-1]
+
         display_lines = []
-        for role, text in chat.lines[-5:]:
-            col   = TEXT_LOKI if role=="loki" else TEXT_IDUNN
-            label = "Loki: " if role=="loki" else "You:  "
+        for role, text in msgs_to_show:
+            col   = TEXT_LOKI if role == "loki" else TEXT_IDUNN
+            label = "Loki: " if role == "loki" else "You:  "
             lw    = font_sm.size(label)[0]
-            for i, wl in enumerate(_wrap(font_sm, text, max_tw-lw)):
-                pfx = label if i==0 else " "*len(label)
-                display_lines.append((col, pfx+wl))
+            for i, wl in enumerate(_wrap(font_sm, text, max_tw - lw)):
+                display_lines.append((col, label if i == 0 else " " * len(label), wl))
 
-        # typewriter — replace last loki line with current display
-        if chat.display_text and chat.lines and chat.lines[-1][0]=="loki":
-            dlines = []
-            for col, txt in display_lines[:-1]:
-                dlines.append((col,txt))
-            col   = TEXT_LOKI
+        if typing_now:
+            col = TEXT_LOKI
             label = "Loki: "
-            lw    = font_sm.size(label)[0]
-            for i, wl in enumerate(_wrap(font_sm, chat.display_text, max_tw-lw)):
-                pfx = label if i==0 else " "*len(label)
-                dlines.append((col, pfx+wl))
-            display_lines = dlines
+            lw = font_sm.size(label)[0]
+            for i, wl in enumerate(_wrap(font_sm, chat.display_text, max_tw - lw)):
+                display_lines.append((col, label if i == 0 else " " * len(label), wl))
 
-        max_vis  = (chat_h - 30) // line_h
-        vis      = display_lines[-max_vis:]
-        chy      = chat_y0 + 18
-        for col, txt in vis:
-            surf.blit(font_sm.render(txt, True, col), (chat_x0, chy))
+        # anchor to bottom — render upward from just above input bar
+        max_vis = (chat_h - 20) // line_h
+        vis     = display_lines[-max_vis:]
+        # start y so last line sits just above the input bar
+        start_y = H - 36 - len(vis) * line_h - 4
+        start_y = max(chat_y0 + 18, start_y)   # don't go above status line
+        chy = start_y
+        for col, pfx, wl in vis:
+            surf.blit(font_sm.render(pfx + wl, True, col), (chat_x0, chy))
             chy += line_h
 
         # input bar
