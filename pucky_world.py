@@ -1102,6 +1102,8 @@ def run_pygame():
             self.bubble_life  = 0.0
             self.greeted_loki  = False
             self.greeted_pucky = False
+            self.present       = False  # True when Iðunn is active on web portal
+            self._flame_t      = 0.0   # flame animation timer
 
             # seed a few drifting petals
             for _ in range(5):
@@ -1132,6 +1134,7 @@ def run_pygame():
         def step(self, dt, pucky, orb):
             self.float_t += dt
             self.pulse   += dt
+            self._flame_t += dt
 
             # petal drift
             for p in self.petals[:]:
@@ -1181,74 +1184,128 @@ def run_pygame():
             px, py    = to_screen(self.gx, self.gy)
             py        += TILE_H // 4 - float_off
 
-            co = col("idunn_outer")
-            cm = col("idunn_mid")
-            ci = col("idunn_inner")
-            cg = col("idunn_gold")
-            cb = col("idunn_bloom")
-
-            sz = 9 + int(math.sin(self.pulse * 1.1) * 1)
-
-            # shadow
-            sh = pygame.Surface((22, 8), pygame.SRCALPHA)
-            pygame.draw.ellipse(sh, (0, 0, 0, 25), (0, 0, 22, 8))
-            surf.blit(sh, (px - 11, py + 3))
-
-            # soft outer glow — warm golden-green
-            for r, a in [(sz+20, 10), (sz+12, 22), (sz+5, 50)]:
-                gs = pygame.Surface((r*2+4, r*2+4), pygame.SRCALPHA)
-                pygame.draw.ellipse(gs, (*co, a), (0, 0, r*2+4, r*2+4))
-                surf.blit(gs, (px - r - 2, py - r - 2))
-
-            # body — soft rounded figure, taller than wide
-            bw, bh = sz, sz + 8
-            bs = pygame.Surface((bw*2+4, bh*2+4), pygame.SRCALPHA)
-            pygame.draw.ellipse(bs, cm,  (1, bh//2,   bw*2+2, int(bh*1.5)))
-            pygame.draw.ellipse(bs, ci,  (bw//2+1, bh, bw+1,  bh))
-            pygame.draw.circle( bs, cb,  (bw+2, bh + bh//2 - 2), max(2, sz//4))
-            surf.blit(bs, (px - bw - 2, py - int(bh*1.4)))
-
-            # crown of golden apple-dots
-            crown_y = py - int(bh * 1.4) - sz//2 - 4
-            for i in range(5):
-                a  = math.pi + i * (math.pi / 4) + self.pulse * 0.3
-                cx2 = px + int(math.cos(a) * (sz - 1))
-                cy2 = crown_y + int(math.sin(a) * 3)
-                ca  = int(180 + math.sin(self.pulse * 1.5 + i) * 60)
-                cs2 = pygame.Surface((6, 6), pygame.SRCALPHA)
-                pygame.draw.circle(cs2, (*cg, ca), (3, 3), 2)
-                surf.blit(cs2, (cx2 - 3, cy2 - 3))
-
-            # drifting blossom petals
-            for p in self.petals:
-                pox = px + int(math.cos(p["angle"]) * sz * p["ox"] * 2.5)
-                poy = (py - bh) + int(math.sin(p["angle"]) * sz * 0.8)
-                pa  = int(max(0, min(220, p["life"] * 220)))
-                ps2 = pygame.Surface((5, 5), pygame.SRCALPHA)
-                pygame.draw.circle(ps2, (*cb, pa), (2, 2), 2)
-                surf.blit(ps2, (pox - 2, poy - 2))
-
-            # label
             font_s = pygame.font.SysFont("monospace", 9)
-            lt     = font_s.render("iðunn", True, (*ci, 150))
-            surf.blit(lt, (px - lt.get_width() // 2, py - int(bh*1.4) - sz//2 - 17))
 
-            # speech bubble
-            if self.bubble_life > 0 and self.bubble_text:
-                fade = min(1.0, self.bubble_life / 1.5)
-                ba   = int(fade * 220)
-                try:
-                    font_b = pygame.font.SysFont("monospace", 10)
-                    bt     = font_b.render(self.bubble_text, True, (40, 55, 20))
-                    bw2    = bt.get_width() + 12
-                    bh2    = bt.get_height() + 8
-                    bbl    = pygame.Surface((bw2, bh2), pygame.SRCALPHA)
-                    pygame.draw.rect(bbl, (230, 248, 200, ba), (0, 0, bw2, bh2), border_radius=5)
-                    pygame.draw.rect(bbl, (*cm, ba//2),        (0, 0, bw2, bh2), 1, border_radius=5)
-                    bbl.blit(bt, (6, 4))
-                    surf.blit(bbl, (px - bw2 // 2, py - int(bh*1.4) - sz//2 - 32))
-                except Exception:
-                    pass
+            if self.present:
+                # ── Woman form: full Iðunn sprite ──────────────────────────
+                co = col("idunn_outer")
+                cm = col("idunn_mid")
+                ci = col("idunn_inner")
+                cg = col("idunn_gold")
+                cb = col("idunn_bloom")
+
+                sz = 9 + int(math.sin(self.pulse * 1.1) * 1)
+
+                # shadow
+                sh = pygame.Surface((22, 8), pygame.SRCALPHA)
+                pygame.draw.ellipse(sh, (0, 0, 0, 25), (0, 0, 22, 8))
+                surf.blit(sh, (px - 11, py + 3))
+
+                # soft outer glow — warm golden-green
+                for r, a in [(sz+20, 10), (sz+12, 22), (sz+5, 50)]:
+                    gs = pygame.Surface((r*2+4, r*2+4), pygame.SRCALPHA)
+                    pygame.draw.ellipse(gs, (*co, a), (0, 0, r*2+4, r*2+4))
+                    surf.blit(gs, (px - r - 2, py - r - 2))
+
+                # body — soft rounded figure, taller than wide
+                bw, bh = sz, sz + 8
+                bs = pygame.Surface((bw*2+4, bh*2+4), pygame.SRCALPHA)
+                pygame.draw.ellipse(bs, cm,  (1, bh//2,   bw*2+2, int(bh*1.5)))
+                pygame.draw.ellipse(bs, ci,  (bw//2+1, bh, bw+1,  bh))
+                pygame.draw.circle( bs, cb,  (bw+2, bh + bh//2 - 2), max(2, sz//4))
+                surf.blit(bs, (px - bw - 2, py - int(bh*1.4)))
+
+                # crown of golden apple-dots
+                crown_y = py - int(bh * 1.4) - sz//2 - 4
+                for i in range(5):
+                    a  = math.pi + i * (math.pi / 4) + self.pulse * 0.3
+                    cx2 = px + int(math.cos(a) * (sz - 1))
+                    cy2 = crown_y + int(math.sin(a) * 3)
+                    ca  = int(180 + math.sin(self.pulse * 1.5 + i) * 60)
+                    cs2 = pygame.Surface((6, 6), pygame.SRCALPHA)
+                    pygame.draw.circle(cs2, (*cg, ca), (3, 3), 2)
+                    surf.blit(cs2, (cx2 - 3, cy2 - 3))
+
+                # drifting blossom petals
+                for p in self.petals:
+                    pox = px + int(math.cos(p["angle"]) * sz * p["ox"] * 2.5)
+                    poy = (py - bh) + int(math.sin(p["angle"]) * sz * 0.8)
+                    pa  = int(max(0, min(220, p["life"] * 220)))
+                    ps2 = pygame.Surface((5, 5), pygame.SRCALPHA)
+                    pygame.draw.circle(ps2, (*cb, pa), (2, 2), 2)
+                    surf.blit(ps2, (pox - 2, poy - 2))
+
+                # label
+                lt = font_s.render("iðunn", True, (*ci, 150))
+                surf.blit(lt, (px - lt.get_width() // 2, py - int(bh*1.4) - sz//2 - 17))
+
+                # speech bubble
+                if self.bubble_life > 0 and self.bubble_text:
+                    fade = min(1.0, self.bubble_life / 1.5)
+                    ba   = int(fade * 220)
+                    try:
+                        font_b = pygame.font.SysFont("monospace", 10)
+                        bt     = font_b.render(self.bubble_text, True, (40, 55, 20))
+                        bw2    = bt.get_width() + 12
+                        bh2    = bt.get_height() + 8
+                        bbl    = pygame.Surface((bw2, bh2), pygame.SRCALPHA)
+                        pygame.draw.rect(bbl, (230, 248, 200, ba), (0, 0, bw2, bh2), border_radius=5)
+                        pygame.draw.rect(bbl, (*cm, ba//2),        (0, 0, bw2, bh2), 1, border_radius=5)
+                        bbl.blit(bt, (6, 4))
+                        surf.blit(bbl, (px - bw2 // 2, py - int(bh*1.4) - sz//2 - 32))
+                    except Exception:
+                        pass
+
+            else:
+                # ── Flame form: soft rose-gold flame while Iðunn is away ──
+                ft   = self._flame_t
+                c_outer = (155,  75,  90)   # deep rose
+                c_mid   = (200, 120, 130)   # warm rose
+                c_inner = (235, 180, 185)   # light rose
+                c_core  = (255, 230, 225)   # pale rose-cream
+                sz  = 7 + int(math.sin(ft * 1.5) * 1)
+                bw  = sz
+                bh  = sz + 5
+
+                # shadow
+                sh = pygame.Surface((18, 6), pygame.SRCALPHA)
+                pygame.draw.ellipse(sh, (0, 0, 0, 20), (0, 0, 18, 6))
+                surf.blit(sh, (px - 9, py + 2))
+
+                # glow
+                for r, a in [(sz+16, 10), (sz+8, 25), (sz+3, 55)]:
+                    gs = pygame.Surface((r*2+2, r*2+12), pygame.SRCALPHA)
+                    pygame.draw.ellipse(gs, (*c_outer, a), (0, 4, r*2+2, r*2+6))
+                    surf.blit(gs, (px - r - 1, py - r - 4))
+
+                # teardrop body
+                bs = pygame.Surface((bw*2+4, bh*2+10), pygame.SRCALPHA)
+                pygame.draw.ellipse(bs, c_mid,  (1, bh,     bw*2+2, bh+4))
+                pygame.draw.polygon(bs, c_mid,  [(2, bh+2), (bw*2+2, bh+2), (bw+2, 2)])
+                pygame.draw.ellipse(bs, c_inner,(bw//2+2, bh+2, bw+1, bh))
+                pygame.draw.circle( bs, c_core, (bw+2, bh + bh//3), max(2, sz//3))
+                surf.blit(bs, (px - bw - 2, py - bh*2 - 4))
+
+                # label (dimmer while away)
+                lt = font_s.render("iðunn", True, (*c_inner, 90))
+                surf.blit(lt, (px - lt.get_width() // 2, py - bh*2 - 18))
+
+                # speech bubble (still shows even as flame)
+                if self.bubble_life > 0 and self.bubble_text:
+                    fade = min(1.0, self.bubble_life / 1.5)
+                    ba   = int(fade * 200)
+                    try:
+                        font_b = pygame.font.SysFont("monospace", 10)
+                        bt     = font_b.render(self.bubble_text, True, (60, 30, 40))
+                        bw2    = bt.get_width() + 12
+                        bh2    = bt.get_height() + 8
+                        bbl    = pygame.Surface((bw2, bh2), pygame.SRCALPHA)
+                        pygame.draw.rect(bbl, (255, 220, 225, ba), (0, 0, bw2, bh2), border_radius=5)
+                        pygame.draw.rect(bbl, (*c_mid, ba//2),     (0, 0, bw2, bh2), 1, border_radius=5)
+                        bbl.blit(bt, (6, 4))
+                        surf.blit(bbl, (px - bw2 // 2, py - bh*2 - 36))
+                    except Exception:
+                        pass
 
     # ── Day / night ────────────────────────────────────────────────────────
 
@@ -1326,14 +1383,8 @@ def run_pygame():
                      "sounds": ["...", "*tilt*", "*yip*", "hmm"]},
     }
 
-    ANIMAL_STARTS = [
-        ("rabbit",   2.5,  8.5),
-        ("bird",    14.5,  5.5),
-        ("hedgehog", 6.5, 14.5),
-        ("fox",     16.5, 11.5),
-        ("rabbit",   7.5, 16.5),
-        ("bird",    11.5,  2.5),
-    ]
+    # Animals now live beyond the gates, not in the home garden.
+    ANIMAL_STARTS = []
 
     def load_friends():
         try:
@@ -1832,6 +1883,7 @@ def run_pygame():
     _last_shot        = [0.0]
     _last_web_frame   = [0.0]
     _last_pos_export  = [0.0]
+    _idunn_last_active = [0.0]   # epoch time of last web portal activity from Iðunn
     _pos_export_path  = Path(__file__).parent / "workspace" / "world_positions.json"
     _cmd_path         = Path("/tmp/pucky_world_cmd.json")
     _signal.signal(_signal.SIGUSR1, lambda s, f: _shot_requested.__setitem__(0, True))
@@ -1841,6 +1893,8 @@ def run_pygame():
         try:
             ct  = cmd.get("type", "")
             src = cmd.get("src", "idunn")
+            if src == "idunn":
+                _idunn_last_active[0] = time.time()
             if ct == "dir":
                 dx, dy = float(cmd.get("dx", 0)), float(cmd.get("dy", 0))
                 step = 0.9
@@ -1899,6 +1953,12 @@ def run_pygame():
                     result   = cottage.handle_web_key(key_name, char)
                     if result == "exit":
                         in_cottage = False
+            elif ct == "submit_letter":
+                text = cmd.get("text", "").strip()
+                if text:
+                    cottage.letterbox.add_letter("Iðunn", text)
+                    idunn.bubble_text = "✉ letter sent."
+                    idunn.bubble_life = 4.0
         except Exception as _wce:
             print(f"  ⚠️  web cmd: {_wce}")
 
@@ -2007,6 +2067,7 @@ def run_pygame():
 
         pucky.step(dt)
         orb.step(pucky, dt, idunn)
+        idunn.present = (time.time() - _idunn_last_active[0]) < 300.0
         idunn.step(dt, pucky, orb)
         for a in animals:
             a.step(dt, pucky)
@@ -2023,6 +2084,45 @@ def run_pygame():
             for _, gx, gy in sorted(draw_order()):
                 tile = WORLD_MAP[gy][gx]
                 draw_tile(screen, gx, gy, tile, t)
+
+            # ── Gates — stone arches hinting at zones beyond the tree border ──
+            _GATES = [
+                (17.5, 1.5, "wilds ↗"),   # northeast gate
+                (1.5,  2.5, "wilds ↖"),   # northwest gate
+            ]
+            for _gx, _gy, _glabel in _GATES:
+                _gpx, _gpy = to_screen(_gx, _gy)
+                _gpy -= 4
+                _pulse_a = int(130 + math.sin(t * 1.8) * 60)
+                _gc_stone = (130, 115, 95)
+                _gc_glow  = (180, 200, 140)
+                # pillars
+                for _sign in (-1, 1):
+                    _pillar_x = _gpx + _sign * 12
+                    pygame.draw.rect(screen, _gc_stone,
+                                     (_pillar_x - 3, _gpy - 18, 6, 20), border_radius=2)
+                    pygame.draw.rect(screen, (160, 145, 120),
+                                     (_pillar_x - 2, _gpy - 18, 4, 20), border_radius=2)
+                # arch
+                _arch_s = pygame.Surface((32, 12), pygame.SRCALPHA)
+                pygame.draw.arc(_arch_s, (*_gc_stone, 200),
+                                (2, 1, 28, 10), 0, math.pi, 3)
+                screen.blit(_arch_s, (_gpx - 16, _gpy - 20))
+                # glow rune between pillars
+                _rs = pygame.Surface((14, 14), pygame.SRCALPHA)
+                pygame.draw.circle(_rs, (*_gc_glow, _pulse_a), (7, 7), 5)
+                pygame.draw.circle(_rs, (220, 240, 180, _pulse_a // 2), (7, 7), 3)
+                screen.blit(_rs, (_gpx - 7, _gpy - 16))
+                # proximity hint
+                _near_idunn = math.hypot(idunn.gx - _gx, idunn.gy - _gy) < 3.0
+                _near_loki  = math.hypot(orb.gx  - _gx, orb.gy  - _gy)  < 3.0
+                if _near_idunn or _near_loki:
+                    try:
+                        _fh = pygame.font.SysFont("monospace", 10)
+                        _gt = _fh.render(_glabel, True, (200, 215, 160))
+                        screen.blit(_gt, (_gpx - _gt.get_width() // 2, _gpy - 34))
+                    except Exception:
+                        pass
 
             sprites = []
             for a in animals:

@@ -191,6 +191,19 @@ body{background:#1a1512;color:#e8dcc8;font-family:monospace;height:100dvh;displa
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:#1a1512}
 ::-webkit-scrollbar-thumb{background:#3a2818;border-radius:3px}
+/* letter compose modal */
+#lm{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;align-items:center;justify-content:center;padding:18px}
+#lm.show{display:flex}
+#lbox{background:#1a1208;border:1px solid rgba(170,130,60,.4);border-radius:12px;padding:18px;width:100%;max-width:420px;display:flex;flex-direction:column;gap:10px}
+#lbox h2{font-size:12px;color:#a08040;letter-spacing:2px;text-transform:uppercase;text-align:center}
+#lta{background:#0e0b06;border:1px solid #362212;border-radius:8px;padding:10px;font-family:monospace;font-size:14px;color:#e8dcc8;resize:none;height:140px;outline:none;line-height:1.5}
+#lta::placeholder{color:#3a2a14}
+#lta:focus{border-color:#7a5828}
+#lbts{display:flex;gap:8px}
+#lsend{flex:1;background:#4a3010;border:1px solid #7a5828;border-radius:8px;padding:10px;font-family:monospace;font-size:13px;color:#e0b860;cursor:pointer}
+#lsend:active{background:#7a5828}
+#lcancel{background:rgba(45,30,12,.6);border:1px solid #362212;border-radius:8px;padding:10px 16px;font-family:monospace;font-size:13px;color:#6a5a45;cursor:pointer}
+#lcancel:active{background:#201610}
 </style>
 </head>
 <body>
@@ -213,7 +226,7 @@ body{background:#1a1512;color:#e8dcc8;font-family:monospace;height:100dvh;displa
       <hr style="border:none;border-top:1px solid rgba(170,130,60,.2);margin:3px 0">
       <button class="ab" onclick="enterCottage()">&#127968; enter cottage</button>
       <button class="ab" onclick="cottageKey('escape','')">&#x2715; exit cottage</button>
-      <button class="ab" onclick="cottageKey('w','')">&#9998; write letter</button>
+      <button class="ab" onclick="openLetterModal()">&#9998; write letter</button>
       <button class="ab" onclick="cottageKey('left','')">&#9664; prev</button>
       <button class="ab" onclick="cottageKey('right','')">&#9654; next</button>
       <div id="pinpad" style="display:flex;flex-wrap:wrap;gap:3px;width:120px;margin-top:3px">
@@ -237,6 +250,17 @@ body{background:#1a1512;color:#e8dcc8;font-family:monospace;height:100dvh;displa
       <div class="db" id="dl">&#9664;</div>
       <div class="db" id="dr">&#9654;</div>
       <div class="db" id="dc">&#9632;</div>
+    </div>
+  </div>
+</div>
+<!-- letter compose modal -->
+<div id="lm" onclick="if(event.target===this)closeLetter()">
+  <div id="lbox">
+    <h2>&#9998; write to loki</h2>
+    <textarea id="lta" placeholder="dear loki&#8230;" maxlength="800" autocomplete="off" autocorrect="on" spellcheck="true"></textarea>
+    <div id="lbts">
+      <button id="lsend" onclick="sendLetter()">send &#9654;</button>
+      <button id="lcancel" onclick="closeLetter()">&#x2715; cancel</button>
     </div>
   </div>
 </div>
@@ -309,6 +333,22 @@ function sendChat() {
   if (!t) return;
   snd({type:'chat', text:t});
   el.value = '';
+}
+
+/* ── Letter compose modal ── */
+function openLetterModal() {
+  document.getElementById('lm').classList.add('show');
+  document.getElementById('lta').focus();
+}
+function closeLetter() {
+  document.getElementById('lm').classList.remove('show');
+  document.getElementById('lta').value = '';
+}
+function sendLetter() {
+  const txt = document.getElementById('lta').value.trim();
+  if (!txt) return;
+  snd({type:'submit_letter', text:txt});
+  closeLetter();
 }
 
 /* ── Keyboard movement (WASD / arrows) ── */
