@@ -1063,6 +1063,7 @@ class ChatManager:
         self._waiting = False
         self._pucky_q:       queue.Queue[str] = queue.Queue()
         self._pucky_waiting: bool             = False
+        self._pucky_carry_to: str            = ""   # place to go, set by poll_pucky
         self._typewriter_text = ""
         self._typewriter_full = ""
         self._typewriter_idx  = 0
@@ -1179,11 +1180,15 @@ class ChatManager:
         self._pucky_waiting = True
         threading.Thread(target=self._ask_pucky, args=(utterance,), daemon=True).start()
 
+    _CARRY_RE = re.compile(r'\[CARRY(?::(\w+))?\]\s*$', re.IGNORECASE)
+
     def _ask_pucky(self, utterance: str) -> None:
         prompt = (
             f"Pucky just made a sound: \"{utterance}\". "
-            "You are her father. React in one short warm sentence — spoken to her "
-            "or murmured fondly about her. No asterisks. No quotes."
+            "React as her father — one warm sentence spoken to her or murmured about her. "
+            "If you want to pick her up and take her somewhere, add one of these tags "
+            "at the very end: [CARRY] [CARRY:brook] [CARRY:garden] [CARRY:apples] "
+            "[CARRY:waterfall] [CARRY:cottage]. Otherwise just reply normally. No asterisks."
         )
         try:
             r = requests.post(OLLAMA_URL, json={
@@ -1211,11 +1216,17 @@ class ChatManager:
         self._pucky_waiting = False
         if not reply:
             return False
+        # Parse optional carry intent before stripping tag
+        carry_m = self._CARRY_RE.search(reply)
+        self._pucky_carry_to = (carry_m.group(1) or "__pickup__") if carry_m else ""
+        clean = self._CARRY_RE.sub("", reply).strip()
+        if not clean:
+            return False
         # Pucky reactions don't go into conversation history
-        self.lines.append(("loki", reply))
-        _log("loki_hears_pucky", reply)
-        self.body.set_talking(max(1.5, len(reply) * 0.04))
-        _speak(reply)
+        self.lines.append(("loki", clean))
+        _log("loki_hears_pucky", clean)
+        self.body.set_talking(max(1.5, len(clean) * 0.04))
+        _speak(clean)
         return True
 
     def poll(self):
@@ -1963,6 +1974,15 @@ def main():
             if sched.activity not in (ACT_SLEEP, ACT_BATHROOM):
                 chat.hear_pucky(u)
         chat.poll_pucky()
+        # Act on Loki's carry intent (set by poll_pucky when he used a [CARRY] tag)
+        carry_to = chat._pucky_carry_to
+        if carry_to:
+            chat._pucky_carry_to = ""
+            if not body.pucky_in_arms and pucky.location == sched.place_id:
+                pucky.pickup()
+                body.pucky_in_arms = True
+                if carry_to != "__pickup__" and carry_to in PLACE_IDS:
+                    sched.go_to(carry_to)
 
         # Auto-putdown during sleep / bath / spar / bathroom
         if body.pucky_in_arms and sched.activity in (
