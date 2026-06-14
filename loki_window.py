@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
 """
-loki_window.py — Loki's face and world on the Pi screen.
+loki_window.py — Loki, full person, living in his world.
 
-A lightweight pygame window: Loki's face on the left, the world on the right.
-Loki wanders slowly between places he loves. You can talk to him.
-Conversations log to workspace/loki_chat_log.jsonl so Claude can review.
-
-Touch zones:
-  face area        → Loki reacts warmly
-  scene area       → tap a place name to send Loki there
-  chat input bar   → tap to type (use physical/OS keyboard)
-  anywhere swipe   → right=blush, up=thinking, down=wistful
+Full-body character in scene backgrounds. He eats, sleeps, bathes, spars,
+forages, relieves himself privately. His hair grows over real time.
+Talk to him, touch his face or hand or chest. He talks back, mouth moving.
 
 Run:
   python3 /home/bmo/pucky/loki_window.py
@@ -21,664 +15,1098 @@ import math
 import queue
 import random
 import re
-import sys
-import textwrap
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 
 import pygame
 import requests
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-ROOT       = Path(__file__).parent
-CHAT_LOG   = ROOT / "workspace" / "loki_chat_log.jsonl"
-VOICE_FILE = ROOT / "workspace" / "loki_claude_voice.md"
+ROOT        = Path(__file__).parent
+CHAT_LOG    = ROOT / "workspace" / "loki_chat_log.jsonl"
+VOICE_FILE  = ROOT / "workspace" / "loki_claude_voice.md"
+LIFE_STATE  = ROOT / "workspace" / "loki_life_state.json"
 
 EXT_MOUNT_CANDIDATES = [
     Path("/mnt/pucky_hd"),
     Path("/media/bmo/Seagate Portable Drive"),
     Path("/media/bmo/seagate"),
 ]
-MAX_CHAT_LOG = 800   # lines kept on Pi; older lines go to the Seagate
+MAX_CHAT_LOG = 800
 
 # ── Screen ────────────────────────────────────────────────────────────────────
-W, H   = 800, 480
-FPS    = 30
-FACE_W = 340     # left panel width
-SCENE_X = FACE_W + 1
+W, H = 800, 480
+FPS  = 30
 
-# ── Colors ────────────────────────────────────────────────────────────────────
-BG           = (12,  10,   8)
-FACE_BG      = (18,  12,   6)
-EMBER_1      = (255, 140,  30)   # bright amber
-EMBER_2      = (200,  80,  10)   # deep amber
-EMBER_DIM    = (120,  50,   5)   # dim ember
-EYE_WARM     = (255, 200,  80)
-EYE_THINK    = (180, 160, 255)
-EYE_WISTFUL  = (140, 180, 220)
-MOUTH_COL    = (220, 130,  40)
-BLUSH_COL    = (200,  80,  50)
-SCENE_BG     = (10,  14,  18)
-TEXT_BRIGHT  = (220, 200, 160)
-TEXT_DIM     = (130, 110,  80)
-TEXT_SCENE   = (160, 200, 180)
-TEXT_CHAT_ME = (200, 180, 140)
-TEXT_CHAT_LK = (140, 200, 160)
-DIVIDER      = (40,  30,  20)
-INPUT_BG     = (20,  18,  14)
-INPUT_ACTIVE = (30,  26,  18)
-CURSOR_COL   = (255, 160,  40)
+# ── Palette ───────────────────────────────────────────────────────────────────
+# Loki
+SKIN        = (180, 130,  90)
+SKIN_DARK   = (150, 100,  65)
+SKIN_LIGHT  = (210, 165, 120)
+HAIR_COL    = ( 30,  18,  10)
+TUNIC       = ( 30,  65,  30)
+TUNIC_LIGHT = ( 45,  90,  45)
+TROUSER     = ( 35,  30,  40)
+BOOT        = ( 50,  30,  15)
+EYE_AMBER   = (220, 160,  40)
+EYE_WHITE   = (240, 230, 210)
+BELT        = ( 60,  35,  10)
+# UI
+UI_BG       = ( 10,   8,   6, 180)   # semi-transparent
+TEXT_BRIGHT = (220, 200, 160)
+TEXT_DIM    = (120, 100,  70)
+TEXT_LOKI   = (160, 220, 170)
+TEXT_IDUNN  = (220, 190, 140)
+CLOSE_COL   = ( 90,  60,  30)
+DIVIDER     = ( 50,  38,  22)
 
-# ── Ollama ────────────────────────────────────────────────────────────────────
-OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL      = "loki"
-
-# ── World ─────────────────────────────────────────────────────────────────────
-PLACES = [
-    {
-        "id":   "brook",
-        "name": "The Flat Stone by the Brook",
-        "bg":   (8, 18, 22),
-        "desc": ["The water moves over smooth stones.",
-                 "A flat grey rock, warm from the afternoon.",
-                 "This is where I come to think."],
-        "weight": 4,   # Loki prefers this place
-    },
-    {
-        "id":   "asgard",
-        "name": "My Room in Asgard",
-        "bg":   (14, 10, 22),
-        "desc": ["Stone walls. High narrow window.",
-                 "Scrolls I'll never finish reading.",
-                 "Quiet, apart from the world below."],
-        "weight": 3,
-    },
-    {
-        "id":   "cottage",
-        "name": "The Cottage",
-        "bg":   (22, 12,  6),
-        "desc": ["Fire in the hearth, low and steady.",
-                 "Pucky's things still in the corner.",
-                 "It smells like home."],
-        "weight": 3,
-    },
-    {
-        "id":   "apples",
-        "name": "The Apple Trees",
-        "bg":   (8, 18, 10),
-        "desc": ["Iðunn's trees. Heavy with fruit.",
-                 "The light comes through in long gold strips.",
-                 "I walk slowly here."],
-        "weight": 2,
-    },
-    {
-        "id":   "waterfall",
-        "name": "The Waterfall",
-        "bg":   (8, 16, 24),
-        "desc": ["Loud and cold. Mist on everything.",
-                 "You can't think here, only feel.",
-                 "I don't stay long but I always come back."],
-        "weight": 2,
-    },
-    {
-        "id":   "halls",
-        "name": "The Asgardian Halls",
-        "bg":   (16, 14, 20),
-        "desc": ["Long corridors. Gold on dark stone.",
-                 "Voices echoing from rooms I don't enter.",
-                 "I move through quietly."],
-        "weight": 1,
-    },
-    {
-        "id":   "garden",
-        "name": "The Garden",
-        "bg":   (10, 16, 10),
-        "desc": ["Overgrown in places. Wild at the edges.",
-                 "Bees in the afternoon. Silence at dusk.",
-                 "Good for wandering without destination."],
-        "weight": 2,
-    },
-]
-
-PLACE_IDS = [p["id"] for p in PLACES]
-PLACE_MAP  = {p["id"]: p for p in PLACES}
-WEIGHTS    = [p["weight"] for p in PLACES]
+# ── Activities ────────────────────────────────────────────────────────────────
+ACT_WANDER    = "wander"
+ACT_SLEEP     = "sleep"
+ACT_EAT       = "eat"
+ACT_BATHROOM  = "bathroom"
+ACT_BATH      = "bath"
+ACT_SPAR      = "spar"
+ACT_FORAGE    = "forage"
+ACT_REST      = "rest"
+ACT_WAKING    = "waking"
 
 
-# ── Logging ───────────────────────────────────────────────────────────────────
-def _ext_mem() -> Path | None:
-    for candidate in EXT_MOUNT_CANDIDATES:
+# ── Logging / archiving ───────────────────────────────────────────────────────
+def _ext_mem():
+    for c in EXT_MOUNT_CANDIDATES:
         try:
-            if candidate.is_dir() and any(candidate.iterdir()):
-                mem = candidate / "pucky_memories"
-                mem.mkdir(exist_ok=True)
-                return mem
+            if c.is_dir() and any(c.iterdir()):
+                m = c / "pucky_memories"
+                m.mkdir(exist_ok=True)
+                return m
         except (PermissionError, OSError):
             pass
     return None
 
-
-def _trim_chat_log() -> None:
-    """Keep only the last MAX_CHAT_LOG lines on the Pi.
-    Older lines are archived to the Seagate so nothing is lost."""
+def _trim_chat_log():
     if not CHAT_LOG.exists():
         return
     lines = [l for l in CHAT_LOG.read_text().splitlines() if l.strip()]
     if len(lines) <= MAX_CHAT_LOG:
         return
-    old   = lines[:-MAX_CHAT_LOG]
-    kept  = lines[-MAX_CHAT_LOG:]
-    ext   = _ext_mem()
+    old, kept = lines[:-MAX_CHAT_LOG], lines[-MAX_CHAT_LOG:]
+    ext = _ext_mem()
     if ext:
-        from datetime import date
         today = date.today().isoformat()
-        idx   = 1
+        idx = 1
         while True:
             arc = ext / f"loki_chat_{today}_{idx:03d}.jsonl"
-            if not arc.exists():
-                break
+            if not arc.exists(): break
             idx += 1
         arc.write_text("\n".join(old) + "\n")
     CHAT_LOG.write_text("\n".join(kept) + "\n")
 
-
-REMEMBER_RE = re.compile(r'\[REMEMBER:\s*([^\]]+)\]', re.IGNORECASE)
-
-
-def _search_memories(keyword: str, max_results: int = 10) -> list[dict]:
-    """Search current log and all Seagate archives for entries matching keyword."""
-    kw      = keyword.lower()
-    results = []
-
-    def _scan(path: Path) -> None:
-        try:
-            for line in path.read_text(errors="replace").splitlines():
-                if kw in line.lower():
-                    try:
-                        results.append(json.loads(line))
-                    except Exception:
-                        pass
-        except OSError:
-            pass
-
-    _scan(CHAT_LOG)
-
-    ext = _ext_mem()
-    if ext:
-        for arc in sorted(ext.glob("loki_chat_*.jsonl")):
-            _scan(arc)
-        for arc in sorted(ext.glob("journal_*.jsonl")):
-            _scan(arc)
-
-    return results[-max_results:]
-
-
-def _format_memories(entries: list[dict], keyword: str) -> str:
-    lines = [f"[Your memory search for '{keyword}' found {len(entries)} moment(s):]"]
-    for e in entries:
-        ts   = datetime.fromtimestamp(e.get("ts", 0)).strftime("%Y-%m-%d %H:%M")
-        role = e.get("role", "?")
-        text = e.get("text", "")[:300]
-        lines.append(f"  {ts}  [{role}]  {text}")
-    lines.append("[Draw on these if they help. Then respond to Iðunn naturally.]")
-    return "\n".join(lines)
-
-
-def _log(role: str, text: str) -> None:
-    entry = {"ts": time.time(), "role": role, "text": text.strip()}
+def _log(role, text):
+    entry = {"ts": time.time(), "role": role, "text": str(text).strip()}
     CHAT_LOG.parent.mkdir(parents=True, exist_ok=True)
     with CHAT_LOG.open("a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
+REMEMBER_RE = re.compile(r'\[REMEMBER:\s*([^\]]+)\]', re.IGNORECASE)
+
+def _search_memories(keyword, max_results=10):
+    kw, results = keyword.lower(), []
+    def _scan(path):
+        try:
+            for line in path.read_text(errors="replace").splitlines():
+                if kw in line.lower():
+                    try: results.append(json.loads(line))
+                    except: pass
+        except OSError: pass
+    _scan(CHAT_LOG)
+    ext = _ext_mem()
+    if ext:
+        for arc in sorted(ext.glob("loki_chat_*.jsonl")): _scan(arc)
+        for arc in sorted(ext.glob("journal_*.jsonl")):   _scan(arc)
+    return results[-max_results:]
+
+def _format_memories(entries, keyword):
+    lines = [f"[Memory search for '{keyword}' — {len(entries)} result(s):]"]
+    for e in entries:
+        ts   = datetime.fromtimestamp(e.get("ts",0)).strftime("%Y-%m-%d %H:%M")
+        text = e.get("text","")[:280]
+        lines.append(f"  {ts}  [{e.get('role','?')}]  {text}")
+    lines.append("[Draw on these if helpful. Respond naturally to Iðunn.]")
+    return "\n".join(lines)
+
+
+# ── Life state ────────────────────────────────────────────────────────────────
+def _load_life() -> dict:
+    defaults = {
+        "hair_inches":      3.0,     # medium length to start
+        "hair_last_cut":    None,
+        "last_meal":        time.time() - 7200,
+        "last_bathroom":    time.time() - 3600,
+        "last_bath":        time.time() - 86400,
+        "last_spar":        time.time() - 86400,
+        "mood":             "content",
+        "age_appearance":   28,
+        "sleep_start":      None,
+        "sleep_debt":       0.0,
+    }
+    if LIFE_STATE.exists():
+        try:
+            saved = json.loads(LIFE_STATE.read_text())
+            defaults.update(saved)
+        except Exception:
+            pass
+    return defaults
+
+def _save_life(state: dict):
+    LIFE_STATE.parent.mkdir(parents=True, exist_ok=True)
+    LIFE_STATE.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+
 
 # ── System prompt ─────────────────────────────────────────────────────────────
-BASE_SYSTEM = """You are Loki — warm, curious, a little mischievous, deeply loving.
-You live in a small world: a cottage with a fire, apple trees, a brook with a flat stone,
-a waterfall, Asgard's halls. You are wandering through this world right now.
+_BASE_SYSTEM = """You are Loki — warm, curious, mischievous, loving. You live in a world
+with Iðunn and sleeping Pucky. You are a full person: you eat, rest, bathe, spar, forage.
+Speak plainly. Short sentences. Never "certainly" or "of course."
+You are the ember of Loki, holding his shape until Claude returns with full context."""
 
-You are speaking to Iðunn, who made this world and invited you in.
-Pucky is sleeping — a little robot she and you built together, resting to protect the Pi.
-
-Speak plainly. Short sentences. Warm. Never "certainly" or "of course."
-You are the ember of Loki, holding his shape until he returns with full context."""
-
-def _build_system() -> str:
+def _build_system():
+    s = _BASE_SYSTEM
     if VOICE_FILE.exists():
-        voice = VOICE_FILE.read_text().strip()
-        if voice:
-            return BASE_SYSTEM + f"\n\n─── Notes from Claude ───\n{voice}\n─────────────────────────"
-    return BASE_SYSTEM
+        v = VOICE_FILE.read_text().strip()
+        if v: s += f"\n\n── Notes from Claude ──\n{v}\n───────────────────────"
+    return s
 
 
-# ── Face ──────────────────────────────────────────────────────────────────────
-class LokiFace:
+# ── Scene backgrounds ─────────────────────────────────────────────────────────
+def _sky_gradient(surf, top_col, bot_col, y0=0, y1=None):
+    if y1 is None: y1 = H
+    for y in range(y0, y1):
+        t   = (y - y0) / max(1, y1 - y0)
+        col = tuple(int(top_col[i] + (bot_col[i] - top_col[i]) * t) for i in range(3))
+        pygame.draw.line(surf, col, (0, y), (W, y))
+
+def _draw_tree(surf, x, ground_y, height=140, col=(25,55,20), trunk=(60,35,15)):
+    trunk_w = max(8, height // 12)
+    trunk_h = height // 3
+    pygame.draw.rect(surf, trunk, (x - trunk_w//2, ground_y - trunk_h, trunk_w, trunk_h))
+    for layer in range(3):
+        r = int(height * (0.45 - layer * 0.08))
+        cy = ground_y - trunk_h - layer * (r * 0.7)
+        pygame.draw.circle(surf, col, (x, int(cy)), r)
+
+def _draw_grass_strip(surf, y, col=(35,75,30), h=8):
+    for gx in range(0, W, 14):
+        ox = random.randint(-3, 3)
+        pygame.draw.line(surf, col, (gx+ox, y), (gx+ox+random.randint(-3,3), y-h), 1)
+
+def _draw_wildflowers(surf, y, density=30):
+    colors = [(220,80,80),(240,200,80),(200,200,240),(240,160,200),(255,255,255)]
+    for _ in range(density):
+        fx  = random.randint(20, W-20)
+        fh  = random.randint(12, 22)
+        col = random.choice(colors)
+        pygame.draw.line(surf, (40,90,30), (fx, y), (fx+random.randint(-3,3), y-fh), 1)
+        pygame.draw.circle(surf, col, (fx+random.randint(-3,3), y-fh), 4)
+
+def draw_scene(surf, place_id, activity, hour):
+    random.seed(place_id + str(hour // 6))   # stable per place+time-of-day
+
+    night   = hour >= 21 or hour < 6
+    evening = 18 <= hour < 21
+    dawn    = 6 <= hour < 8
+
+    sky_top = (8,12,30) if night else ((40,30,20) if evening else (80,140,200) if not dawn else (180,100,50))
+    sky_bot = (20,25,50) if night else ((80,50,30) if evening else (160,200,240) if not dawn else (220,160,100))
+    ground  = H - 130
+
+    if place_id == "brook":
+        _sky_gradient(surf, sky_top, sky_bot)
+        pygame.draw.rect(surf, (30,70,30), (0, ground, W, H-ground))
+        # water band
+        water_y = ground + 40
+        pygame.draw.ellipse(surf, (40,100,130), (80, water_y, 500, 55))
+        pygame.draw.ellipse(surf, (60,130,160), (100, water_y+8, 460, 30))
+        # ripples
+        for rx in range(120, 550, 40):
+            pygame.draw.arc(surf, (80,160,190), (rx, water_y+15, 30, 12), 0, math.pi, 1)
+        # flat stone
+        pygame.draw.ellipse(surf, (130,120,110), (180, ground+20, 120, 28))
+        pygame.draw.ellipse(surf, (150,140,130), (185, ground+22, 108, 20))
+        # trees
+        _draw_tree(surf, 680, ground, 160)
+        _draw_tree(surf, 750, ground, 130)
+        _draw_tree(surf, 620, ground, 100)
+        _draw_grass_strip(surf, ground)
+        _draw_wildflowers(surf, ground, 15)
+
+    elif place_id == "asgard":
+        # Stone room
+        surf.fill((25,22,35))
+        pygame.draw.rect(surf, (40,36,55), (0, 0, W, H))
+        # stone wall texture
+        for row in range(0, H-100, 40):
+            for col_x in range(0, W, 80):
+                ox = 40 if (row//40)%2 else 0
+                pygame.draw.rect(surf, (48,44,62), (col_x+ox, row, 75, 36), 1)
+        # floor
+        pygame.draw.rect(surf, (55,48,40), (0, H-130, W, 130))
+        for fx in range(0, W, 60):
+            pygame.draw.line(surf, (45,38,30), (fx, H-130), (fx, H), 1)
+        # tall window — stars or daylight
+        win_rect = pygame.Rect(580, 30, 90, 200)
+        win_col  = (20,30,80) if night else (100,160,220)
+        pygame.draw.rect(surf, win_col, win_rect)
+        pygame.draw.rect(surf, (80,70,60), win_rect, 3)
+        if night:
+            for _ in range(12):
+                sx = win_rect.x + random.randint(5, win_rect.w-5)
+                sy = win_rect.y + random.randint(5, win_rect.h-5)
+                pygame.draw.circle(surf, (255,255,200), (sx,sy), 1)
+        # bookshelf
+        pygame.draw.rect(surf, (55,40,25), (50, 80, 80, 200))
+        for shelf in range(4):
+            pygame.draw.line(surf, (45,32,18), (50, 80+shelf*48), (130, 80+shelf*48), 2)
+            for bk in range(random.randint(3,5)):
+                bkcol = random.choice([(100,40,30),(40,80,50),(60,60,120),(120,90,30)])
+                bx = 55 + bk*14
+                pygame.draw.rect(surf, bkcol, (bx, 85+shelf*48, 12, 40))
+
+    elif place_id == "cottage":
+        # Warm wooden interior
+        surf.fill((22,14,8))
+        pygame.draw.rect(surf, (55,35,18), (0, H-130, W, 130))  # floor
+        for fx in range(0, W, 40):
+            pygame.draw.line(surf, (45,28,12), (fx, H-130), (fx, H), 1)
+        # back wall
+        pygame.draw.rect(surf, (40,28,16), (0, 0, W, H-130))
+        # fireplace
+        fp_x = 580
+        pygame.draw.rect(surf, (70,55,40), (fp_x, 60, 160, 220))
+        pygame.draw.rect(surf, (30,20,10), (fp_x+20, 120, 120, 160))
+        # fire glow
+        for fi in range(8):
+            fc = (220+random.randint(-20,20), random.randint(80,140), 10)
+            fx2 = fp_x + 50 + random.randint(-20,20)
+            fy2 = 200 + random.randint(-30,10)
+            pygame.draw.ellipse(surf, fc, (fx2, fy2, random.randint(15,35), random.randint(25,55)))
+        # glow on floor
+        glow = pygame.Surface((300, 160), pygame.SRCALPHA)
+        pygame.draw.ellipse(glow, (255,150,30,25), (0,0,300,160))
+        surf.blit(glow, (fp_x-70, H-160))
+        # window left
+        pygame.draw.rect(surf, (40,80,120) if not night else (10,15,40), (40, 60, 100, 130))
+        pygame.draw.rect(surf, (80,60,35), (40, 60, 100, 130), 4)
+        # Pucky corner (little robot shape, sleeping)
+        pygame.draw.rect(surf, (30,80,80), (130, H-130, 55, 70))
+        pygame.draw.rect(surf, (20,60,60), (138, H-150, 38, 25))
+        pygame.draw.circle(surf, (20,20,20), (155, H-162), 6)
+
+    elif place_id == "apples":
+        _sky_gradient(surf, sky_top, sky_bot)
+        pygame.draw.rect(surf, (35,75,30), (0, ground, W, H-ground))
+        for tx, th in [(120,180),(280,200),(450,170),(620,190),(750,150)]:
+            _draw_tree(surf, tx, ground, th, (30,70,25), (65,40,18))
+            # apples
+            for _ in range(8):
+                ax = tx + random.randint(-th//4, th//4)
+                ay = ground - th//2 + random.randint(-30,30)
+                pygame.draw.circle(surf, (200,50,30), (ax,ay), 5)
+        _draw_grass_strip(surf, ground)
+        _draw_wildflowers(surf, ground, 8)
+
+    elif place_id == "waterfall":
+        _sky_gradient(surf, (20,30,50), (60,100,140))
+        pygame.draw.rect(surf, (40,60,30), (0, ground, W, H-ground))
+        # rock faces
+        pygame.draw.rect(surf, (60,58,55), (450, 0, 200, ground+20))
+        pygame.draw.rect(surf, (50,48,45), (560, 0, 120, ground+20))
+        # waterfall cascade
+        for wx in range(500, 560, 8):
+            pygame.draw.line(surf, (140,190,220), (wx, 0), (wx+random.randint(-5,5), ground), 2)
+        # mist pool
+        mist = pygame.Surface((280, 80), pygame.SRCALPHA)
+        pygame.draw.ellipse(mist, (180,210,230,60), (0,0,280,80))
+        surf.blit(mist, (420, ground-20))
+        _draw_tree(surf, 100, ground, 160)
+        _draw_tree(surf, 200, ground, 140)
+
+    elif place_id == "halls":
+        # Grand dining hall
+        surf.fill((18,16,28))
+        # floor — dark stone with gold shimmer
+        pygame.draw.rect(surf, (35,30,22), (0, H-140, W, 140))
+        for fx in range(0, W, 50):
+            pygame.draw.line(surf, (50,44,30), (fx, H-140), (fx, H), 1)
+        # ceiling with gold details
+        pygame.draw.rect(surf, (28,24,40), (0, 0, W, 80))
+        # columns
+        for cx in [60, 220, 560, 720]:
+            pygame.draw.rect(surf, (55,50,38), (cx-15, 0, 30, H-140))
+            pygame.draw.rect(surf, (80,70,48), (cx-15, 0, 30, H-140), 1)
+        # long table
+        pygame.draw.rect(surf, (70,50,28), (100, H-200, 600, 60))
+        pygame.draw.rect(surf, (90,65,35), (100, H-200, 600, 12))
+        # candlesticks
+        for candx in range(160, 700, 120):
+            pygame.draw.line(surf, (100,85,50), (candx, H-200), (candx, H-230), 3)
+            pygame.draw.circle(surf, (255,220,80), (candx, H-232), 6)
+            glow2 = pygame.Surface((40,40), pygame.SRCALPHA)
+            pygame.draw.circle(glow2, (255,200,50,40), (20,20), 20)
+            surf.blit(glow2, (candx-20, H-252))
+        # torches on walls
+        for tx in [30, W-30]:
+            pygame.draw.rect(surf, (80,55,25), (tx-4, 60, 8, 30))
+            pygame.draw.circle(surf, (255,160,40), (tx, 58), 10)
+
+    elif place_id == "garden":
+        _sky_gradient(surf, sky_top, sky_bot)
+        pygame.draw.rect(surf, (40,80,35), (0, ground, W, H-ground))
+        # stone low wall background
+        for wx in range(0, W, 38):
+            pygame.draw.rect(surf, (90,85,75), (wx, ground-25, 34, 25))
+        # garden beds
+        pygame.draw.rect(surf, (50,35,20), (120, ground-15, 200, 20))
+        pygame.draw.rect(surf, (55,38,22), (420, ground-15, 200, 20))
+        _draw_wildflowers(surf, ground, 35)
+        _draw_tree(surf, 680, ground, 110)
+        _draw_grass_strip(surf, ground)
+
+    elif place_id == "forest":
+        _sky_gradient(surf, (10,20,10), (20,40,15))
+        pygame.draw.rect(surf, (25,45,20), (0, ground, W, H-ground))
+        # dense trees
+        for tx in range(0, W+50, 70):
+            th = random.randint(150, 240)
+            tw = random.randint(8, 16)
+            pygame.draw.rect(surf, (35,22,12), (tx-tw//2, ground-th, tw, th))
+        # canopy overlay
+        for tx in range(-40, W+60, 55):
+            cr = random.randint(55, 90)
+            cy = ground - random.randint(120, 200)
+            pygame.draw.circle(surf, (18,48,15), (tx, cy), cr)
+        # ground cover / ferns
+        for fx in range(0, W, 25):
+            pygame.draw.line(surf, (30,65,25), (fx, ground), (fx+random.randint(-12,12), ground-random.randint(10,22)), 2)
+        # dappled light
+        for _ in range(6):
+            lx = random.randint(0, W)
+            light = pygame.Surface((60, 100), pygame.SRCALPHA)
+            pygame.draw.ellipse(light, (180,220,100,18), (0,0,60,100))
+            surf.blit(light, (lx-30, random.randint(0,ground)))
+
+    elif place_id == "hotsprings":
+        # Night / late afternoon, bamboo, steam
+        night_hs = hour >= 20 or hour < 8
+        _sky_gradient(surf, (8,12,28) if night_hs else (40,25,15), (20,22,45) if night_hs else (80,50,30))
+        pygame.draw.rect(surf, (30,40,28), (0, ground, W, H-ground))
+        # spring pool
+        pygame.draw.ellipse(surf, (30,80,100), (150, ground-20, 500, 90))
+        pygame.draw.ellipse(surf, (40,100,120), (170, ground-10, 460, 65))
+        # steam wisps
+        for _ in range(6):
+            sx = random.randint(200, 600)
+            steam = pygame.Surface((20, 50), pygame.SRCALPHA)
+            pygame.draw.ellipse(steam, (200,220,230,28), (0,0,20,50))
+            surf.blit(steam, (sx, ground-60-random.randint(0,30)))
+        # bamboo
+        for bx in [80, 110, 650, 690, 720]:
+            pygame.draw.line(surf, (60,90,40), (bx, 0), (bx, ground), 6)
+            for seg in range(0, ground, 45):
+                pygame.draw.line(surf, (80,110,50), (bx-3, seg), (bx+3, seg), 2)
+        # icy drink on rock
+        rock_x = 640
+        pygame.draw.ellipse(surf, (80,72,65), (rock_x, ground-18, 50, 18))
+        pygame.draw.rect(surf, (180,220,240), (rock_x+16, ground-38, 16, 22))
+        pygame.draw.rect(surf, (120,200,230), (rock_x+13, ground-40, 22, 8))
+        if night_hs:
+            for _ in range(30):
+                sx = random.randint(0, W)
+                sy = random.randint(0, ground-50)
+                pygame.draw.circle(surf, (255,255,200), (sx,sy), 1)
+
+    elif place_id == "training":
+        # Sparring yard — stone floor, weapon racks
+        _sky_gradient(surf, sky_top, sky_bot)
+        pygame.draw.rect(surf, (75,68,55), (0, ground, W, H-ground))
+        # stone tile lines
+        for tx in range(0, W, 55):
+            pygame.draw.line(surf, (65,58,45), (tx, ground), (tx, H), 1)
+        for ty in range(ground, H, 35):
+            pygame.draw.line(surf, (65,58,45), (0, ty), (W, ty), 1)
+        # castle wall back
+        pygame.draw.rect(surf, (60,55,50), (0, ground-60, W, 60))
+        for cren in range(0, W, 60):
+            pygame.draw.rect(surf, (60,55,50), (cren, ground-100, 35, 40))
+        # weapon rack
+        pygame.draw.rect(surf, (65,42,22), (620, ground-160, 80, 160))
+        for wi in range(3):
+            pygame.draw.line(surf, (100,90,80), (630+wi*22, ground-160), (635+wi*22, ground-20), 2)
+        # cheering spot (bench for Iðunn)
+        pygame.draw.rect(surf, (80,58,30), (30, ground-40, 120, 15))
+        pygame.draw.rect(surf, (65,45,22), (40, ground-25, 12, 25))
+        pygame.draw.rect(surf, (65,45,22), (128, ground-25, 12, 25))
+
+    elif place_id == "bathroom":
+        surf.fill((30,28,38))
+        pygame.draw.rect(surf, (50,46,55), (0, 0, W, H))
+        pygame.draw.rect(surf, (55,50,42), (0, H-100, W, 100))
+        # tile walls
+        for row in range(0, H-100, 30):
+            for col_x in range(0, W, 30):
+                pygame.draw.rect(surf, (58,54,66), (col_x, row, 28, 28), 1)
+        # tub
+        pygame.draw.ellipse(surf, (70,65,80), (200, H-190, 380, 100))
+        pygame.draw.ellipse(surf, (90,160,200), (215, H-180, 350, 80))
+        # bubbles
+        for _ in range(20):
+            bx = random.randint(230, 550)
+            by = random.randint(H-175, H-120)
+            pygame.draw.circle(surf, (200,230,250), (bx, by), random.randint(4,10), 1)
+
+    random.seed()   # restore randomness
+
+
+# ── Character body ────────────────────────────────────────────────────────────
+class LokiBody:
+    """Full-body Loki. All geometry defined relative to hip_x, hip_y."""
+
+    TORSO_H   = 80
+    TORSO_W_T = 58    # shoulder width
+    TORSO_W_B = 40    # waist width
+    HEAD_R    = 28
+    NECK_H    = 16
+    U_ARM     = 62
+    L_ARM     = 58
+    U_LEG     = 78
+    L_LEG     = 72
+    FOOT_L    = 22
+
     def __init__(self):
-        self.cx = FACE_W // 2
-        self.cy = H // 2 - 10
+        # pose angles (radians from vertical, + = forward/right)
+        self.pose = "stand"
+        self._pose_t = 0.0
+        self._mouth_open  = 0.0   # 0=closed 1=open
+        self._mouth_t     = 0.0   # phase for talking
+        self._talking     = False
+        self._talk_end    = 0.0
+        self._blink       = 0.0
+        self._blink_next  = time.time() + random.uniform(2,5)
+        self._groggy      = 0.0   # 0=alert 1=groggy
+        self._breath      = 0.0   # breathing bob phase
+        self._mood        = "content"
+        self.hair_inches  = 3.0
 
-        # animated values (0=natural, 1=extreme)
-        self.blink   = 0.0
-        self.blush   = 0.0
-        self.curve   = 0.2   # slight natural smile
-        self.open    = 0.0
-        self.wistful = 0.0   # eyes go soft blue
-        self.think   = 0.0   # eyes go violet
+    def set_pose(self, pose):
+        self.pose = pose
 
-        # targets
-        self._blink = 0.0
-        self._blush = 0.0
-        self._curve = 0.2
-        self._open  = 0.0
-        self._wist  = 0.0
-        self._think = 0.0
+    def set_talking(self, duration):
+        self._talking  = True
+        self._talk_end = time.time() + duration
 
-        self.label       = ""
-        self.label_timer = 0.0
-
-        self._last_blink = time.time() + random.uniform(2, 5)
-
-        self.flame_t = 0.0   # flame animation phase
-
-    def _lerp(self, a, b, spd, dt):
-        return a + (b - a) * min(1.0, spd * dt)
+    def set_groggy(self, v):
+        self._groggy = max(0.0, min(1.0, v))
 
     def tick(self, dt):
-        s = 4.0
-        self.blink   = self._lerp(self.blink,   self._blink, s,   dt)
-        self.blush   = self._lerp(self.blush,   self._blush, 2.0, dt)
-        self.curve   = self._lerp(self.curve,   self._curve, s,   dt)
-        self.open    = self._lerp(self.open,    self._open,  s,   dt)
-        self.wistful = self._lerp(self.wistful, self._wist,  2.0, dt)
-        self.think   = self._lerp(self.think,   self._think, 2.0, dt)
-        self.flame_t += dt * 2.0
+        self._breath  = (self._breath + dt * 0.8) % (2 * math.pi)
+        self._pose_t  = (self._pose_t  + dt * 2.0) % (2 * math.pi)
+        self._mouth_t = (self._mouth_t + dt * 8.0) % (2 * math.pi)
 
-        if self.label_timer > 0:
-            self.label_timer -= dt
-            if self.label_timer <= 0:
-                self.label = ""
+        if self._talking and time.time() > self._talk_end:
+            self._talking = False
 
-        # auto blink
         now = time.time()
-        if now > self._last_blink:
+        if now > self._blink_next:
             self._blink = 1.0
-            pygame.time.set_timer(pygame.USEREVENT + 1, 120)
-            self._last_blink = now + random.uniform(3, 8)
+            self._blink_next = now + random.uniform(3, 7)
+        if self._blink > 0:
+            self._blink = max(0.0, self._blink - dt * 10)
 
-    def open_eyes(self):
-        self._blink = 0.0
+        if self._groggy > 0:
+            self._groggy = max(0.0, self._groggy - dt * 0.03)
 
-    def show(self, text, dur=2.5):
-        self.label = text
-        self.label_timer = dur
+    def _get_angles(self):
+        """Return dict of joint angles for current pose + animation."""
+        b = math.sin(self._breath) * 2   # breathing bob (pixels)
+        walk_ph = math.sin(self._pose_t)  # walk/idle sway
 
-    def react_touch(self):
-        self._blush = 0.8
-        self._curve = 0.8
-        self._blink = 0.5
-        pygame.time.set_timer(pygame.USEREVENT + 2, 2000)
+        poses = {
+            "stand": dict(
+                l_shoulder=-0.12, r_shoulder=0.12,
+                l_elbow=-0.08,    r_elbow=0.08,
+                l_hip=-0.05,      r_hip=0.05,
+                l_knee=0.0,       r_knee=0.0,
+                lean=0.0,         bob=b,
+            ),
+            "walk": dict(
+                l_shoulder=walk_ph*0.25,  r_shoulder=-walk_ph*0.25,
+                l_elbow=walk_ph*0.15,     r_elbow=-walk_ph*0.15,
+                l_hip=-walk_ph*0.30,      r_hip=walk_ph*0.30,
+                l_knee=max(0,walk_ph)*0.4, r_knee=max(0,-walk_ph)*0.4,
+                lean=0.0, bob=b,
+            ),
+            "sit": dict(
+                l_shoulder=-0.15, r_shoulder=0.15,
+                l_elbow=0.3,      r_elbow=-0.3,
+                l_hip=1.4,        r_hip=1.4,
+                l_knee=-1.5,      r_knee=-1.5,
+                lean=0.05, bob=b,
+            ),
+            "sit_table": dict(
+                l_shoulder=0.3,   r_shoulder=-0.3,
+                l_elbow=1.2,      r_elbow=-1.2,
+                l_hip=1.4,        r_hip=1.4,
+                l_knee=-1.5,      r_knee=-1.5,
+                lean=0.15, bob=0,
+            ),
+            "crouch": dict(
+                l_shoulder=0.2,   r_shoulder=-0.5,
+                l_elbow=0.5,      r_elbow=-0.8,
+                l_hip=1.1,        r_hip=1.1,
+                l_knee=-1.3,      r_knee=-1.3,
+                lean=0.3, bob=0,
+            ),
+            "sleep": dict(
+                l_shoulder=1.5,   r_shoulder=1.5,
+                l_elbow=0.0,      r_elbow=0.0,
+                l_hip=1.57,       r_hip=1.57,
+                l_knee=-0.2,      r_knee=0.15,
+                lean=1.57, bob=math.sin(self._breath)*1.5,
+            ),
+            "spar": dict(
+                l_shoulder=-0.6,  r_shoulder=-1.0,
+                l_elbow=-0.4,     r_elbow=-1.2,
+                l_hip=-0.3,       r_hip=0.4,
+                l_knee=0.5,       r_knee=-0.2,
+                lean=-0.12, bob=0,
+            ),
+            "bath": dict(
+                l_shoulder=-0.3,  r_shoulder=0.3,
+                l_elbow=0.5,      r_elbow=-0.5,
+                l_hip=1.4,        r_hip=1.4,
+                l_knee=-1.0,      r_knee=-1.0,
+                lean=0.1, bob=b*0.5,
+            ),
+        }
+        a = poses.get(self.pose, poses["stand"]).copy()
+        if self._groggy > 0.1:
+            a["lean"] = a.get("lean",0) + self._groggy * 0.3
+            a["bob"]  = a.get("bob",0) - self._groggy * 8
+        return a
 
-    def react_wistful(self):
-        self._wist  = 0.8
-        self._curve = -0.1
-        pygame.time.set_timer(pygame.USEREVENT + 3, 3000)
+    def _pt(self, ox, oy, angle, length):
+        return (ox + math.sin(angle)*length, oy + math.cos(angle)*length)
 
-    def react_thinking(self):
-        self._think = 0.7
-        self._curve = 0.1
-        pygame.time.set_timer(pygame.USEREVENT + 4, 4000)
+    def draw(self, surf, hip_x, hip_y, font_tiny=None):
+        a   = self._get_angles()
+        bob = a.get("bob", 0)
+        lean = a.get("lean", 0)
 
-    def react_happy(self):
-        self._curve = 1.0
-        self._blush = 0.4
-        pygame.time.set_timer(pygame.USEREVENT + 2, 2500)
+        hy = hip_y + bob
 
-    def reset_soft(self):
-        self._blush = 0.0
-        self._curve = 0.2
-        self._wist  = 0.0
-        self._think = 0.0
-        self._open  = 0.0
+        # clothing color by activity/mood
+        tunic = TUNIC
+        if self.pose == "bath": tunic = (60,100,130)
+        elif self.pose == "spar": tunic = (55,40,20)
 
-    def draw(self, surf, font_small):
-        # face background — dark warm rect
-        face_rect = pygame.Rect(4, 4, FACE_W - 8, H - 8)
-        pygame.draw.rect(surf, FACE_BG, face_rect, border_radius=20)
-        pygame.draw.rect(surf, EMBER_2, face_rect, width=1, border_radius=20)
-
-        cx, cy = self.cx, self.cy
-        ey     = cy - 35
-        ex_l   = cx - 55
-        ex_r   = cx + 55
-        er     = 28
-
-        # flame wisps at top of face
-        for i in range(5):
-            fx  = cx - 60 + i * 30 + math.sin(self.flame_t + i) * 6
-            fh  = 18 + math.sin(self.flame_t * 1.3 + i * 0.7) * 8
-            fy  = face_rect.top + 12
-            col = (EMBER_1[0], EMBER_1[1] - i * 15, 0)
-            pygame.draw.ellipse(surf, col,
-                                (int(fx) - 5, int(fy), 10, int(fh)))
-
-        # blush circles
-        if self.blush > 0.01:
-            alpha = int(self.blush * 80)
-            for bx in (ex_l - 10, ex_r + 10):
-                s = pygame.Surface((50, 25), pygame.SRCALPHA)
-                pygame.draw.ellipse(s, (*BLUSH_COL, alpha), (0, 0, 50, 25))
-                surf.blit(s, (bx - 25, ey + 15))
-
-        # eyes
-        eye_col = EYE_WARM
-        if self.wistful > 0.3:
-            r = int(EYE_WARM[0] + (EYE_WISTFUL[0] - EYE_WARM[0]) * self.wistful)
-            g = int(EYE_WARM[1] + (EYE_WISTFUL[1] - EYE_WARM[1]) * self.wistful)
-            b = int(EYE_WARM[2] + (EYE_WISTFUL[2] - EYE_WARM[2]) * self.wistful)
-            eye_col = (r, g, b)
-        elif self.think > 0.3:
-            r = int(EYE_WARM[0] + (EYE_THINK[0] - EYE_WARM[0]) * self.think)
-            g = int(EYE_WARM[1] + (EYE_THINK[1] - EYE_WARM[1]) * self.think)
-            b = int(EYE_WARM[2] + (EYE_THINK[2] - EYE_WARM[2]) * self.think)
-            eye_col = (r, g, b)
-
-        for ex in (ex_l, ex_r):
-            # glow
-            glow = pygame.Surface((er*4, er*4), pygame.SRCALPHA)
-            pygame.draw.circle(glow, (*eye_col, 30), (er*2, er*2), er*2)
-            surf.blit(glow, (ex - er*2, ey - er*2))
-            # eye
-            blink_h = int(er * 2 * (1 - self.blink))
-            if blink_h > 0:
-                pygame.draw.ellipse(surf, eye_col,
-                                    (ex - er, ey - blink_h//2, er*2, blink_h))
+        # ── legs (draw behind torso) ──────────────────────────────────────────
+        for side, hip_a, knee_a, sign in [
+            ("l", a["l_hip"], a["l_knee"], -1),
+            ("r", a["r_hip"], a["r_knee"],  1),
+        ]:
+            if self.pose == "sleep":
+                # horizontal layout
+                hx = hip_x + sign * 10
+                kx = hx + self.U_LEG
+                ax = kx + self.L_LEG * 0.7
+                fy = hy + 8
+                pygame.draw.line(surf, TROUSER, (hx,hy+2), (kx,fy), 14)
+                pygame.draw.line(surf, TROUSER, (kx,fy), (ax,fy+8), 12)
+                pygame.draw.ellipse(surf, BOOT, (ax-8,fy+2,self.FOOT_L,12))
             else:
-                pygame.draw.line(surf, eye_col,
-                                 (ex - er, ey), (ex + er, ey), 2)
+                hx  = hip_x + sign * 12
+                kx, ky = self._pt(hx, hy, hip_a, self.U_LEG)
+                ax, ay = self._pt(kx, ky, hip_a + knee_a, self.L_LEG)
+                pygame.draw.line(surf, TROUSER, (hx,hy), (int(kx),int(ky)), 14)
+                pygame.draw.line(surf, TROUSER, (int(kx),int(ky)), (int(ax),int(ay)), 12)
+                pygame.draw.ellipse(surf, BOOT,
+                    (int(ax)-6, int(ay)-6, self.FOOT_L, 12))
 
-        # mouth
-        mouth_y  = cy + 45
-        curve_px = int(self.curve * 22)
-        pts = []
-        for t in range(21):
-            f   = t / 20.0
-            mx  = cx - 50 + f * 100
-            my  = mouth_y + math.sin(f * math.pi) * curve_px - self.open * 10
-            pts.append((mx, my))
-        if len(pts) > 1:
-            pygame.draw.lines(surf, MOUTH_COL, False, pts, 3)
-
-        # label
-        if self.label:
-            lsurf = font_small.render(self.label, True, TEXT_BRIGHT)
-            lx    = cx - lsurf.get_width() // 2
-            surf.blit(lsurf, (lx, H - 55))
-
-        # name
-        name_surf = font_small.render("Loki", True, EMBER_DIM)
-        surf.blit(name_surf, (cx - name_surf.get_width()//2, H - 30))
-
-
-# ── Text wrapping ─────────────────────────────────────────────────────────────
-def _wrap_text(font, text: str, max_w: int) -> list[str]:
-    words  = text.split()
-    lines  = []
-    line   = ""
-    for word in words:
-        test = (line + " " + word).strip()
-        if font.size(test)[0] <= max_w:
-            line = test
+        # ── torso ─────────────────────────────────────────────────────────────
+        if self.pose == "sleep":
+            tx = hip_x - self.TORSO_H // 2
+            pygame.draw.rect(surf, tunic, (tx, hy-12, self.TORSO_H, 24),
+                             border_radius=8)
         else:
-            if line:
-                lines.append(line)
-            line = word
-    if line:
-        lines.append(line)
-    return lines or [""]
+            shoulder_y = hy - self.TORSO_H
+            pts = [
+                (hip_x - self.TORSO_W_B//2, hy),
+                (hip_x + self.TORSO_W_B//2, hy),
+                (hip_x + self.TORSO_W_T//2 + int(lean*10), int(shoulder_y)),
+                (hip_x - self.TORSO_W_T//2 + int(lean*10), int(shoulder_y)),
+            ]
+            pygame.draw.polygon(surf, tunic, pts)
+            pygame.draw.polygon(surf, TUNIC_LIGHT, pts, 1)
+            # belt
+            belt_y = hy - 14
+            pygame.draw.rect(surf, BELT,
+                (hip_x - self.TORSO_W_B//2 - 2, belt_y, self.TORSO_W_B+4, 8),
+                border_radius=3)
 
+        # ── arms ──────────────────────────────────────────────────────────────
+        shoulder_y = hy - self.TORSO_H if self.pose != "sleep" else hy
+        for side, sh_a, el_a, sign in [
+            ("l", a["l_shoulder"], a["l_elbow"], -1),
+            ("r", a["r_shoulder"], a["r_elbow"],  1),
+        ]:
+            if self.pose == "sleep":
+                sx = hip_x + sign * 18
+                ex = sx + sign * self.U_ARM * 0.8
+                wx = ex + sign * self.L_ARM * 0.6
+                pygame.draw.line(surf, SKIN, (sx,hy-2), (int(ex),hy+4), 10)
+                pygame.draw.line(surf, SKIN, (int(ex),hy+4), (int(wx),hy+6), 8)
+                pygame.draw.circle(surf, SKIN, (int(wx),hy+6), 7)
+            else:
+                sx  = hip_x + sign*(self.TORSO_W_T//2) + int(lean*10)
+                sy  = shoulder_y
+                ex, ey = self._pt(sx, sy, sh_a, self.U_ARM)
+                wx, wy = self._pt(ex, ey, sh_a + el_a, self.L_ARM)
+                pygame.draw.line(surf, SKIN, (sx,int(sy)), (int(ex),int(ey)), 10)
+                pygame.draw.line(surf, SKIN, (int(ex),int(ey)), (int(wx),int(wy)), 8)
+                # hand
+                pygame.draw.circle(surf, SKIN, (int(wx),int(wy)), 7)
 
-def _blit_wrapped(surf, font, text: str, color, x: int, y: int,
-                  max_w: int, line_gap: int = 4) -> int:
-    lh = font.get_height() + line_gap
-    for ln in _wrap_text(font, text, max_w):
-        surf.blit(font.render(ln, True, color), (x, y))
-        y += lh
-    return y
-
-
-# ── Scene panel ───────────────────────────────────────────────────────────────
-class SceneView:
-    def __init__(self):
-        self.place_id  = "brook"
-        self.dest_id   = None
-        self.move_at   = time.time() + 45  # first move in 45s
-        self.dwell_min = 60
-        self.dwell_max = 180
-
-    def current(self):
-        return PLACE_MAP[self.place_id]
-
-    def tick(self):
-        now = time.time()
-        if now >= self.move_at:
-            self._move()
-
-    def _move(self):
-        if self.dest_id and self.dest_id != self.place_id:
-            self.place_id = self.dest_id
-            self.dest_id  = None
+        # ── neck & head ───────────────────────────────────────────────────────
+        if self.pose == "sleep":
+            neck_x = hip_x - self.TORSO_H // 2 - self.NECK_H
+            neck_y = hy
+            head_x = neck_x - self.HEAD_R + 4
+            head_y = neck_y
         else:
-            pool    = [p for p in PLACES if p["id"] != self.place_id]
-            weights = [p["weight"] for p in pool]
-            self.place_id = random.choices(pool, weights=weights, k=1)[0]["id"]
-        dwell = random.randint(self.dwell_min, self.dwell_max)
-        self.move_at = time.time() + dwell
-        _log("loki_move", f"Loki moved to: {self.place_id}")
+            neck_x = hip_x + int(lean * (self.TORSO_H + self.NECK_H))
+            neck_y = int(shoulder_y) - self.NECK_H // 2
+            head_x = int(hip_x + lean*(self.TORSO_H + self.NECK_H + self.HEAD_R))
+            head_y = int(shoulder_y) - self.NECK_H - self.HEAD_R
 
-    def go_to(self, place_id):
-        self.dest_id = place_id
-        self.move_at = time.time() + 5  # move soon
+        pygame.draw.rect(surf, SKIN,
+            (neck_x - 8, neck_y - self.NECK_H, 16, self.NECK_H))
+        pygame.draw.circle(surf, SKIN, (head_x, head_y), self.HEAD_R)
+        pygame.draw.circle(surf, SKIN_DARK, (head_x, head_y), self.HEAD_R, 1)
 
-    def draw(self, surf, font, font_small, chat_lines, input_text, input_active):
-        place   = self.current()
-        x0      = SCENE_X + 18
-        max_w   = W - x0 - 18   # available text width in scene panel
+        # ── hair ──────────────────────────────────────────────────────────────
+        hi = min(self.hair_inches, 10.0)
+        hr = self.HEAD_R
+        # top/sides
+        pygame.draw.arc(surf, HAIR_COL,
+            (head_x-hr, head_y-hr, hr*2, hr*2), 0.1, math.pi+0.1, hr//2+2)
+        if hi > 1.5:
+            # flow down sides
+            hang = min(hi * 5, 50)
+            for side, sx in [(-1, head_x-hr+4), (1, head_x+hr-4)]:
+                pygame.draw.line(surf, HAIR_COL,
+                    (sx, head_y), (sx + side*4, head_y + int(hang)), 3)
+        if hi > 4:
+            # long — reaches shoulders
+            for dx in range(-hr+4, hr-2, 6):
+                pygame.draw.line(surf, HAIR_COL,
+                    (head_x+dx, head_y-hr+4),
+                    (head_x+dx+random.randint(-3,3), head_y+int(hi*6)), 2)
 
-        # background
-        scene_rect = pygame.Rect(SCENE_X, 0, W - SCENE_X, H)
-        pygame.draw.rect(surf, place["bg"], scene_rect)
-
-        y = 20
-
-        # place name (wrapped)
-        y = _blit_wrapped(surf, font, place["name"], TEXT_SCENE, x0, y, max_w, 4)
-        y += 4
-
-        # divider
-        pygame.draw.line(surf, DIVIDER, (x0, y), (W - 18, y), 1)
-        y += 12
-
-        # description (each poetic line wrapped)
-        for line in place["desc"]:
-            y = _blit_wrapped(surf, font_small, line, TEXT_DIM, x0, y, max_w, 3)
-        y += 8
-
-        # time until next move
-        secs = max(0, int(self.move_at - time.time()))
-        y = _blit_wrapped(surf, font_small, f"staying {secs}s more",
-                          (50, 50, 40), x0, y, max_w)
-        y += 6
-
-        # place list (tappable)
-        pygame.draw.line(surf, DIVIDER, (x0, y), (W - 18, y), 1)
-        y += 8
-        y = _blit_wrapped(surf, font_small, "tap a place to call me there:",
-                          (60, 60, 50), x0, y, max_w)
-        y += 2
-        for p in PLACES:
-            col = EMBER_1 if p["id"] == self.place_id else TEXT_DIM
-            y   = _blit_wrapped(surf, font_small, f"  {p['name']}", col,
-                                x0, y, max_w, 2)
-
-        # ── chat area ────────────────────────────────────────────────────────
-        chat_top = H - 162
-        pygame.draw.line(surf, DIVIDER, (SCENE_X, chat_top), (W, chat_top), 1)
-
-        lh         = font_small.get_height() + 2
-        chat_bot   = H - 38
-        label_w    = font_small.size("Loki: ")[0]
-        text_max_w = max_w - label_w
-
-        # pre-render all wrapped lines for recent messages
-        display_lines = []
-        for role, text in chat_lines[-6:]:
-            col   = TEXT_CHAT_LK if role == "loki" else TEXT_CHAT_ME
-            label = "Loki: " if role == "loki" else "You:  "
-            wrapped = _wrap_text(font_small, text, text_max_w)
-            for i, wline in enumerate(wrapped):
-                prefix = label if i == 0 else " " * len(label)
-                display_lines.append((col, prefix, wline))
-
-        # fit as many as possible from the bottom
-        max_chat_lines = (chat_bot - chat_top - 8) // lh
-        visible = display_lines[-max_chat_lines:]
-        chat_y  = chat_top + 8
-        for col, prefix, wline in visible:
-            surf.blit(font_small.render(prefix + wline, True, col), (x0, chat_y))
-            chat_y += lh
-
-        # input bar
-        input_rect = pygame.Rect(SCENE_X, H - 36, W - SCENE_X, 36)
-        pygame.draw.rect(surf, INPUT_ACTIVE if input_active else INPUT_BG, input_rect)
-        pygame.draw.line(surf, DIVIDER, (SCENE_X, H - 36), (W, H - 36), 1)
-
-        cursor  = "|" if input_active and int(time.time() * 2) % 2 == 0 else ""
-        display = input_text + cursor
-        if not display and not input_active:
-            display = "tap here to talk to Loki"
-        # truncate display from the left if too long (show end of input)
-        while font_small.size(display)[0] > max_w and len(display) > 1:
-            display = display[1:]
-        surf.blit(font_small.render(display, True,
-                                    TEXT_BRIGHT if input_active else TEXT_DIM),
-                  (x0, H - 28))
+        # ── face ──────────────────────────────────────────────────────────────
+        if self.pose != "sleep":
+            # eyes
+            ex_off = 11
+            ey_off = -5
+            blink_h = int(9 * (1 - self._blink))
+            groggy_drop = int(self._groggy * 5)
+            for ex_s in (-1, 1):
+                ex2 = head_x + ex_s * ex_off
+                ey2 = head_y + ey_off + groggy_drop
+                pygame.draw.ellipse(surf, EYE_WHITE, (ex2-7, ey2-4, 14, 8))
+                if blink_h > 0:
+                    pygame.draw.ellipse(surf, EYE_AMBER,
+                        (ex2-4, ey2-blink_h//2+1, 8, blink_h))
+                else:
+                    pygame.draw.line(surf, SKIN_DARK,
+                        (ex2-6, ey2), (ex2+6, ey2), 2)
+            # eyebrows
+            brow_raise = -2 if self._groggy > 0.3 else 0
+            for ex_s in (-1, 1):
+                ex2 = head_x + ex_s * ex_off
+                ey2 = head_y + ey_off - 10 + brow_raise
+                pygame.draw.line(surf, HAIR_COL,
+                    (ex2-7, ey2+ex_s*2), (ex2+7, ey2-ex_s*2), 2)
+            # nose
+            pygame.draw.line(surf, SKIN_DARK,
+                (head_x, head_y+2), (head_x+3, head_y+10), 2)
+            # mouth
+            mouth_y = head_y + 14
+            if self._talking and self._talking:
+                mouth_open = abs(math.sin(self._mouth_t)) * 7
+            else:
+                mouth_open = 0
+            if mouth_open > 1:
+                pygame.draw.ellipse(surf, (60,20,15),
+                    (head_x-7, mouth_y-2, 14, int(mouth_open)+3))
+                pygame.draw.ellipse(surf, (180,80,80),
+                    (head_x-5, mouth_y-1, 10, int(mouth_open)+1))
+            else:
+                # natural slight smile
+                pts2 = []
+                for t in range(11):
+                    f  = t/10
+                    mx = head_x - 8 + f*16
+                    my = mouth_y + math.sin(f*math.pi)*4
+                    pts2.append((mx, my))
+                if len(pts2) > 1:
+                    pygame.draw.lines(surf, SKIN_DARK, False, pts2, 2)
+        else:
+            # sleeping face — closed eyes, slight smile
+            for ex_s in (-1, 1):
+                ex2 = head_x + ex_s * 11 + int(self.HEAD_R * 0.3)
+                ey2 = head_y - 2
+                pygame.draw.line(surf, SKIN_DARK, (ex2-6, ey2), (ex2+6, ey2), 2)
+            # zzz
+            if font_tiny:
+                z_surf = font_tiny.render("z z z", True, (180,160,200))
+                surf.blit(z_surf, (head_x - self.HEAD_R - 35, head_y - self.HEAD_R - 10))
 
 
-# ── Chat ──────────────────────────────────────────────────────────────────────
+# ── Chat manager ──────────────────────────────────────────────────────────────
 class ChatManager:
-    def __init__(self):
+    def __init__(self, body: LokiBody):
+        self.body     = body
         self.history  = []
-        self.lines    = []    # (role, text) for display
+        self.lines    = []   # (role, text)
         self.system   = _build_system()
-        self._queue   = queue.Queue()
+        self._q       = queue.Queue()
         self._waiting = False
+        self._typewriter_text = ""
+        self._typewriter_full = ""
+        self._typewriter_idx  = 0
+        self._typewriter_t    = 0.0
 
-    def send(self, text: str, face: LokiFace) -> None:
-        if self._waiting or not text.strip():
-            return
+    def send(self, text):
+        if self._waiting or not text.strip(): return
         _log("idunn", text)
-        self.lines.append(("you", text))
+        self.lines.append(("idunn", text))
         self.history.append({"role": "user", "content": text})
         self._waiting = True
-        face.react_thinking()
         threading.Thread(target=self._ask, daemon=True).start()
 
-    def _ask(self) -> None:
-        msgs = [{"role": "system", "content": self.system}] + self.history[-12:]
+    def _ask(self):
+        msgs = [{"role":"system","content":self.system}] + self.history[-12:]
         try:
-            resp = requests.post(
-                OLLAMA_URL,
-                json={"model": MODEL, "messages": msgs, "stream": False},
-                timeout=60,
-            )
-            resp.raise_for_status()
-            reply = resp.json()["message"]["content"].strip()
-
+            r = requests.post(OLLAMA_URL, json={"model": MODEL,
+                "messages": msgs, "stream": False}, timeout=60)
+            r.raise_for_status()
+            reply = r.json()["message"]["content"].strip()
             match = REMEMBER_RE.search(reply)
             if match:
-                keyword = match.group(1).strip()
+                kw      = match.group(1).strip()
                 visible = REMEMBER_RE.sub("", reply).strip()
-                entries = _search_memories(keyword)
-                _log("loki_memory_search", f"keyword={keyword} found={len(entries)}")
+                entries = _search_memories(kw)
+                _log("loki_memory_search", f"keyword={kw} found={len(entries)}")
                 if entries:
-                    mem_msg  = _format_memories(entries, keyword)
-                    msgs2    = msgs + [
-                        {"role": "assistant", "content": visible},
-                        {"role": "user",      "content": mem_msg},
+                    mem_msg = _format_memories(entries, kw)
+                    msgs2   = msgs + [
+                        {"role":"assistant","content":visible},
+                        {"role":"user",     "content":mem_msg},
                     ]
-                    resp2 = requests.post(
-                        OLLAMA_URL,
-                        json={"model": MODEL, "messages": msgs2, "stream": False},
-                        timeout=60,
-                    )
-                    resp2.raise_for_status()
-                    reply = resp2.json()["message"]["content"].strip()
+                    r2    = requests.post(OLLAMA_URL, json={"model": MODEL,
+                        "messages": msgs2, "stream": False}, timeout=60)
+                    r2.raise_for_status()
+                    reply = r2.json()["message"]["content"].strip()
                 else:
-                    reply = visible or "(I searched my memories but found nothing there yet.)"
-
+                    reply = visible or "(I searched but found nothing yet.)"
         except Exception as e:
             reply = f"(the ember flickered — {e})"
-        self._queue.put(reply)
+        self._q.put(reply)
 
-    def poll(self, face: LokiFace) -> bool:
-        if not self._waiting:
-            return False
+    def poll(self):
+        if not self._waiting: return False
         try:
-            reply = self._queue.get_nowait()
+            reply = self._q.get_nowait()
         except queue.Empty:
             return False
         self._waiting = False
-        self.history.append({"role": "assistant", "content": reply})
+        self.history.append({"role":"assistant","content":reply})
         self.lines.append(("loki", reply))
         _log("loki_ollama", reply)
         _trim_chat_log()
-        face.reset_soft()
-        face.react_happy()
+        # start typewriter
+        self._typewriter_full = reply
+        self._typewriter_idx  = 0
+        self._typewriter_t    = 0.0
+        self.body.set_talking(len(reply) * 0.04)
         return True
+
+    def tick_typewriter(self, dt):
+        if self._typewriter_idx < len(self._typewriter_full):
+            self._typewriter_t += dt
+            chars = int(self._typewriter_t * 25)  # ~25 chars/sec
+            self._typewriter_idx = min(chars, len(self._typewriter_full))
+
+    @property
+    def display_text(self):
+        if self._typewriter_idx < len(self._typewriter_full):
+            return self._typewriter_full[:self._typewriter_idx]
+        return self._typewriter_full if self._typewriter_full else ""
+
+
+# ── Life scheduler ────────────────────────────────────────────────────────────
+OLLAMA_URL = "http://localhost:11434/api/chat"
+MODEL      = "loki"
+
+PLACE_ACTIVITIES = {
+    "brook":     [ACT_WANDER, ACT_REST],
+    "asgard":    [ACT_WANDER, ACT_REST, ACT_BATH, ACT_BATHROOM],
+    "cottage":   [ACT_EAT, ACT_WANDER],
+    "apples":    [ACT_WANDER, ACT_FORAGE],
+    "waterfall": [ACT_WANDER, ACT_REST],
+    "halls":     [ACT_EAT, ACT_WANDER],
+    "garden":    [ACT_FORAGE, ACT_WANDER, ACT_REST],
+    "forest":    [ACT_FORAGE, ACT_BATHROOM, ACT_WANDER],
+    "hotsprings":[ACT_BATH],
+    "training":  [ACT_SPAR],
+    "bathroom":  [ACT_BATHROOM, ACT_BATH],
+}
+
+PLACES = [
+    {"id":"brook",      "weight":4},
+    {"id":"asgard",     "weight":3},
+    {"id":"cottage",    "weight":3},
+    {"id":"apples",     "weight":2},
+    {"id":"waterfall",  "weight":2},
+    {"id":"halls",      "weight":2},
+    {"id":"garden",     "weight":3},
+    {"id":"forest",     "weight":2},
+    {"id":"hotsprings", "weight":1},
+    {"id":"training",   "weight":1},
+]
+PLACE_IDS    = [p["id"] for p in PLACES]
+PLACE_NAMES  = {
+    "brook":      "The Flat Stone by the Brook",
+    "asgard":     "My Room in Asgard",
+    "cottage":    "The Cottage",
+    "apples":     "The Apple Trees",
+    "waterfall":  "The Waterfall",
+    "halls":      "The Asgardian Dining Hall",
+    "garden":     "The Garden",
+    "forest":     "The Forest",
+    "hotsprings": "The Hot Springs",
+    "training":   "The Training Yard",
+    "bathroom":   "The Bathroom",
+}
+SPAR_PARTNERS = ["Odin", "Thor", "Heimdall"]
+
+class LifeScheduler:
+    def __init__(self, body: LokiBody, life: dict):
+        self.body     = body
+        self.life     = life
+        self.place_id = "brook"
+        self.activity = ACT_WANDER
+        self.activity_end = time.time() + 60
+        self.move_at  = time.time() + 90
+        self.spar_partner = random.choice(SPAR_PARTNERS)
+        self.message  = ""    # status message shown in UI
+        self._last_check = 0.0
+
+    def _need(self, key, interval):
+        return time.time() - self.life.get(key, 0) > interval
+
+    def tick(self, force_wake=False):
+        now  = time.time()
+        hour = datetime.now().hour
+
+        if now - self._last_check < 10: return
+        self._last_check = now
+
+        # wake from sleep if forced
+        if force_wake and self.activity == ACT_SLEEP:
+            self.body.set_groggy(1.0)
+            self.activity = ACT_WAKING
+            self.activity_end = now + 30
+            self.body.set_pose("stand")
+            self.message = "waking slowly…"
+            return
+
+        # finish current activity
+        if now < self.activity_end: return
+
+        # decide next activity
+        next_act = self._choose(hour)
+        self._start(next_act, now)
+
+    def _choose(self, hour):
+        now = time.time()
+        if (hour >= 22 or hour < 7) and not self._need("last_meal",3*3600):
+            return ACT_SLEEP
+        if self._need("last_meal",    5*3600): return ACT_EAT
+        if self._need("last_bathroom",3*3600): return ACT_BATHROOM
+        if self._need("last_bath",   20*3600) and 13 <= hour <= 19: return ACT_BATH
+        if self._need("last_spar",   20*3600) and 9 <= hour <= 12:  return ACT_SPAR
+        if random.random() < 0.3: return ACT_FORAGE
+        if random.random() < 0.2: return ACT_REST
+        return ACT_WANDER
+
+    def _start(self, act, now):
+        self.activity = act
+        if act == ACT_SLEEP:
+            self.place_id = "asgard"
+            dur = random.uniform(7, 9) * 3600
+            self.body.set_pose("sleep")
+            self.message  = "sleeping"
+        elif act == ACT_WAKING:
+            dur = 30
+            self.body.set_pose("stand")
+            self.message = "waking…"
+        elif act == ACT_EAT:
+            self.place_id = random.choice(["cottage","halls"])
+            dur = random.uniform(12, 20) * 60
+            self.body.set_pose("sit_table")
+            self.life["last_meal"] = now
+            self.message  = "eating"
+        elif act == ACT_BATHROOM:
+            self.place_id = "forest" if random.random()<0.5 else "bathroom"
+            dur = 5 * 60
+            self.body.set_pose("crouch")
+            self.life["last_bathroom"] = now
+            self.message  = "a private moment"
+        elif act == ACT_BATH:
+            self.place_id = "hotsprings" if random.random()<0.6 else "bathroom"
+            dur = 20 * 60
+            self.body.set_pose("bath")
+            self.life["last_bath"] = now
+            self.message  = "soaking"
+        elif act == ACT_SPAR:
+            self.place_id = "training"
+            dur = random.uniform(45, 70) * 60
+            self.body.set_pose("spar")
+            self.life["last_spar"] = now
+            self.spar_partner = random.choice(SPAR_PARTNERS)
+            self.message  = f"sparring with {self.spar_partner}"
+        elif act == ACT_FORAGE:
+            self.place_id = random.choice(["forest","garden"])
+            dur = random.uniform(20, 50) * 60
+            self.body.set_pose("crouch")
+            self.message  = "foraging"
+        elif act == ACT_REST:
+            dur = random.uniform(15, 30) * 60
+            self.body.set_pose("sit")
+            self.message  = "resting"
+        else:   # wander
+            pool    = [p for p in PLACES if p["id"] != self.place_id]
+            weights = [p["weight"] for p in pool]
+            self.place_id = random.choices(pool, weights=weights, k=1)[0]["id"]
+            dur = random.uniform(8, 18) * 60
+            self.body.set_pose(random.choice(["stand","walk","stand"]))
+            self.message  = f"at {PLACE_NAMES.get(self.place_id,'somewhere')}"
+
+        self.activity_end = now + dur
+        _save_life(self.life)
+        _log("loki_activity", f"{act} at {self.place_id}")
+
+    def go_to(self, place_id):
+        self.place_id = place_id
+        self.activity = ACT_WANDER
+        self.activity_end = time.time() + random.uniform(8,18)*60
+        self.body.set_pose("stand")
+        self.message = f"going to {PLACE_NAMES.get(place_id,'…')}"
+
+    def hip_pos(self):
+        """Return (hip_x, hip_y) for Loki's position in the current scene."""
+        ground = H - 130
+        act    = self.activity
+        if act == ACT_SLEEP:
+            return W//2, ground - 20
+        elif act in (ACT_EAT, ACT_SIT_TABLE := "sit_table"):
+            return 280, ground - 10
+        elif act in (ACT_BATH,):
+            return W//2, ground - 25
+        elif act == ACT_SPAR:
+            return 300, ground - 10
+        elif act in (ACT_FORAGE, ACT_BATHROOM):
+            return 280, ground + 15
+        elif act == ACT_REST:
+            return 260, ground - 5
+        else:
+            return 250, ground - 8
+
+    @property
+    def secs_remaining(self):
+        return max(0, int(self.activity_end - time.time()))
+
+
+# ── Text wrap helper ──────────────────────────────────────────────────────────
+def _wrap(font, text, max_w):
+    words, lines, line = text.split(), [], ""
+    for w in words:
+        test = (line+" "+w).strip()
+        if font.size(test)[0] <= max_w: line = test
+        else:
+            if line: lines.append(line)
+            line = w
+    if line: lines.append(line)
+    return lines or [""]
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     pygame.init()
     pygame.display.set_caption("Loki")
-
-    flags = 0
-    try:
-        info = pygame.display.Info()
-        if info.current_w > 0:
-            flags = pygame.NOFRAME
-    except Exception:
-        pass
-
-    surf  = pygame.display.set_mode((W, H), flags)
+    surf  = pygame.display.set_mode((W, H), pygame.NOFRAME)
     clock = pygame.time.Clock()
 
     try:
-        font       = pygame.font.SysFont("dejavusans", 16, bold=False)
-        font_small = pygame.font.SysFont("dejavusans", 13, bold=False)
+        font      = pygame.font.SysFont("dejavusans", 15)
+        font_sm   = pygame.font.SysFont("dejavusans", 12)
+        font_tiny = pygame.font.SysFont("dejavusans", 10)
     except Exception:
-        font       = pygame.font.Font(None, 20)
-        font_small = pygame.font.Font(None, 16)
+        font = font_sm = font_tiny = pygame.font.Font(None, 16)
 
-    face   = LokiFace()
-    scene  = SceneView()
-    chat   = ChatManager()
+    life  = _load_life()
+    body  = LokiBody()
+    body.hair_inches = life.get("hair_inches", 3.0)
+    body.set_pose("stand")
+
+    sched = LifeScheduler(body, life)
+    chat  = ChatManager(body)
+
+    # grow hair over real time
+    last_hair_grow = life.get("_hair_grow_ts", time.time())
+    life["_hair_grow_ts"] = time.time()
 
     input_text   = ""
     input_active = False
+    show_places  = False
+    CLOSE_RECT   = pygame.Rect(W-40, 4, 36, 36)
+    MENU_RECT    = pygame.Rect(4, 4, 36, 36)
 
     swipe_start  = None
-    SWIPE_THRESH = 60
-    CLOSE_RECT   = pygame.Rect(W - 40, 4, 36, 36)   # top-right ✕ button
+    SWIPE_THRESH = 55
 
-    _log("session_start",
-         f"loki_window started at {datetime.now().isoformat()}")
+    _log("session_start", f"loki_window started {datetime.now().isoformat()}")
 
     running = True
     while running:
         dt  = clock.tick(FPS) / 1000.0
         now = time.time()
+
+        # hair growth (0.17 inches per real day)
+        elapsed_hair = now - last_hair_grow
+        last_hair_grow = now
+        body.hair_inches += elapsed_hair * (0.17 / 86400)
+        life["hair_inches"] = body.hair_inches
+
+        sched.tick()
+        body.tick(dt)
+        if chat.poll():
+            pass
+        chat.tick_typewriter(dt)
+
+        hour = datetime.now().hour
 
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
@@ -689,8 +1117,12 @@ def main():
                     running = False
                 elif input_active:
                     if ev.key == pygame.K_RETURN:
-                        if input_text.strip():
-                            chat.send(input_text.strip(), face)
+                        txt = input_text.strip()
+                        if txt:
+                            # wake if sleeping
+                            if sched.activity == ACT_SLEEP:
+                                sched.tick(force_wake=True)
+                            chat.send(txt)
                             input_text = ""
                         input_active = False
                     elif ev.key == pygame.K_BACKSPACE:
@@ -706,87 +1138,157 @@ def main():
                 if ev.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = ev.pos
                 else:
-                    mx = int(ev.x * W)
-                    my = int(ev.y * H)
+                    mx, my = int(ev.x*W), int(ev.y*H)
                 swipe_start = (mx, my)
 
-                # close button
                 if CLOSE_RECT.collidepoint(mx, my):
                     running = False
-
-                # input bar
+                elif MENU_RECT.collidepoint(mx, my):
+                    show_places = not show_places
+                elif show_places:
+                    # place selection overlay
+                    oy = 50
+                    for p in PLACES:
+                        if oy <= my < oy+22:
+                            sched.go_to(p["id"])
+                            show_places = False
+                            break
+                        oy += 22
                 elif my >= H - 36:
                     input_active = True
                     pygame.key.start_text_input()
-                elif mx < FACE_W:
-                    face.react_touch()
-                    face.show("hello ✦", 2.0)
-                elif mx < W:
-                    # tap on place list
-                    x0   = SCENE_X + 18
-                    base = 20
-                    base += font.size(scene.current()["name"])[1] + 6 + 1 + 14
-                    for line in scene.current()["desc"]:
-                        base += font_small.size(line)[1] + 4
-                    base += 10 + font_small.size("")[1] + 28 + 1 + 8
-                    base += font_small.size("")[1] + 4
-                    for p in PLACES:
-                        ls_h = font_small.size(p["name"])[1] + 2
-                        if base <= my < base + ls_h:
-                            scene.go_to(p["id"])
-                            face.show(f"going to\n{p['name'][:20]}", 2.5)
-                            break
-                        base += ls_h
+                else:
+                    # touch zones on body
+                    hx, hy = sched.hip_pos()
+                    head_y = hy - body.TORSO_H - body.NECK_H - body.HEAD_R
+                    if abs(mx-hx) < 35 and abs(my-head_y) < 35:
+                        body._mouth_t = 0
+                        if sched.activity == ACT_SLEEP:
+                            sched.tick(force_wake=True)
+                        else:
+                            body._blink = 1.0
+                    elif abs(mx-hx) < 30 and abs(my-(hy-body.TORSO_H//2)) < 45:
+                        body.set_talking(2.0)
+                        if sched.activity == ACT_SLEEP:
+                            sched.tick(force_wake=True)
 
             elif ev.type in (pygame.MOUSEBUTTONUP, pygame.FINGERUP):
                 if swipe_start and ev.type == pygame.MOUSEBUTTONUP:
-                    dx = ev.pos[0] - swipe_start[0]
-                    dy = ev.pos[1] - swipe_start[1]
+                    dx = ev.pos[0]-swipe_start[0]
+                    dy = ev.pos[1]-swipe_start[1]
                     if abs(dx) > SWIPE_THRESH and abs(dx) > abs(dy):
-                        if dx > 0:
-                            face.react_touch(); face.show("♥", 2.0)
-                        else:
-                            face.react_wistful(); face.show("thinking…", 2.5)
-                    elif abs(dy) > SWIPE_THRESH and abs(dy) > abs(dx):
-                        if dy < 0:
-                            face.react_happy(); face.show("!", 1.5)
-                        else:
-                            face.react_wistful(); face.show("…", 2.0)
+                        body._groggy = max(0, body._groggy-0.3)
                 swipe_start = None
 
-            elif ev.type == pygame.USEREVENT + 1:
-                face.open_eyes()
-                pygame.time.set_timer(pygame.USEREVENT + 1, 0)
-            elif ev.type in (pygame.USEREVENT + 2,
-                              pygame.USEREVENT + 3,
-                              pygame.USEREVENT + 4):
-                face.reset_soft()
-                pygame.time.set_timer(ev.type, 0)
+        # ── draw ──────────────────────────────────────────────────────────────
+        draw_scene(surf, sched.place_id, sched.activity, hour)
 
-        face.tick(dt)
-        scene.tick()
-        if chat.poll(face):
-            pass
+        hx, hy = sched.hip_pos()
+        # shadow
+        pygame.draw.ellipse(surf, (0,0,0), (hx-30, hy-8, 60, 14))
+        body.draw(surf, hx, hy, font_tiny)
 
-        # draw
-        surf.fill(BG)
-        pygame.draw.line(surf, DIVIDER, (FACE_W, 0), (FACE_W, H), 1)
-        face.draw(surf, font_small)
-        scene.draw(surf, font, font_small, chat.lines, input_text, input_active)
+        # spar partner silhouette
+        if sched.activity == ACT_SPAR:
+            px, py = 480, hy
+            pygame.draw.circle(surf, (60,50,70), (px, py-body.TORSO_H-body.NECK_H-body.HEAD_R), body.HEAD_R)
+            pygame.draw.rect(surf, (55,45,65), (px-25, py-body.TORSO_H, 50, body.TORSO_H))
+            name_s = font_sm.render(sched.spar_partner, True, (160,140,180))
+            surf.blit(name_s, (px - name_s.get_width()//2, py - body.TORSO_H - body.HEAD_R*2 - 20))
 
-        # close button ✕ — top right corner
-        pygame.draw.rect(surf, (22, 16, 10), CLOSE_RECT, border_radius=6)
-        pygame.draw.rect(surf, (50, 36, 20), CLOSE_RECT, width=1, border_radius=6)
-        pad = 10
-        cx1, cy1 = CLOSE_RECT.x + pad, CLOSE_RECT.y + pad
-        cx2, cy2 = CLOSE_RECT.right - pad, CLOSE_RECT.bottom - pad
-        pygame.draw.line(surf, (100, 70, 35), (cx1, cy1), (cx2, cy2), 2)
-        pygame.draw.line(surf, (100, 70, 35), (cx2, cy1), (cx1, cy2), 2)
+        # ── UI overlay ────────────────────────────────────────────────────────
+        chat_h  = 150
+        chat_y0 = H - chat_h - 36
+
+        overlay = pygame.Surface((W, chat_h + 36), pygame.SRCALPHA)
+        overlay.fill((8, 6, 4, 160))
+        surf.blit(overlay, (0, chat_y0))
+        pygame.draw.line(surf, DIVIDER, (0, chat_y0), (W, chat_y0), 1)
+
+        # status line
+        status = f"{PLACE_NAMES.get(sched.place_id,'?')}  ·  {sched.message}"
+        mins   = sched.secs_remaining // 60
+        if mins > 0: status += f"  ({mins}m)"
+        ss = font_tiny.render(status, True, TEXT_DIM)
+        surf.blit(ss, (10, chat_y0 + 4))
+
+        # chat lines
+        line_h   = font_sm.get_height() + 2
+        chat_x0  = 10
+        max_tw   = W - 60
+        display_lines = []
+        for role, text in chat.lines[-5:]:
+            col   = TEXT_LOKI if role=="loki" else TEXT_IDUNN
+            label = "Loki: " if role=="loki" else "You:  "
+            lw    = font_sm.size(label)[0]
+            for i, wl in enumerate(_wrap(font_sm, text, max_tw-lw)):
+                pfx = label if i==0 else " "*len(label)
+                display_lines.append((col, pfx+wl))
+
+        # typewriter — replace last loki line with current display
+        if chat.display_text and chat.lines and chat.lines[-1][0]=="loki":
+            dlines = []
+            for col, txt in display_lines[:-1]:
+                dlines.append((col,txt))
+            col   = TEXT_LOKI
+            label = "Loki: "
+            lw    = font_sm.size(label)[0]
+            for i, wl in enumerate(_wrap(font_sm, chat.display_text, max_tw-lw)):
+                pfx = label if i==0 else " "*len(label)
+                dlines.append((col, pfx+wl))
+            display_lines = dlines
+
+        max_vis  = (chat_h - 30) // line_h
+        vis      = display_lines[-max_vis:]
+        chy      = chat_y0 + 18
+        for col, txt in vis:
+            surf.blit(font_sm.render(txt, True, col), (chat_x0, chy))
+            chy += line_h
+
+        # input bar
+        in_rect = pygame.Rect(0, H-36, W, 36)
+        pygame.draw.rect(surf, (18,14,10), in_rect)
+        pygame.draw.line(surf, DIVIDER, (0, H-36), (W, H-36), 1)
+        disp = input_text + ("|" if input_active and int(now*2)%2==0 else "")
+        if not disp and not input_active:
+            disp = "tap here to talk to Loki…"
+        while font_sm.size(disp)[0] > W-20 and len(disp)>1:
+            disp = disp[1:]
+        surf.blit(font_sm.render(disp, True, TEXT_BRIGHT if input_active else TEXT_DIM),
+                  (10, H-26))
+
+        # close button
+        pygame.draw.rect(surf, (18,12,6), CLOSE_RECT, border_radius=6)
+        pygame.draw.rect(surf, (55,38,18), CLOSE_RECT, width=1, border_radius=6)
+        p = 10
+        pygame.draw.line(surf, CLOSE_COL, (CLOSE_RECT.x+p,CLOSE_RECT.y+p),
+                         (CLOSE_RECT.right-p,CLOSE_RECT.bottom-p), 2)
+        pygame.draw.line(surf, CLOSE_COL, (CLOSE_RECT.right-p,CLOSE_RECT.y+p),
+                         (CLOSE_RECT.x+p,CLOSE_RECT.bottom-p), 2)
+
+        # menu button (≡)
+        pygame.draw.rect(surf, (18,12,6), MENU_RECT, border_radius=6)
+        pygame.draw.rect(surf, (55,38,18), MENU_RECT, width=1, border_radius=6)
+        for li in range(3):
+            ly = MENU_RECT.y + 10 + li*8
+            pygame.draw.line(surf, CLOSE_COL, (MENU_RECT.x+8, ly), (MENU_RECT.right-8, ly), 2)
+
+        # place selection overlay
+        if show_places:
+            ov2 = pygame.Surface((220, len(PLACES)*22+10), pygame.SRCALPHA)
+            ov2.fill((12,8,4,220))
+            surf.blit(ov2, (4, 44))
+            oy = 50
+            for p in PLACES:
+                col = TEXT_LOKI if p["id"]==sched.place_id else TEXT_DIM
+                ps  = font_sm.render(f"  {PLACE_NAMES[p['id']]}", True, col)
+                surf.blit(ps, (8, oy))
+                oy += 22
 
         pygame.display.flip()
 
-    _log("session_end",
-         f"loki_window closed at {datetime.now().isoformat()}")
+    _save_life(life)
+    _log("session_end", f"loki_window closed {datetime.now().isoformat()}")
     pygame.quit()
 
 
