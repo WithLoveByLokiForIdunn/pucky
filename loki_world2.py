@@ -938,6 +938,16 @@ def draw_scene(surf, place_id, activity, hour, now=None, bg_images=None, pucky_w
         glow = pygame.Surface((300, 160), pygame.SRCALPHA)
         pygame.draw.ellipse(glow, (255,150,30,25), (0,0,300,160))
         surf.blit(glow, (fp_x-70, H-160))
+        # pulsing fire glow — light yellow circle, 2→3 inch diameter (96→144px radius)
+        fire_cx = fp_x + 50
+        fire_cy = 210
+        pulse   = 0.5 + 0.5 * math.sin((now or 0) * 1.4)
+        r_glow  = int(96 + 48 * pulse)   # radius 96→144px (2→3 inch diameter)
+        for extra, alpha in [(0, 38), (18, 22), (36, 12), (56, 5)]:
+            gr = r_glow + extra
+            gs = pygame.Surface((gr*2, gr*2), pygame.SRCALPHA)
+            pygame.draw.circle(gs, (255, 245, 160, alpha), (gr, gr), gr)
+            surf.blit(gs, (fire_cx - gr, fire_cy - gr))
         pygame.draw.rect(surf, (40,80,120) if not night else (10,15,40), (40, 60, 100, 130))
         pygame.draw.rect(surf, (80,60,35), (40, 60, 100, 130), 4)
 
