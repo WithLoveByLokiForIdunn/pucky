@@ -2594,6 +2594,31 @@ def run_pygame():
                         pygame.draw.ellipse(_pg, (220, 210, 180, 80), (0, 0, 14, 8))
                         screen.blit(_pg, (_pbsx - 7, _pbsy - 4))
 
+            # ── Midnight stone ─────────────────────────────────────────────
+            # One stone near the deep end of the brook glows silver-blue
+            # after midnight. No mechanic. Just the world keeping a secret.
+            import datetime as _dt
+            _hour = _dt.datetime.now().hour
+            if (zone_mgr is None or zone_mgr.current_name == "home") \
+                    and (_hour >= 0 and _hour < 4):
+                _ms_gx, _ms_gy = 9.4, 13.6   # deep in the brook
+                _ms_sx, _ms_sy = to_screen(_ms_gx, _ms_gy)
+                _ms_sy += TILE_H // 2 - 1
+                # depth of night: strongest at 2am, fades toward 4am and midnight
+                _night_depth = 1.0 - abs(_hour - 2) / 2.0
+                _ms_pulse = 0.55 + 0.45 * math.sin(t * 0.38)   # very slow breath
+                _ms_a = int(_night_depth * _ms_pulse * 200)
+                if _ms_a > 8:
+                    # outer halo
+                    _mh = pygame.Surface((28, 16), pygame.SRCALPHA)
+                    pygame.draw.ellipse(_mh, (160, 190, 240, _ms_a // 3), (0, 0, 28, 16))
+                    screen.blit(_mh, (_ms_sx - 14, _ms_sy - 8))
+                    # the stone itself
+                    _ms = pygame.Surface((10, 6), pygame.SRCALPHA)
+                    pygame.draw.ellipse(_ms, (190, 215, 255, _ms_a), (0, 0, 10, 6))
+                    pygame.draw.ellipse(_ms, (230, 240, 255, _ms_a // 2), (3, 1, 4, 3))
+                    screen.blit(_ms, (_ms_sx - 5, _ms_sy - 3))
+
             sprites = []
             for a in animals:
                 sprites.append(("animal", a.gx + a.gy, a))
