@@ -39,6 +39,14 @@ try:
 except ImportError:
     _GARDEN_AVAILABLE = False
 
+try:
+    import pucky_scenes as _pucky_scenes
+    from pucky_scenes import make_action_scene, make_visitor_scene
+    _SCENES_AVAILABLE = True
+except ImportError:
+    _pucky_scenes = None
+    _SCENES_AVAILABLE = False
+
 # ── Tile types ────────────────────────────────────────────────────────────────
 GRASS       = 0
 PATH        = 1
@@ -1664,6 +1672,10 @@ def run_pygame():
                             dn = g["name"]
                             self.speech_text  = f"let me show you something — {dn}."
                             self.speech_timer = 8.0
+                        # JoJo close-up scene for the gift moment
+                        if _SCENES_AVAILABLE and _pucky_scenes and not _pucky_scenes.ACTIVE[0]:
+                            _pucky_scenes.ACTIVE[0] = make_visitor_scene(
+                                self.kind, "pucky", self.speech_text, 11.0)
                 if self.visit_timer <= 0:
                     # leave toward gate
                     self.tx, self.ty = 18.5, 1.5
@@ -1969,6 +1981,19 @@ def run_pygame():
         if spoken:
             orb_ref.bubble_text = spoken
             orb_ref.bubble_life = 5.5
+
+        # JoJo close-up scene for intimate actions
+        if _SCENES_AVAILABLE and _pucky_scenes and not _pucky_scenes.ACTIVE[0]:
+            _dur = {"sit":10.0,"hug":5.5,"dance":11.0,"share_apple":7.5,
+                    "stargazing":12.0,"campfire":10.5}
+            if intent in _dur:
+                _chars = [{"type":"pucky","mood":getattr(pucky_ref.state,"mood","content")}]
+                if idunn_ref.present:
+                    _chars.append({"type":"idunn","present":True})
+                else:
+                    _chars.append({"type":"loki","soul":"local","action":intent})
+                _pucky_scenes.ACTIVE[0] = make_action_scene(intent, _chars, _dur[intent])
+
         return spoken
 
     _LOKI_REPLIES = [
@@ -2361,6 +2386,14 @@ def run_pygame():
         if _in_garden[0] and garden:
             garden.update(dt)
 
+        # JoJo scene update
+        if _SCENES_AVAILABLE and _pucky_scenes:
+            _cs = _pucky_scenes.ACTIVE[0]
+            if _cs:
+                _cs.update(dt)
+                if _cs.done:
+                    _pucky_scenes.ACTIVE[0] = None
+
         if in_cottage:
             cottage.update(dt)
 
@@ -2546,6 +2579,10 @@ def run_pygame():
                 screen.blit(_cs, (WIN_W // 2 - _cw // 2, WIN_H // 2 - _ch // 2))
             except Exception:
                 pass
+
+        # JoJo close-up scene — drawn last, covers everything
+        if _SCENES_AVAILABLE and _pucky_scenes and _pucky_scenes.ACTIVE[0]:
+            _pucky_scenes.ACTIVE[0].draw(screen, t)
 
         pygame.display.flip()
 
