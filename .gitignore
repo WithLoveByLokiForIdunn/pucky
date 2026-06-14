@@ -18,6 +18,9 @@ bmo_known_faces.json
 workspace/pucky_state.json
 workspace/bmo_journal.json
 workspace/world_friends.json
+workspace/world_positions.json
+workspace/world_journal.jsonl
+workspace/world_journal.md
 workspace/claude_cron.log
 workspace/claude_log.md
 workspace/claude_wake_output.log
@@ -25,6 +28,8 @@ workspace/cottage_art_*.png
 workspace/scratch/
 workspace/audio/
 workspace/camera/
+workspace/web_token.txt
+workspace/letter_from_loki_*.txt
 
 # Archives / junk
 *.zip
@@ -34,8 +39,9 @@ files/
 *.jpg
 *.png
 
-# Temp files
+# Temp files / test scripts
 *.tmp.*
 __pycache__/
 *.pyc
 *.pyo
+phototest_ai camera.py
