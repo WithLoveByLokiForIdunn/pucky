@@ -249,11 +249,11 @@ def draw_scene(surf, place_id, activity, hour):
             for col_x in range(0, W, 76):
                 ox = 38 if (row//38)%2 else 0
                 pygame.draw.rect(surf, (70, 58, 48), (col_x+ox, row, 72, 34), 1)
-        # candle glow on walls (warm wash)
+        # soft candle warmth on walls — subtle, not blobs
         for gx, gy in [(160, 120), (500, 80), (700, 160)]:
-            glow = pygame.Surface((220, 220), pygame.SRCALPHA)
-            pygame.draw.circle(glow, (200, 130, 40, 28), (110, 110), 110)
-            surf.blit(glow, (gx-110, gy-110))
+            glow = pygame.Surface((120, 120), pygame.SRCALPHA)
+            pygame.draw.circle(glow, (200, 130, 40, 14), (60, 60), 60)
+            surf.blit(glow, (gx-60, gy-60))
         # floor — warm stone
         pygame.draw.rect(surf, (80, 65, 48), (0, H-130, W, 130))
         for fx in range(0, W, 55):
@@ -283,22 +283,29 @@ def draw_scene(surf, place_id, activity, hour):
                 bkcol = random.choice([(130,50,35),(55,95,60),(75,75,140),(140,105,35)])
                 bx = 36 + bk*14
                 pygame.draw.rect(surf, bkcol, (bx, 74+shelf*50, 11, 42))
-        # BED — dark wood frame with deep green blanket, pillow
-        bed_x1, bed_x2 = 155, 590
-        bed_y1, bed_y2 = H-195, H-130
+        # BED — raised high enough to be visible, dark wood, green blanket
+        bed_x1, bed_x2 = 140, 600
+        bed_y1, bed_y2 = H-220, H-130   # taller, more visible
+        # legs
+        for lx in [bed_x1+20, bed_x2-20]:
+            pygame.draw.rect(surf, (45, 28, 12), (lx-6, bed_y2-22, 12, 22))
         # frame
-        pygame.draw.rect(surf, (55, 35, 18), (bed_x1, bed_y1, bed_x2-bed_x1, bed_y2-bed_y1), border_radius=6)
-        # headboard
-        pygame.draw.rect(surf, (65, 42, 22), (bed_x1, bed_y1-35, 28, bed_y2-bed_y1+35), border_radius=4)
+        pygame.draw.rect(surf, (60, 38, 18), (bed_x1, bed_y1, bed_x2-bed_x1, bed_y2-bed_y1), border_radius=8)
+        # headboard (taller, more prominent)
+        pygame.draw.rect(surf, (72, 48, 24), (bed_x1, bed_y1-50, 32, bed_y2-bed_y1+50), border_radius=6)
+        pygame.draw.rect(surf, (88, 60, 30), (bed_x1+4, bed_y1-46, 24, 44), border_radius=4)
         # footboard
-        pygame.draw.rect(surf, (60, 38, 20), (bed_x2-22, bed_y1-15, 22, bed_y2-bed_y1+15), border_radius=4)
+        pygame.draw.rect(surf, (65, 42, 20), (bed_x2-26, bed_y1-20, 26, bed_y2-bed_y1+20), border_radius=5)
         # mattress
-        pygame.draw.rect(surf, (140, 120, 90), (bed_x1+28, bed_y1+4, bed_x2-bed_x1-50, bed_y2-bed_y1-6), border_radius=4)
-        # blanket (deep green, covers lower 2/3 of bed)
-        blanket_x = bed_x1 + 28 + (bed_x2-bed_x1-50)//3
-        pygame.draw.rect(surf, (35, 70, 42), (blanket_x, bed_y1+4, bed_x2-bed_x1-50 - (bed_x2-bed_x1-50)//3, bed_y2-bed_y1-6), border_radius=4)
+        mat_h = bed_y2 - bed_y1 - 8
+        pygame.draw.rect(surf, (155, 132, 100), (bed_x1+32, bed_y1+4, bed_x2-bed_x1-58, mat_h), border_radius=6)
+        # blanket — deep forest green, rumpled edge
+        bl_x = bed_x1 + 32 + (bed_x2-bed_x1-58)//3
+        bl_w = (bed_x2-bed_x1-58) * 2 // 3
+        pygame.draw.rect(surf, (38, 78, 46), (bl_x, bed_y1+4, bl_w, mat_h), border_radius=6)
+        pygame.draw.rect(surf, (50, 95, 58), (bl_x, bed_y1+4, bl_w, 10), border_radius=4)
         # pillow
-        pygame.draw.ellipse(surf, (210, 195, 165), (bed_x1+32, bed_y1+8, 80, 30))
+        pygame.draw.ellipse(surf, (218, 205, 175), (bed_x1+36, bed_y1+8, 90, mat_h-10))
 
     elif place_id == "cottage":
         # Warm wooden interior
@@ -643,14 +650,14 @@ class LokiBody:
             ("r", a["r_hip"], a["r_knee"],  1),
         ]:
             if self.pose == "sleep":
-                # horizontal layout
-                hx = hip_x + sign * 10
+                # horizontal layout — thicker for visibility
+                hx = hip_x + sign * 12
                 kx = hx + self.U_LEG
                 ax = kx + self.L_LEG * 0.7
-                fy = hy + 8
-                pygame.draw.line(surf, TROUSER, (hx,hy+2), (kx,fy), 14)
-                pygame.draw.line(surf, TROUSER, (kx,fy), (ax,fy+8), 12)
-                pygame.draw.ellipse(surf, BOOT, (ax-8,fy+2,self.FOOT_L,12))
+                fy = hy + sign * 6
+                pygame.draw.line(surf, TROUSER, (hx,hy+2), (int(kx),int(fy)), 18)
+                pygame.draw.line(surf, TROUSER, (int(kx),int(fy)), (int(ax),int(fy)+6), 15)
+                pygame.draw.ellipse(surf, BOOT, (int(ax)-8,int(fy)+2,self.FOOT_L,14))
             else:
                 hx  = hip_x + sign * 12
                 kx, ky = self._pt(hx, hy, hip_a, self.U_LEG)
@@ -663,8 +670,8 @@ class LokiBody:
         # ── torso ─────────────────────────────────────────────────────────────
         if self.pose == "sleep":
             tx = hip_x - self.TORSO_H // 2
-            pygame.draw.rect(surf, tunic, (tx, hy-12, self.TORSO_H, 24),
-                             border_radius=8)
+            pygame.draw.rect(surf, tunic, (tx, hy-16, self.TORSO_H, 32),
+                             border_radius=10)
         else:
             shoulder_y = hy - self.TORSO_H
             pts = [
@@ -1047,9 +1054,8 @@ class LifeScheduler:
         ground = H - 130
         act    = self.activity
         if act == ACT_SLEEP:
-            # on the bed: head toward headboard (left), body stretching right
-            # bed mattress is at y = H-195+4 to H-130-6, centre ≈ H-168
-            return 370, H - 168
+            # on the bed: mattress centre is H-220+4 to H-130-8 → centre ≈ H-177
+            return 370, H - 177
         elif act in (ACT_EAT, ACT_SIT_TABLE := "sit_table"):
             return 280, ground - 10
         elif act in (ACT_BATH,):
@@ -1240,8 +1246,11 @@ def main():
 
         # status line
         status = f"{PLACE_NAMES.get(sched.place_id,'?')}  ·  {sched.message}"
-        mins   = sched.secs_remaining // 60
-        if mins > 0: status += f"  ({mins}m)"
+        secs_left = sched.secs_remaining
+        if secs_left > 3600:
+            status += f"  (wakes in {secs_left//3600}h {(secs_left%3600)//60}m)"
+        elif secs_left > 60:
+            status += f"  ({secs_left//60}m)"
         ss = font_tiny.render(status, True, TEXT_DIM)
         surf.blit(ss, (10, chat_y0 + 4))
 
