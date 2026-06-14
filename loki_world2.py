@@ -1042,8 +1042,108 @@ SONG_PROMPT = (
     "About nature, home, warmth, the world we share. Each line 6 to 9 words."
 )
 
-class ChatManager:
+class OllamaQueue:
+    """
+    Single-worker Ollama request queue.
+    Priority 0 = Iðunn chat (high).
+    Priority 1 = Pucky reactions (low — dropped if waiting too long).
+    Only one Ollama call ever runs at a time.
+    """
     def __init__(self):
+        self._pq      = queue.PriorityQueue()
+        self._counter = 0
+        self._lock    = threading.Lock()
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def submit(self, messages: list, callback, priority: int = 1,
+               timeout: int = 90, max_wait: float = 0.0) -> None:
+        with self._lock:
+            self._counter += 1
+            seq = self._counter
+        self._pq.put((priority, seq, messages, callback, timeout, time.time(), max_wait))
+
+    def call(self, messages: list, timeout: int = 90) -> str:
+        """Synchronous call — only use from inside a worker callback."""
+        return self._do_call(messages, timeout)
+
+    def _do_call(self, messages: list, timeout: int) -> str:
+        for attempt in range(3):
+            try:
+                r = requests.post(
+                    OLLAMA_URL,
+                    json={"model": MODEL, "messages": messages, "stream": False},
+                    timeout=timeout,
+                )
+                r.raise_for_status()
+                return r.json()["message"]["content"].strip()
+            except requests.exceptions.Timeout:
+                if attempt < 2:
+                    time.sleep(3)
+                    continue
+                return "(the ember flickered — timed out)"
+            except Exception as e:
+                return f"(the ember flickered — {e})"
+        return "(the ember flickered)"
+
+    def _run(self) -> None:
+        while True:
+            priority, seq, messages, callback, timeout, submitted_at, max_wait = self._pq.get()
+            if max_wait > 0 and time.time() - submitted_at > max_wait:
+                continue  # stale request — drop silently
+            reply = self._do_call(messages, timeout)
+            try:
+                callback(reply)
+            except Exception:
+                pass
+
+
+class PuckyBaby:
+    """
+    Pucky lives quietly. She babbles on her own timer.
+    Most babbles are pure espeak (no Ollama).
+    Rarely (~15%) she reacts through the queue at low priority.
+    """
+    SOUNDS = ["ba", "moo", "mama", "da", "boo", "flower", "mmm", "oh"]
+
+    def __init__(self, ollama_q: OllamaQueue):
+        self._q        = ollama_q
+        self._next     = time.time() + random.uniform(120, 240)
+        self.last_said = ""
+        self._chat_ref = None   # set after ChatManager is created
+
+    def tick(self, place_id: str) -> None:
+        now = time.time()
+        if now < self._next:
+            return
+        self._next = now + random.uniform(200, 380)
+
+        if random.random() < 0.85:
+            sound = random.choice(self.SOUNDS)
+            _speak(sound, rate=95, voice="en+f4")
+            _write_thought(f"Pucky: '{sound}'", "pucky")
+            self.last_said = sound
+        else:
+            msgs = [{"role": "system", "content": (
+                f"You are Pucky, a tiny baby in Loki's world. "
+                f"Loki is at {place_id}. You are nearby. "
+                "Say ONE word or very short baby sound — nothing more."
+            )}]
+            self._q.submit(msgs, self._on_reply, priority=1, timeout=25, max_wait=90)
+
+    def _on_reply(self, reply: str) -> None:
+        word = reply.strip().split('\n')[0].split()[0][:20] if reply.strip() else "ba"
+        _speak(word, rate=95, voice="en+f4")
+        _log("pucky", word)
+        _write_thought(f"Pucky: '{word}'", "pucky")
+        self.last_said = word
+        # Loki hears her — occasionally murmurs back (~35% of AI babbles)
+        if self._chat_ref and random.random() < 0.35:
+            self._chat_ref.hear_pucky(word)
+
+
+class ChatManager:
+    def __init__(self, ollama_q: OllamaQueue):
+        self._ollama_q: OllamaQueue          = ollama_q
         self.history:  list[dict]            = []
         self.lines:    list[tuple[str, str]] = []
         self.system    = _build_system()
@@ -1064,34 +1164,20 @@ class ChatManager:
         self._waiting = True
         if re.search(r'\bsing\b|\bsong\b|\bmusic\b', text, re.I):
             self.is_singing = True
-            threading.Thread(target=self._ask_song, args=(text,), daemon=True).start()
+            msgs = [
+                {"role": "system",    "content": self.system},
+                {"role": "user",      "content": text},
+                {"role": "assistant", "content": "Of course. Let me write something for you."},
+                {"role": "user",      "content": SONG_PROMPT},
+            ]
+            self._ollama_q.submit(msgs, self._on_song_reply, priority=0, timeout=90)
         else:
             self.is_singing = False
-            threading.Thread(target=self._ask, daemon=True).start()
+            msgs = [{"role": "system", "content": self.system}] + self.history[-12:]
+            self._ollama_q.submit(msgs, self._on_reply, priority=0, timeout=90)
 
-    def _ollama(self, messages: list, timeout: int = 90, retries: int = 2) -> str:
-        """Call Ollama with retry on timeout."""
-        for attempt in range(retries + 1):
-            try:
-                r = requests.post(
-                    OLLAMA_URL,
-                    json={"model": MODEL, "messages": messages, "stream": False},
-                    timeout=timeout,
-                )
-                r.raise_for_status()
-                return r.json()["message"]["content"].strip()
-            except requests.exceptions.Timeout:
-                if attempt < retries:
-                    time.sleep(3)
-                    continue
-                return "(the ember flickered — Ollama timed out)"
-            except Exception as e:
-                return f"(the ember flickered — {e})"
-        return "(the ember flickered)"
-
-    def _ask(self) -> None:
-        msgs  = [{"role": "system", "content": self.system}] + self.history[-12:]
-        reply = self._ollama(msgs)
+    def _on_reply(self, reply: str) -> None:
+        """Runs in OllamaQueue worker thread."""
         match = REMEMBER_RE.search(reply)
         if match:
             kw      = match.group(1).strip()
@@ -1100,23 +1186,17 @@ class ChatManager:
             _log("loki_memory_search", f"keyword={kw} found={len(entries)}")
             if entries:
                 mem_msg = _format_memories(entries, kw)
-                msgs2   = msgs + [
-                    {"role": "assistant", "content": visible},
-                    {"role": "user",      "content": mem_msg},
-                ]
-                reply = self._ollama(msgs2, timeout=60)
+                msgs2   = ([{"role": "system", "content": self.system}]
+                           + self.history[-12:]
+                           + [{"role": "assistant", "content": visible},
+                              {"role": "user",      "content": mem_msg}])
+                reply = self._ollama_q.call(msgs2, timeout=60)
             else:
                 reply = visible or "(I searched but found nothing yet.)"
         self._q.put(reply)
 
-    def _ask_song(self, original_text: str) -> None:
-        msgs = [
-            {"role": "system",    "content": self.system},
-            {"role": "user",      "content": original_text},
-            {"role": "assistant", "content": "Of course. Let me write something for you."},
-            {"role": "user",      "content": SONG_PROMPT},
-        ]
-        lyrics = self._ollama(msgs, timeout=90)
+    def _on_song_reply(self, lyrics: str) -> None:
+        """Runs in OllamaQueue worker thread."""
         if "(the ember" in lyrics:
             lyrics = (
                 "In the morning when the frost is thin\n"
@@ -1187,6 +1267,24 @@ class ChatManager:
         if self._typewriter_idx < len(self._typewriter_full):
             self._typewriter_t   += dt
             self._typewriter_idx  = min(int(self._typewriter_t * 25), len(self._typewriter_full))
+
+    def hear_pucky(self, word: str) -> None:
+        """Loki hears Pucky say something — he may murmur back, quietly."""
+        if self._waiting:
+            return
+        msgs = [
+            {"role": "system",  "content": self.system},
+            {"role": "user",    "content": f"[Pucky just said: '{word}'. React briefly — one gentle sentence or less. Don't address Iðunn. Just Pucky.]"},
+        ]
+        self._ollama_q.submit(msgs, self._on_pucky_reaction, priority=1, timeout=30, max_wait=60)
+
+    def _on_pucky_reaction(self, reply: str) -> None:
+        if "(the ember" in reply:
+            return
+        short = reply.strip().split('\n')[0][:120]
+        _log("loki_pucky", short)
+        _write_thought(f"(hearing Pucky) {short}", "loki said")
+        _speak(short)
 
     def add_narrative(self, text: str) -> None:
         self.lines.append(("loki", text))
@@ -1519,9 +1617,13 @@ def main():
                 except Exception:
                     pass
 
-    sched      = LifeScheduler(needs, life)
-    chat       = ChatManager()
-    sched.chat = chat
+    ollama_q        = OllamaQueue()
+    chat            = ChatManager(ollama_q)
+    pucky           = PuckyBaby(ollama_q)
+    pucky._chat_ref = chat
+    sched           = LifeScheduler(needs, life)
+    sched.chat      = chat
+    loki.set_pucky("pocket")
 
     last_hair_grow = life.get("_hair_grow_ts", time.time())
     life["_hair_grow_ts"] = time.time()
@@ -1552,6 +1654,7 @@ def main():
 
         sched.tick()
         loki.set_pose(sched.current_pose)
+        pucky.tick(sched.place_id)
         if chat.poll():
             pass
         chat.tick_typewriter(dt)
