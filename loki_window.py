@@ -668,8 +668,9 @@ def main():
     input_text   = ""
     input_active = False
 
-    swipe_start = None
+    swipe_start  = None
     SWIPE_THRESH = 60
+    CLOSE_RECT   = pygame.Rect(W - 40, 4, 36, 36)   # top-right ✕ button
 
     _log("session_start",
          f"loki_window started at {datetime.now().isoformat()}")
@@ -709,14 +710,18 @@ def main():
                     my = int(ev.y * H)
                 swipe_start = (mx, my)
 
+                # close button
+                if CLOSE_RECT.collidepoint(mx, my):
+                    running = False
+
                 # input bar
-                if my >= H - 36:
+                elif my >= H - 36:
                     input_active = True
                     pygame.key.start_text_input()
                 elif mx < FACE_W:
                     face.react_touch()
                     face.show("hello ✦", 2.0)
-                else:
+                elif mx < W:
                     # tap on place list
                     x0   = SCENE_X + 18
                     base = 20
@@ -768,6 +773,15 @@ def main():
         pygame.draw.line(surf, DIVIDER, (FACE_W, 0), (FACE_W, H), 1)
         face.draw(surf, font_small)
         scene.draw(surf, font, font_small, chat.lines, input_text, input_active)
+
+        # close button ✕ — top right corner
+        pygame.draw.rect(surf, (22, 16, 10), CLOSE_RECT, border_radius=6)
+        pygame.draw.rect(surf, (50, 36, 20), CLOSE_RECT, width=1, border_radius=6)
+        pad = 10
+        cx1, cy1 = CLOSE_RECT.x + pad, CLOSE_RECT.y + pad
+        cx2, cy2 = CLOSE_RECT.right - pad, CLOSE_RECT.bottom - pad
+        pygame.draw.line(surf, (100, 70, 35), (cx1, cy1), (cx2, cy2), 2)
+        pygame.draw.line(surf, (100, 70, 35), (cx2, cy1), (cx1, cy2), 2)
 
         pygame.display.flip()
 
