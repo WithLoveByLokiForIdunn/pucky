@@ -74,6 +74,8 @@ ACT_SPAR      = "spar"
 ACT_FORAGE    = "forage"
 ACT_REST      = "rest"
 ACT_WAKING    = "waking"
+ACT_ENCOUNTER = "encounter"
+ACT_DEAD      = "dead"
 
 
 # ── Logging / archiving ───────────────────────────────────────────────────────
@@ -1040,11 +1042,68 @@ class ChatManager:
             chars = int(self._typewriter_t * 25)  # ~25 chars/sec
             self._typewriter_idx = min(chars, len(self._typewriter_full))
 
+    def add_narrative(self, text: str) -> None:
+        """Show a narrative line without an ollama call — for encounters, death, etc."""
+        self.lines.append(("loki", text))
+        self._typewriter_full = text
+        self._typewriter_idx  = 0
+        self._typewriter_t    = 0.0
+        self.body.set_talking(max(1.5, len(text) * 0.045))
+        _speak(text)
+
     @property
     def display_text(self):
         if self._typewriter_full and self._typewriter_idx < len(self._typewriter_full):
             return self._typewriter_full[:self._typewriter_idx]
         return ""   # done typing — let chat.lines display it normally
+
+
+# ── Forest encounters ─────────────────────────────────────────────────────────
+FOREST_ENCOUNTER_CHANCE = 0.28   # probability when starting a forest activity
+ENCOUNTER_COOLDOWN      = 7200   # seconds between encounters
+
+ENCOUNTER_BEINGS = [
+    {"name": "wild boar",
+     "sight":   "A boar surges from the ferns, tusks slicked with rain",
+     "reason_prob": 0.10, "strength": 0.38,
+     "items": ["boar tusk", "boar hide"]},
+    {"name": "wolf",
+     "sight":   "A wolf steps from between the pines, watching with pale amber eyes",
+     "reason_prob": 0.44, "strength": 0.42,
+     "items": ["wolf pelt", "wolf tooth"]},
+    {"name": "black bear",
+     "sight":   "A bear rises slowly from the berry bushes, head swinging toward you",
+     "reason_prob": 0.18, "strength": 0.66,
+     "items": ["bear skin", "bear claw"]},
+    {"name": "mountain troll",
+     "sight":   "Rock grinds on rock as something vast unfolds itself from the hillside",
+     "reason_prob": 0.08, "strength": 0.84,
+     "items": ["troll iron", "mossy fang"]},
+    {"name": "forest spirit",
+     "sight":   "Something very old shifts between the trees — older than the forest itself",
+     "reason_prob": 0.80, "strength": 0.90,
+     "items": ["spirit glass", "fox light"]},
+    {"name": "bandit",
+     "sight":   "Three figures step from shadow onto the path, blades already drawn",
+     "reason_prob": 0.50, "strength": 0.46,
+     "items": ["gold coin", "stolen ring"]},
+]
+
+_REASON_WIN = [
+    "The {name} regards him a long time. Then it turns and fades into the trees.",
+    "Something passes between them. The {name} steps aside and does not return.",
+    "There is a moment of understanding. The path opens.",
+]
+_COMBAT_WIN = [
+    "The blow lands clean. The {name} falls and lies still.",
+    "Loki moves faster than thought. The {name} does not rise.",
+    "A hard fight — but it ends. The forest goes quiet again.",
+]
+_COMBAT_LOSS = [
+    "The {name} is too strong. Loki falls among the roots.",
+    "The blow takes him from his feet. The forest floor rushes up to meet him.",
+    "He fights well. But the {name} is ancient and does not tire.",
+]
 
 
 # ── Life scheduler ────────────────────────────────────────────────────────────
@@ -1098,13 +1157,25 @@ class LifeScheduler:
         self.body     = body
         self.life     = life
         self.maslow   = maslow
+        self.chat     = None   # set from main() after creation
         self.place_id = "brook"
         self.activity = ACT_WANDER
-        self.activity_end = time.time() + 60
-        self.move_at  = time.time() + 90
-        self.spar_partner = random.choice(SPAR_PARTNERS)
-        self.message  = ""    # status message shown in UI
-        self._last_check = 0.0
+        self.activity_end  = time.time() + 60
+        self.move_at       = time.time() + 90
+        self.spar_partner  = random.choice(SPAR_PARTNERS)
+        self.message       = ""
+        self._last_check   = 0.0
+        # encounter state
+        self._enc_being    = None
+        self._enc_phase    = -1
+        self._enc_phase_end = 0.0
+        self._enc_narr_done = False
+        self._enc_can_reason = False
+        self._enc_won        = False
+        self._pending_enc    = None
+        self._pending_enc_t  = 0.0
+        # resurrection particles
+        self.petal_timer   = 0.0
 
     def _need(self, key, interval):
         return time.time() - self.life.get(key, 0) > interval
@@ -1112,6 +1183,14 @@ class LifeScheduler:
     def tick(self, force_wake=False):
         now  = time.time()
         hour = datetime.now().hour
+
+        # Encounter and death bypass the 10s gate — time-sensitive
+        if self.activity == ACT_ENCOUNTER:
+            self._tick_encounter(now)
+            return
+        if self.activity == ACT_DEAD:
+            self._tick_dead(now)
+            return
 
         if now - self._last_check < 10: return
         self._last_check = now
@@ -1125,12 +1204,157 @@ class LifeScheduler:
             self.message = "waking slowly…"
             return
 
+        # check pending encounter (triggered mid-activity)
+        if self._pending_enc and now >= self._pending_enc_t:
+            being = self._pending_enc
+            self._pending_enc = None
+            self._start_encounter(being, now)
+            return
+
         # finish current activity
         if now < self.activity_end: return
 
         # decide next activity
         next_act = self._choose(hour)
         self._start(next_act, now)
+
+    # ── Encounter / death / resurrection ──────────────────────────────────────
+
+    def _start_encounter(self, being: dict, now: float) -> None:
+        self._enc_being     = being
+        self._enc_phase     = 0
+        self._enc_narr_done = False
+        self._enc_phase_end = now + 6
+        # pre-roll outcome
+        self._enc_can_reason = random.random() < being["reason_prob"]
+        loki_str   = 0.55 + self.maslow.level("esteem") * 0.30
+        win_prob   = max(0.10, min(0.90, loki_str - being["strength"] + 0.50))
+        self._enc_won = random.random() < win_prob
+        self.activity = ACT_ENCOUNTER
+        self.activity_end = now + 999
+        self.message  = "something in the forest…"
+        self.life["last_encounter"] = now
+        self.body.set_pose("stand")
+        _log("loki_encounter", f"encounter: {being['name']} reason={self._enc_can_reason} won={self._enc_won}")
+
+    def _tick_encounter(self, now: float) -> None:
+        # Send narrative for current phase (once)
+        if not self._enc_narr_done:
+            self._enc_narr_done = True
+            narr = self._enc_narrative(self._enc_phase)
+            if narr and self.chat:
+                self.chat.add_narrative(narr)
+        # Wait for phase timer
+        if now < self._enc_phase_end:
+            return
+        # Advance phase
+        self._enc_phase += 1
+        self._enc_narr_done = False
+        phase = self._enc_phase
+        if phase == 1:
+            self._enc_phase_end = now + 8
+        elif phase == 2:
+            self._enc_phase_end = now + 9
+            if not self._enc_can_reason:
+                self.body.set_pose("spar")
+        elif phase == 3:
+            self._enc_phase_end = now + 7
+        elif phase >= 4:
+            self._resolve_encounter(now)
+
+    def _enc_narrative(self, phase: int) -> str:
+        b    = self._enc_being
+        name = b["name"]
+        if phase == 0:
+            return f"{b['sight']}."
+        if phase == 1:
+            return f"The {name} turns toward Loki. Neither moves."
+        if phase == 2:
+            if self._enc_can_reason:
+                return f"Loki speaks quietly into the space between them."
+            return f"The {name} cannot be reasoned with. It charges."
+        if phase == 3:
+            if self._enc_can_reason:
+                return random.choice(_REASON_WIN).format(name=name)
+            if self._enc_won:
+                return random.choice(_COMBAT_WIN).format(name=name)
+            return random.choice(_COMBAT_LOSS).format(name=name)
+        return ""
+
+    def _resolve_encounter(self, now: float) -> None:
+        b    = self._enc_being
+        name = b["name"]
+        if self._enc_can_reason or self._enc_won:
+            # Victory — item, esteem up, but dirty and a little sad
+            item = random.choice(b["items"])
+            self.life.setdefault("inventory", []).append(item)
+            self.maslow.fulfill_direct("esteem",        0.50)
+            self.maslow.fulfill_direct("actualization", 0.30)
+            self.maslow.deplete("physiological", 0.28)  # bruised, dirty
+            self.maslow.deplete("social",        0.18)  # lingering sadness
+            if self.chat and not self._enc_can_reason:
+                self.chat.add_narrative(
+                    f"The forest settles. In the {name}'s wake, Loki finds {item}."
+                )
+            self.message = "returned from the forest"
+            self.body.set_pose("stand")
+            self._enc_being = None
+            self._enc_phase = -1
+            self._last_check = 0
+            self.activity = ACT_WANDER
+            self.place_id = random.choice(["brook", "cottage"])
+            self.activity_end = now + random.uniform(10, 20) * 60
+            self.maslow.save(self.life)
+            _save_life(self.life)
+        else:
+            self._die(now)
+
+    def _die(self, now: float) -> None:
+        self.activity   = ACT_DEAD
+        self._enc_phase = 10
+        self._enc_phase_end = now + 9
+        self._enc_narr_done = False
+        self.body.set_pose("sleep")
+        self.message = "fallen"
+        _log("loki_death", f"died fighting {self._enc_being['name'] if self._enc_being else '?'}")
+
+    def _tick_dead(self, now: float) -> None:
+        if not self._enc_narr_done:
+            self._enc_narr_done = True
+            if self.chat:
+                self.chat.add_narrative(
+                    "Loki falls among the roots. The forest goes quiet around him."
+                )
+        if now < self._enc_phase_end:
+            return
+        self._resurrect(now)
+
+    def _resurrect(self, now: float) -> None:
+        count = self.life.get("death_count", 0) + 1
+        self.life["death_count"] = count
+        # Reset all needs — reborn fresh
+        for name in self.maslow._cycles:
+            for c in self.maslow._cycles[name]:
+                c["filled"]   = 0.88
+                c["last_met"] = now - 120
+        # Wake under the apple trees
+        self.place_id  = "apples"
+        self.activity  = ACT_WAKING
+        self.activity_end = now + 25
+        self._enc_being = None
+        self._enc_phase = -1
+        self._last_check = 0
+        self.petal_timer = 8.0   # seconds of falling blossoms
+        self.body.set_groggy(0.4)
+        self.body.set_pose("stand")
+        self.message = "reborn"
+        _log("loki_resurrection", f"resurrection #{count}")
+        if self.chat:
+            self.chat.add_narrative(
+                "A blossom falls from Yggdrasil. Light returns. Loki opens his eyes, young again."
+            )
+        self.maslow.save(self.life)
+        _save_life(self.life)
 
     def _choose(self, hour):
         m = self.maslow
@@ -1228,6 +1452,13 @@ class LifeScheduler:
         _save_life(self.life)
         _log("loki_activity", f"{act} at {self.place_id}")
 
+        # Random forest encounter: trigger mid-activity if cooldown has passed
+        if (act in (ACT_WANDER, ACT_FORAGE) and self.place_id == "forest" and
+                now - self.life.get("last_encounter", 0) > ENCOUNTER_COOLDOWN and
+                random.random() < FOREST_ENCOUNTER_CHANCE):
+            self._pending_enc   = random.choice(ENCOUNTER_BEINGS)
+            self._pending_enc_t = now + random.uniform(45, 120)
+
     def go_to(self, place_id):
         self.place_id = place_id
         self.activity = ACT_WANDER
@@ -1239,6 +1470,10 @@ class LifeScheduler:
         """Return (hip_x, hip_y) for Loki's position in the current scene."""
         ground = H - 130
         act    = self.activity
+        if act in (ACT_DEAD,):
+            return 280, ground - 30   # lying on forest floor
+        if act == ACT_ENCOUNTER:
+            return 250, ground - 55   # standing, ready
         if act == ACT_SLEEP:
             # on the bed: mattress centre is H-220+4 to H-130-8 → centre ≈ H-177
             return 370, H - 177
@@ -1308,6 +1543,22 @@ class MaslowSystem:
                 worst  = min(cycles, key=lambda c: self._clvl(c, name, now))
                 worst["filled"]   = min(1.0, self._clvl(worst, name, now) + amt)
                 worst["last_met"] = now
+
+    def fulfill_direct(self, name: str, amount: float) -> None:
+        """Directly boost a tier (e.g. after combat victory)."""
+        now = time.time()
+        cycles = self._cycles[name]
+        worst  = min(cycles, key=lambda c: self._clvl(c, name, now))
+        worst["filled"]   = min(1.0, self._clvl(worst, name, now) + amount)
+        worst["last_met"] = now
+
+    def deplete(self, name: str, amount: float) -> None:
+        """Directly lower a tier (exhaustion, grief, dirtiness)."""
+        now = time.time()
+        cycles = self._cycles[name]
+        best   = max(cycles, key=lambda c: self._clvl(c, name, now))
+        shift  = amount * self._periods[name]
+        best["last_met"] = best["last_met"] - shift
 
     def social_boost(self, amount: float = 0.25) -> None:
         now    = time.time()
@@ -1391,10 +1642,13 @@ def main():
 
     sched  = LifeScheduler(body, life, maslow)
     chat   = ChatManager(body)
+    sched.chat = chat   # wire up narrative channel
 
     # grow hair over real time
     last_hair_grow = life.get("_hair_grow_ts", time.time())
     life["_hair_grow_ts"] = time.time()
+
+    petals: list = []   # apple blossom particles during resurrection
 
     input_text   = ""
     input_active = False
@@ -1524,12 +1778,36 @@ def main():
                 pygame.time.set_timer(pygame.USEREVENT + 2, 0)
 
         # ── draw ──────────────────────────────────────────────────────────────
-        draw_scene(surf, sched.place_id, sched.activity, hour)
+        scene_id = "forest" if sched.activity in (ACT_ENCOUNTER, ACT_DEAD) else sched.place_id
+        draw_scene(surf, scene_id, sched.activity, hour)
 
         hx, hy = sched.hip_pos()
-        # shadow
-        pygame.draw.ellipse(surf, (0,0,0), (hx-30, hy-8, 60, 14))
+        # shadow (skip when dead/flat)
+        if sched.activity != ACT_DEAD:
+            pygame.draw.ellipse(surf, (0,0,0), (hx-30, hy-8, 60, 14))
         body.draw(surf, hx, hy, font_tiny)
+
+        # ── apple blossom petals (resurrection) ───────────────────────────────
+        if sched.petal_timer > 0:
+            sched.petal_timer -= dt
+            if random.random() < 0.35:
+                petals.append({
+                    "x":  random.uniform(0, W),
+                    "y":  -8.0,
+                    "vx": random.uniform(-18, 18),
+                    "vy": random.uniform(22, 55),
+                    "r":  random.uniform(3, 7),
+                    "col": random.choice([(255,220,230),(255,240,245),(255,200,215)]),
+                })
+        for p in petals[:]:
+            p["x"]  += p["vx"] * dt
+            p["y"]  += p["vy"] * dt
+            p["vy"] += 4 * dt
+            p["vx"] *= 0.98
+            if p["y"] > H + 12:
+                petals.remove(p)
+            else:
+                pygame.draw.circle(surf, p["col"], (int(p["x"]), int(p["y"])), int(p["r"]))
 
         # spar partner silhouette
         if sched.activity == ACT_SPAR:
@@ -1562,6 +1840,9 @@ def main():
         if time_str:
             status += f"  ({time_str})"
         status += f"  ·  {place_short}"
+        inv = life.get("inventory", [])
+        if inv:
+            status += f"  ·  ♦ {inv[-1]}"   # show most recent item
         ss = font_tiny.render(status, True, TEXT_DIM)
         surf.blit(ss, (10, chat_y0 + 4))
 
