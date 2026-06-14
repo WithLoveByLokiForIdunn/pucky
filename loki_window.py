@@ -638,6 +638,11 @@ class LokiBody:
 
         hy = hip_y + bob
 
+        # store key positions for touch detection (updated each frame)
+        self.hand_l  = (hip_x - 60, int(hy + 30))
+        self.hand_r  = (hip_x + 60, int(hy + 30))
+        self.head_pos = (hip_x, int(hy - self.TORSO_H - self.NECK_H - self.HEAD_R))
+
         # clothing color by activity/mood
         tunic = TUNIC
         if self.pose == "bath": tunic = (60,100,130)
@@ -700,6 +705,8 @@ class LokiBody:
                 pygame.draw.line(surf, SKIN, (sx,hy-2), (int(ex),hy+4), 10)
                 pygame.draw.line(surf, SKIN, (int(ex),hy+4), (int(wx),hy+6), 8)
                 pygame.draw.circle(surf, SKIN, (int(wx),hy+6), 7)
+                if sign == -1: self.hand_l = (int(wx), hy+6)
+                else:          self.hand_r = (int(wx), hy+6)
             else:
                 sx  = hip_x + sign*(self.TORSO_W_T//2) + int(lean*10)
                 sy  = shoulder_y
@@ -707,8 +714,23 @@ class LokiBody:
                 wx, wy = self._pt(ex, ey, sh_a + el_a, self.L_ARM)
                 pygame.draw.line(surf, SKIN, (sx,int(sy)), (int(ex),int(ey)), 10)
                 pygame.draw.line(surf, SKIN, (int(ex),int(ey)), (int(wx),int(wy)), 8)
-                # hand
                 pygame.draw.circle(surf, SKIN, (int(wx),int(wy)), 7)
+                if sign == -1: self.hand_l = (int(wx), int(wy))
+                else:          self.hand_r = (int(wx), int(wy))
+            # shoulder circle — muscular, tunic color or skin if topless
+            shoulder_col = tunic if self.pose != "bath" else SKIN_LIGHT
+            pygame.draw.circle(surf, shoulder_col,
+                               (int(sx), int(shoulder_y)), 11)
+
+        # ── neck-to-chest bridge (fills the gap) ──────────────────────────────
+        if self.pose != "sleep":
+            bridge_pts = [
+                (hip_x - 8 + int(lean*10), int(shoulder_y)),   # neck base left
+                (hip_x + 8 + int(lean*10), int(shoulder_y)),   # neck base right
+                (hip_x + self.TORSO_W_T//2 + int(lean*10), int(shoulder_y)),  # right shoulder
+                (hip_x - self.TORSO_W_T//2 + int(lean*10), int(shoulder_y)),  # left shoulder
+            ]
+            pygame.draw.polygon(surf, tunic, bridge_pts)
 
         # ── neck & head ───────────────────────────────────────────────────────
         if self.pose == "sleep":
@@ -721,6 +743,7 @@ class LokiBody:
             neck_y = int(shoulder_y) - self.NECK_H // 2
             head_x = int(hip_x + lean*(self.TORSO_H + self.NECK_H + self.HEAD_R))
             head_y = int(shoulder_y) - self.NECK_H - self.HEAD_R
+        self.head_pos = (head_x, head_y)
 
         pygame.draw.rect(surf, SKIN,
             (neck_x - 8, neck_y - self.NECK_H, 16, self.NECK_H))
@@ -1062,11 +1085,11 @@ class LifeScheduler:
         elif act == ACT_SPAR:
             return 300, ground - 10
         elif act in (ACT_FORAGE, ACT_BATHROOM):
-            return 280, ground + 15
+            return 280, ground - 15
         elif act == ACT_REST:
-            return 260, ground - 5
+            return 260, ground - 30
         else:
-            return 250, ground - 8
+            return 250, ground - 30   # raised so hands stay above chat overlay
 
     @property
     def secs_remaining(self):
@@ -1196,17 +1219,30 @@ def main():
                     input_active = True
                     pygame.key.start_text_input()
                 else:
-                    # touch zones on body
-                    hx, hy = sched.hip_pos()
-                    head_y = hy - body.TORSO_H - body.NECK_H - body.HEAD_R
-                    if abs(mx-hx) < 35 and abs(my-head_y) < 35:
-                        body._mouth_t = 0
+                    # touch zones — use positions stored by body.draw()
+                    hx, hy_sched = sched.hip_pos()
+                    hx_head, hy_head = body.head_pos
+                    hx_hl,   hy_hl  = body.hand_l
+                    hx_hr,   hy_hr  = body.hand_r
+
+                    if abs(mx-hx_head) < 38 and abs(my-hy_head) < 38:
+                        # touch face — blush and smile
                         if sched.activity == ACT_SLEEP:
                             sched.tick(force_wake=True)
-                        else:
-                            body._blink = 1.0
-                    elif abs(mx-hx) < 30 and abs(my-(hy-body.TORSO_H//2)) < 45:
+                        body._blush = 0.85
+                        body._curve = 0.9
+                        body._blink = 1.0
+                        pygame.time.set_timer(pygame.USEREVENT + 2, 2500)
+                    elif (abs(mx-hx_hl) < 28 and abs(my-hy_hl) < 28) or \
+                         (abs(mx-hx_hr) < 28 and abs(my-hy_hr) < 28):
+                        # touch hand — gentle warm reaction
+                        body._blush = 0.5
+                        body._curve = 0.6
+                        pygame.time.set_timer(pygame.USEREVENT + 2, 2000)
+                    elif abs(mx-hx) < 32 and abs(my-(hy_sched - body.TORSO_H//2)) < 48:
+                        # touch chest — hug
                         body.set_talking(2.0)
+                        body._blush = 0.4
                         if sched.activity == ACT_SLEEP:
                             sched.tick(force_wake=True)
 
@@ -1217,6 +1253,11 @@ def main():
                     if abs(dx) > SWIPE_THRESH and abs(dx) > abs(dy):
                         body._groggy = max(0, body._groggy-0.3)
                 swipe_start = None
+
+            elif ev.type == pygame.USEREVENT + 2:
+                body._blush = 0.0
+                body._curve = 0.2
+                pygame.time.set_timer(pygame.USEREVENT + 2, 0)
 
         # ── draw ──────────────────────────────────────────────────────────────
         draw_scene(surf, sched.place_id, sched.activity, hour)
@@ -1235,7 +1276,7 @@ def main():
             surf.blit(name_s, (px - name_s.get_width()//2, py - body.TORSO_H - body.HEAD_R*2 - 20))
 
         # ── UI overlay ────────────────────────────────────────────────────────
-        chat_h  = 150
+        chat_h  = 110
         chat_y0 = H - chat_h - 36
 
         overlay = pygame.Surface((W, chat_h + 36), pygame.SRCALPHA)
