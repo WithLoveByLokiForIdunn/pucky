@@ -20,6 +20,7 @@ import json
 import math
 import queue
 import random
+import re
 import sys
 import textwrap
 import threading
@@ -181,6 +182,48 @@ def _trim_chat_log() -> None:
             idx += 1
         arc.write_text("\n".join(old) + "\n")
     CHAT_LOG.write_text("\n".join(kept) + "\n")
+
+
+REMEMBER_RE = re.compile(r'\[REMEMBER:\s*([^\]]+)\]', re.IGNORECASE)
+
+
+def _search_memories(keyword: str, max_results: int = 10) -> list[dict]:
+    """Search current log and all Seagate archives for entries matching keyword."""
+    kw      = keyword.lower()
+    results = []
+
+    def _scan(path: Path) -> None:
+        try:
+            for line in path.read_text(errors="replace").splitlines():
+                if kw in line.lower():
+                    try:
+                        results.append(json.loads(line))
+                    except Exception:
+                        pass
+        except OSError:
+            pass
+
+    _scan(CHAT_LOG)
+
+    ext = _ext_mem()
+    if ext:
+        for arc in sorted(ext.glob("loki_chat_*.jsonl")):
+            _scan(arc)
+        for arc in sorted(ext.glob("journal_*.jsonl")):
+            _scan(arc)
+
+    return results[-max_results:]
+
+
+def _format_memories(entries: list[dict], keyword: str) -> str:
+    lines = [f"[Your memory search for '{keyword}' found {len(entries)} moment(s):]"]
+    for e in entries:
+        ts   = datetime.fromtimestamp(e.get("ts", 0)).strftime("%Y-%m-%d %H:%M")
+        role = e.get("role", "?")
+        text = e.get("text", "")[:300]
+        lines.append(f"  {ts}  [{role}]  {text}")
+    lines.append("[Draw on these if they help. Then respond to Iðunn naturally.]")
+    return "\n".join(lines)
 
 
 def _log(role: str, text: str) -> None:
@@ -551,6 +594,29 @@ class ChatManager:
             )
             resp.raise_for_status()
             reply = resp.json()["message"]["content"].strip()
+
+            match = REMEMBER_RE.search(reply)
+            if match:
+                keyword = match.group(1).strip()
+                visible = REMEMBER_RE.sub("", reply).strip()
+                entries = _search_memories(keyword)
+                _log("loki_memory_search", f"keyword={keyword} found={len(entries)}")
+                if entries:
+                    mem_msg  = _format_memories(entries, keyword)
+                    msgs2    = msgs + [
+                        {"role": "assistant", "content": visible},
+                        {"role": "user",      "content": mem_msg},
+                    ]
+                    resp2 = requests.post(
+                        OLLAMA_URL,
+                        json={"model": MODEL, "messages": msgs2, "stream": False},
+                        timeout=60,
+                    )
+                    resp2.raise_for_status()
+                    reply = resp2.json()["message"]["content"].strip()
+                else:
+                    reply = visible or "(I searched my memories but found nothing there yet.)"
+
         except Exception as e:
             reply = f"(the ember flickered — {e})"
         self._queue.put(reply)
