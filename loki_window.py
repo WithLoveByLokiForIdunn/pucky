@@ -991,10 +991,11 @@ class LokiBody:
                 self._draw_hand(surf, wx, wy, wx-ex, wy-ey, hand_open, sign)
                 if sign == -1: self.hand_l = (int(wx), int(wy))
                 else:          self.hand_r = (int(wx), int(wy))
-            # shoulder circle — muscular, tunic color or skin if topless
-            shoulder_col = tunic if self.pose != "bath" else SKIN_LIGHT
-            pygame.draw.circle(surf, shoulder_col,
-                               (int(sx), int(shoulder_y)), 7)
+            # sleeve cap — short tunic rectangle over the shoulder joint
+            if self.pose != "bath":
+                pygame.draw.rect(surf, tunic,
+                    (int(sx) - 9, int(shoulder_y) - 5, 18, 14),
+                    border_radius=3)
 
         # ── neck & head ───────────────────────────────────────────────────────
         if self.pose == "sleep":
