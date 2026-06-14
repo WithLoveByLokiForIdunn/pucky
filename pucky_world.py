@@ -1810,7 +1810,7 @@ def run_pygame():
         garden      = GardenView(WIN_W, WIN_H)
     else:
         garden      = None
-    __in_garden[0]      = [False]   # mutable so _process_web_cmd can write it
+    _in_garden          = [False]    # mutable so _process_web_cmd can write it
 
     _world_dirty = [False]   # house cleanliness state (mutable so inner methods can write it)
 
