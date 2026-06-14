@@ -184,9 +184,10 @@ def _build_system():
 
 
 # ── Text-to-speech ────────────────────────────────────────────────────────────
-VOICE_ENGINE = "espeak"   # "espeak" or "piper"
-PIPER_MODEL  = str(ROOT / "voices" / "en_US-lessac-medium.onnx")
-PIPER_RATE   = 22050      # Hz — matches en_US-lessac-medium
+VOICE_ENGINE  = "espeak"   # "espeak" or "piper"
+PIPER_MODEL   = str(ROOT / "voices" / "en_US-lessac-medium.onnx")
+PIPER_RATE    = 22050      # Hz — matches en_US-lessac-medium
+AUDIO_DEVICE  = "plughw:CARD=J2300,DEV=0"   # Jabra BIZ 2300 headset
 
 import shutil as _shutil
 _PIPER_BIN = _shutil.which("piper") or "/home/bmo/.local/bin/piper"
@@ -210,14 +211,19 @@ def _speak(text: str, rate: int = 130, voice: str = "en+m3") -> None:
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL)
             _tts_proc2 = subprocess.Popen(
-                ["aplay", "-r", str(PIPER_RATE), "-f", "S16_LE", "-t", "raw", "-"],
+                ["aplay", "-D", AUDIO_DEVICE,
+                 "-r", str(PIPER_RATE), "-f", "S16_LE", "-t", "raw", "-"],
                 stdin=_tts_proc.stdout, stderr=subprocess.DEVNULL)
-            _tts_proc.stdin.write(clean.encode())
-            _tts_proc.stdin.close()
+            if _tts_proc.stdin is not None:
+                _tts_proc.stdin.write(clean.encode())
+                _tts_proc.stdin.close()
         else:
             _tts_proc = subprocess.Popen(
-                ["espeak-ng", "-s", str(rate), "-v", voice, clean],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                ["espeak-ng", "-s", str(rate), "-v", voice, "--stdout", clean],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            _tts_proc2 = subprocess.Popen(
+                ["aplay", "-D", AUDIO_DEVICE, "-"],
+                stdin=_tts_proc.stdout, stderr=subprocess.DEVNULL)
     except FileNotFoundError:
         pass
 
@@ -611,6 +617,7 @@ class LokiBody:
         self.hair_inches  = 3.0
         self._blush       = 0.0   # 0=none  1=deep pink cheeks
         self._curve       = 0.2   # 0=flat  1=big smile
+        self._arm_ph      = 0.0   # slow idle arm sway phase
 
     def set_pose(self, pose):
         self.pose = pose
@@ -623,9 +630,10 @@ class LokiBody:
         self._groggy = max(0.0, min(1.0, v))
 
     def tick(self, dt):
-        self._breath  = (self._breath + dt * 0.8) % (2 * math.pi)
-        self._pose_t  = (self._pose_t  + dt * 2.0) % (2 * math.pi)
-        self._mouth_t = (self._mouth_t + dt * 8.0) % (2 * math.pi)
+        self._breath  = (self._breath  + dt * 0.8)  % (2 * math.pi)
+        self._pose_t  = (self._pose_t  + dt * 2.0)  % (2 * math.pi)
+        self._mouth_t = (self._mouth_t + dt * 8.0)  % (2 * math.pi)
+        self._arm_ph  = (self._arm_ph  + dt * 0.28) % (2 * math.pi)
 
         if self._talking and time.time() > self._talk_end:
             self._talking = False
@@ -642,75 +650,131 @@ class LokiBody:
 
     def _get_angles(self):
         """Return dict of joint angles for current pose + animation."""
-        b = math.sin(self._breath) * 2   # breathing bob (pixels)
-        walk_ph = math.sin(self._pose_t)  # walk/idle sway
+        b        = math.sin(self._breath) * 2
+        walk_ph  = math.sin(self._pose_t)
+        ap       = self._arm_ph          # slow idle sway (period ~22 s)
+        ap2      = self._arm_ph * 1.7    # slightly offset second harmonic
+        spar_ph  = self._arm_ph * 3.1   # faster for combat
 
         poses = {
             "stand": dict(
-                l_shoulder=-0.12, r_shoulder=0.12,
-                l_elbow=-0.08,    r_elbow=0.08,
-                l_hip=-0.05,      r_hip=0.05,
-                l_knee=0.0,       r_knee=0.0,
-                lean=0.0,         bob=b,
+                l_shoulder=-0.12 + math.sin(ap)  * 0.07,
+                r_shoulder= 0.12 + math.sin(ap + 1.1) * 0.07,
+                l_elbow   =-0.08 + math.sin(ap2) * 0.05,
+                r_elbow   = 0.08 + math.sin(ap2 + 0.9) * 0.05,
+                l_hip=-0.05, r_hip=0.05,
+                l_knee=0.0, r_knee=0.0,
+                lean=math.sin(ap*0.5) * 0.02,
+                bob=b,
+                hand_open=0.5 + math.sin(ap*0.6) * 0.12,
             ),
             "walk": dict(
-                l_shoulder=walk_ph*0.25,  r_shoulder=-walk_ph*0.25,
-                l_elbow=walk_ph*0.15,     r_elbow=-walk_ph*0.15,
-                l_hip=-walk_ph*0.30,      r_hip=walk_ph*0.30,
-                l_knee=max(0,walk_ph)*0.4, r_knee=max(0,-walk_ph)*0.4,
-                lean=0.0, bob=b,
+                l_shoulder= walk_ph * 0.40, r_shoulder=-walk_ph * 0.40,
+                l_elbow   = walk_ph * 0.24, r_elbow   =-walk_ph * 0.24,
+                l_hip     =-walk_ph * 0.33, r_hip      = walk_ph * 0.33,
+                l_knee=max(0, walk_ph)*0.45, r_knee=max(0,-walk_ph)*0.45,
+                lean=walk_ph * 0.04, bob=b,
+                hand_open=0.45 + abs(walk_ph) * 0.18,
             ),
             "sit": dict(
-                l_shoulder=-0.15, r_shoulder=0.15,
-                l_elbow=0.3,      r_elbow=-0.3,
-                l_hip=1.4,        r_hip=1.4,
-                l_knee=-1.5,      r_knee=-1.5,
+                l_shoulder=-0.15 + math.sin(ap)*0.04,
+                r_shoulder= 0.15 + math.sin(ap+1.2)*0.04,
+                l_elbow=0.3, r_elbow=-0.3,
+                l_hip=1.4, r_hip=1.4,
+                l_knee=-1.5, r_knee=-1.5,
                 lean=0.05, bob=b,
+                hand_open=0.45,
             ),
             "sit_table": dict(
-                l_shoulder=0.3,   r_shoulder=-0.3,
-                l_elbow=1.2,      r_elbow=-1.2,
-                l_hip=1.4,        r_hip=1.4,
-                l_knee=-1.5,      r_knee=-1.5,
+                l_shoulder=0.3,  r_shoulder=-0.3,
+                l_elbow=1.2,     r_elbow=-1.2,
+                l_hip=1.4,       r_hip=1.4,
+                l_knee=-1.5,     r_knee=-1.5,
                 lean=0.15, bob=0,
+                hand_open=0.75,
             ),
             "crouch": dict(
-                l_shoulder=0.2,   r_shoulder=-0.5,
-                l_elbow=0.5,      r_elbow=-0.8,
-                l_hip=1.1,        r_hip=1.1,
-                l_knee=-1.3,      r_knee=-1.3,
+                l_shoulder=0.22 + math.sin(ap)*0.08,
+                r_shoulder=-0.55 + math.sin(ap+0.8)*0.08,
+                l_elbow=0.55, r_elbow=-0.85,
+                l_hip=1.1, r_hip=1.1,
+                l_knee=-1.3, r_knee=-1.3,
                 lean=0.3, bob=0,
+                hand_open=0.65,
             ),
             "sleep": dict(
-                l_shoulder=1.5,   r_shoulder=1.5,
-                l_elbow=0.0,      r_elbow=0.0,
-                l_hip=1.57,       r_hip=1.57,
-                l_knee=-0.2,      r_knee=0.15,
+                l_shoulder=1.5, r_shoulder=1.5,
+                l_elbow=0.0,    r_elbow=0.0,
+                l_hip=1.57,     r_hip=1.57,
+                l_knee=-0.2,    r_knee=0.15,
                 lean=1.57, bob=math.sin(self._breath)*1.5,
+                hand_open=0.3,
             ),
             "spar": dict(
-                l_shoulder=-0.6,  r_shoulder=-1.0,
-                l_elbow=-0.4,     r_elbow=-1.2,
-                l_hip=-0.3,       r_hip=0.4,
-                l_knee=0.5,       r_knee=-0.2,
-                lean=-0.12, bob=0,
+                l_shoulder=-0.60 + math.sin(spar_ph)      * 0.18,
+                r_shoulder=-1.02 + math.sin(spar_ph+1.3)  * 0.15,
+                l_elbow   =-0.42 + math.sin(spar_ph*1.2)  * 0.22,
+                r_elbow   =-1.22 + math.sin(spar_ph*1.2+0.8) * 0.16,
+                l_hip=-0.3, r_hip=0.4,
+                l_knee=0.5, r_knee=-0.2,
+                lean=-0.12 + math.sin(spar_ph*0.7)*0.05,
+                bob=0,
+                hand_open=0.0,
             ),
             "bath": dict(
-                l_shoulder=-0.3,  r_shoulder=0.3,
-                l_elbow=0.5,      r_elbow=-0.5,
-                l_hip=1.4,        r_hip=1.4,
-                l_knee=-1.0,      r_knee=-1.0,
+                l_shoulder=-0.3 + math.sin(ap)*0.06,
+                r_shoulder= 0.3 + math.sin(ap+1.5)*0.06,
+                l_elbow=0.5, r_elbow=-0.5,
+                l_hip=1.4, r_hip=1.4,
+                l_knee=-1.0, r_knee=-1.0,
                 lean=0.1, bob=b*0.5,
+                hand_open=0.88,
             ),
         }
         a = poses.get(self.pose, poses["stand"]).copy()
         if self._groggy > 0.1:
-            a["lean"] = a.get("lean",0) + self._groggy * 0.3
-            a["bob"]  = a.get("bob",0) - self._groggy * 8
+            a["lean"] = a.get("lean", 0) + self._groggy * 0.3
+            a["bob"]  = a.get("bob",  0) - self._groggy * 8
         return a
 
     def _pt(self, ox, oy, angle, length):
         return (ox + math.sin(angle)*length, oy + math.cos(angle)*length)
+
+    def _draw_hand(self, surf, wx: float, wy: float,
+                   fdx: float, fdy: float, open_frac: float, sign: int) -> None:
+        """Draw palm + fingers at wrist. fdx,fdy = forearm direction vector."""
+        L = math.hypot(fdx, fdy)
+        fdx, fdy = (fdx/L, fdy/L) if L > 0.001 else (0.0, 1.0)
+        # lateral outward direction (perpendicular, toward the thumb side)
+        lx, ly = -fdy * sign, fdx * sign
+
+        pygame.draw.circle(surf, SKIN, (int(wx), int(wy)), 7)
+
+        if open_frac < 0.12:
+            # fist: knuckle bumps across the front of the palm
+            for i in range(4):
+                s = (i - 1.5) * 3.2
+                kx = wx + fdx * 5 + lx * s
+                ky = wy + fdy * 5 + ly * s
+                pygame.draw.circle(surf, SKIN_DARK, (int(kx), int(ky)), 2)
+            return
+
+        # four fingers, slightly splayed
+        fl = int(9 * open_frac + 2)
+        for i, sp in enumerate((-1.5, -0.5, 0.5, 1.5)):
+            ratio = 0.78 if i in (0, 3) else 1.0
+            bx = wx + lx * sp * 3.2 + fdx * 4
+            by = wy + ly * sp * 3.2 + fdy * 4
+            pygame.draw.line(surf, SKIN,
+                (int(bx), int(by)),
+                (int(bx + fdx * fl * ratio), int(by + fdy * fl * ratio)), 2)
+
+        # thumb — branches off the lateral side
+        tb_x = wx + lx * 6
+        tb_y = wy + ly * 6
+        pygame.draw.line(surf, SKIN,
+            (int(wx + lx * 3), int(wy + ly * 3)),
+            (int(tb_x + fdx * 5 + lx * 3), int(tb_y + fdy * 5 + ly * 3)), 2)
 
     def draw(self, surf, hip_x, hip_y, font_tiny=None):
         a   = self._get_angles()
@@ -774,7 +838,8 @@ class LokiBody:
                 border_radius=3)
 
         # ── arms ──────────────────────────────────────────────────────────────
-        shoulder_y = hy - self.TORSO_H if self.pose != "sleep" else hy
+        shoulder_y  = hy - self.TORSO_H if self.pose != "sleep" else hy
+        hand_open   = float(a.get("hand_open", 0.5))
         for side, sh_a, el_a, sign in [
             ("l", a["l_shoulder"], a["l_elbow"], -1),
             ("r", a["r_shoulder"], a["r_elbow"],  1),
@@ -785,7 +850,8 @@ class LokiBody:
                 wx = ex + sign * self.L_ARM * 0.6
                 pygame.draw.line(surf, SKIN, (sx,hy-2), (int(ex),hy+4), 10)
                 pygame.draw.line(surf, SKIN, (int(ex),hy+4), (int(wx),hy+6), 8)
-                pygame.draw.circle(surf, SKIN, (int(wx),hy+6), 7)
+                # sleeping hand — curled, pointing outward
+                self._draw_hand(surf, wx, hy+6, float(sign), 0.0, 0.28, sign)
                 if sign == -1: self.hand_l = (int(wx), hy+6)
                 else:          self.hand_r = (int(wx), hy+6)
             else:
@@ -795,7 +861,7 @@ class LokiBody:
                 wx, wy = self._pt(ex, ey, sh_a + el_a, self.L_ARM)
                 pygame.draw.line(surf, SKIN, (sx,int(sy)), (int(ex),int(ey)), 10)
                 pygame.draw.line(surf, SKIN, (int(ex),int(ey)), (int(wx),int(wy)), 8)
-                pygame.draw.circle(surf, SKIN, (int(wx),int(wy)), 7)
+                self._draw_hand(surf, wx, wy, wx-ex, wy-ey, hand_open, sign)
                 if sign == -1: self.hand_l = (int(wx), int(wy))
                 else:          self.hand_r = (int(wx), int(wy))
             # shoulder circle — muscular, tunic color or skin if topless
@@ -928,11 +994,11 @@ SONG_PROMPT = (
 class ChatManager:
     def __init__(self, body: LokiBody):
         self.body      = body
-        self.history   = []
-        self.lines     = []   # (role, text)
+        self.history:  list[dict]              = []
+        self.lines:    list[tuple[str, str]]   = []   # (role, text)
         self.system    = _build_system()
         self.is_singing = False
-        self._q       = queue.Queue()
+        self._q:       queue.Queue[str]        = queue.Queue()
         self._waiting = False
         self._typewriter_text = ""
         self._typewriter_full = ""
@@ -1189,7 +1255,7 @@ class LifeScheduler:
         self.message       = ""
         self._last_check   = 0.0
         # encounter state
-        self._enc_being    = None
+        self._enc_being:   dict | None = None
         self._enc_phase    = -1
         self._enc_phase_end = 0.0
         self._enc_narr_done = False
@@ -1286,7 +1352,9 @@ class LifeScheduler:
             self._resolve_encounter(now)
 
     def _enc_narrative(self, phase: int) -> str:
-        b    = self._enc_being
+        b = self._enc_being
+        if b is None:
+            return ""
         name = b["name"]
         if phase == 0:
             return f"{b['sight']}."
@@ -1305,7 +1373,9 @@ class LifeScheduler:
         return ""
 
     def _resolve_encounter(self, now: float) -> None:
-        b    = self._enc_being
+        b = self._enc_being
+        if b is None:
+            return
         name = b["name"]
         if self._enc_can_reason or self._enc_won:
             # Victory — item, esteem up, but dirty and a little sad
