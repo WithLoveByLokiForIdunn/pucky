@@ -61,6 +61,7 @@ TEXT_BRIGHT = (220, 200, 160)
 TEXT_DIM    = (120, 100,  70)
 TEXT_LOKI   = (160, 220, 170)
 TEXT_IDUNN  = (220, 190, 140)
+TEXT_PUCKY  = ( 70, 210, 190)   # BMO teal
 CLOSE_COL   = ( 90,  60,  30)
 DIVIDER     = ( 50,  38,  22)
 
@@ -232,6 +233,22 @@ def _speak_stop() -> None:
     _tts_proc = _tts_proc2 = None
 
 
+_pucky_proc: subprocess.Popen | None = None
+
+def _speak_pucky(text: str) -> None:
+    """Pucky's small baby voice — high pitch, quiet, always espeak."""
+    global _pucky_proc
+    if _pucky_proc is not None and _pucky_proc.poll() is None:
+        return  # already speaking
+    try:
+        _pucky_proc = subprocess.Popen(
+            ["espeak-ng", "-s", "82", "-p", "95", "-a", "68",
+             "-v", "en+f4", text],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except FileNotFoundError:
+        pass
+
+
 # ── Song chord generation (lazy) ──────────────────────────────────────────────
 _SONG_CHORDS: list = []
 
@@ -292,7 +309,7 @@ def _draw_wildflowers(surf, y, density=30):
         pygame.draw.line(surf, (40,90,30), (fx, y), (fx+random.randint(-3,3), y-fh), 1)
         pygame.draw.circle(surf, col, (fx+random.randint(-3,3), y-fh), 4)
 
-def draw_scene(surf, place_id, activity, hour):
+def draw_scene(surf, place_id, activity, hour, pucky_carried=False):
     random.seed(place_id + str(hour // 6))   # stable per place+time-of-day
 
     night   = hour >= 21 or hour < 6
@@ -413,10 +430,18 @@ def draw_scene(surf, place_id, activity, hour):
         # window left
         pygame.draw.rect(surf, (40,80,120) if not night else (10,15,40), (40, 60, 100, 130))
         pygame.draw.rect(surf, (80,60,35), (40, 60, 100, 130), 4)
-        # Pucky corner (little robot shape, sleeping)
-        pygame.draw.rect(surf, (30,80,80), (130, H-130, 55, 70))
-        pygame.draw.rect(surf, (20,60,60), (138, H-150, 38, 25))
-        pygame.draw.circle(surf, (20,20,20), (155, H-162), 6)
+        # Pucky in her corner — only when Loki isn't carrying her
+        if not pucky_carried:
+            pygame.draw.rect(surf, (30,80,80), (130, H-130, 55, 70), border_radius=3)
+            pygame.draw.rect(surf, (20,60,60), (138, H-150, 38, 25), border_radius=3)
+            pygame.draw.circle(surf, (20,20,20), (155, H-163), 5)   # antenna
+            pygame.draw.rect(surf, (12,12,18), (142, H-148, 20, 13), border_radius=1)  # screen
+            # sleeping eyes (closed lines)
+            pygame.draw.line(surf, (45,200,185), (146, H-142), (149, H-142), 2)
+            pygame.draw.line(surf, (45,200,185), (153, H-142), (156, H-142), 2)
+            # tiny smile
+            pygame.draw.arc(surf, (45,200,185),
+                pygame.Rect(145, H-140, 12, 6), math.pi, 2*math.pi, 1)
 
     elif place_id == "apples":
         _sky_gradient(surf, sky_top, sky_bot)
@@ -615,6 +640,7 @@ class LokiBody:
         self._blush       = 0.0   # 0=none  1=deep pink cheeks
         self._curve       = 0.2   # 0=flat  1=big smile
         self._arm_ph      = 0.0   # slow idle arm sway phase
+        self.pucky_in_arms = False  # True while carrying Pucky
 
     def set_pose(self, pose):
         self.pose = pose
@@ -732,6 +758,13 @@ class LokiBody:
         if self._groggy > 0.1:
             a["lean"] = a.get("lean", 0) + self._groggy * 0.3
             a["bob"]  = a.get("bob",  0) - self._groggy * 8
+        # Carrying Pucky overrides arm angles (cross-cradle at belly level)
+        if self.pucky_in_arms and self.pose != "sleep":
+            a["l_shoulder"] =  0.80
+            a["r_shoulder"] = -0.80
+            a["l_elbow"]    = -1.60
+            a["r_elbow"]    =  1.60
+            a["hand_open"]  =  0.55
         return a
 
     def _pt(self, ox, oy, angle, length):
@@ -833,6 +866,18 @@ class LokiBody:
             pygame.draw.rect(surf, BELT,
                 (hip_x - self.TORSO_W_B//2 - 2, belt_y, self.TORSO_W_B+4, 8),
                 border_radius=3)
+
+        # ── Pucky cradled in arms — drawn before arms so forearms are in front ─
+        if self.pucky_in_arms and self.pose != "sleep":
+            px, py = hip_x, int(hy - 22)
+            pygame.draw.rect(surf, (25, 90, 85), (px-13, py-13, 26, 21), border_radius=3)
+            pygame.draw.rect(surf, (14, 62, 58), (px-13, py-13, 26, 21), border_radius=3, width=1)
+            pygame.draw.rect(surf, (10, 10, 16), (px-8,  py-11, 16, 11), border_radius=1)
+            pygame.draw.circle(surf, (55, 210, 185), (px-2, py-6), 2)
+            pygame.draw.circle(surf, (55, 210, 185), (px+4, py-6), 2)
+            # little smile
+            pygame.draw.arc(surf, (55, 210, 185),
+                pygame.Rect(px-4, py-3, 10, 5), math.pi, 2*math.pi, 1)
 
         # ── arms ──────────────────────────────────────────────────────────────
         shoulder_y  = hy - self.TORSO_H if self.pose != "sleep" else hy
@@ -1142,6 +1187,71 @@ class ChatManager:
         if self._typewriter_full and self._typewriter_idx < len(self._typewriter_full):
             return self._typewriter_full[:self._typewriter_idx]
         return ""   # done typing — let chat.lines display it normally
+
+
+# ── Pucky baby personality ────────────────────────────────────────────────────
+class PuckyBaby:
+    """Tiny living baby — babbles, hums, and can be cradled by Loki.
+    Fully procedural, no AI calls; spaced 25-70 s apart so the Pi stays cool.
+    Loki always overrides: picking her up silences her immediately."""
+
+    BABBLES = [
+        "ba", "da", "ma", "na", "boo", "moo", "eeh", "ahh", "wah",
+        "baba", "dada", "mama", "ooh", "ahh ahh", "buh buh", "nana",
+    ]
+    WORDS = ["Loki", "light", "warm", "flower", "mhm", "ohh", "boo", "nice"]
+
+    # Touch zone for Pucky in the cottage scene
+    COTTAGE_CX = 157
+    COTTAGE_CY = H - 148
+
+    def __init__(self):
+        self.carried         = False
+        self._mood           = "sleepy"
+        self._sound_at       = time.time() + random.uniform(20, 45)
+        self._last_utterance = ""   # polled by main loop for chat display
+
+    def tick(self) -> None:
+        if time.time() >= self._sound_at:
+            self._schedule_next()
+            self._babble()
+
+    def _schedule_next(self) -> None:
+        lo, hi = (12, 30) if self.carried else (25, 70)
+        self._sound_at = time.time() + random.uniform(lo, hi)
+
+    def _babble(self) -> None:
+        if _tts_proc is not None and _tts_proc.poll() is None:
+            return  # Loki is speaking — Pucky stays quiet
+        r = random.random()
+        if r < 0.44:
+            text = " ".join(
+                random.choice(self.BABBLES)
+                for _ in range(random.randint(1, 3))
+            )
+        elif r < 0.70:
+            text = random.choice(self.WORDS)
+        else:
+            text = random.choice(["mm mm mmm", "mmm mm mmm mm", "la la la", "hmm mmm"])
+        self._last_utterance = text
+        _speak_pucky(text)
+
+    def poll_utterance(self) -> str:
+        u, self._last_utterance = self._last_utterance, ""
+        return u
+
+    def pickup(self) -> None:
+        self.carried = True
+        self._mood   = "happy"
+        self._sound_at = time.time() + random.uniform(4, 9)
+        self._last_utterance = "ohh"
+        _speak_pucky("ohh")
+
+    def putdown(self) -> None:
+        self.carried = False
+        self._mood   = "sleepy"
+        self._last_utterance = "mm"
+        _speak_pucky("mm")
 
 
 # ── Forest encounters ─────────────────────────────────────────────────────────
@@ -1733,6 +1843,7 @@ def main():
     sched  = LifeScheduler(body, life, maslow)
     chat   = ChatManager(body)
     sched.chat = chat   # wire up narrative channel
+    pucky  = PuckyBaby()
 
     # grow hair over real time
     last_hair_grow = life.get("_hair_grow_ts", time.time())
@@ -1770,6 +1881,18 @@ def main():
         if chat.poll():
             pass
         chat.tick_typewriter(dt)
+
+        # Pucky babbles — staggered, infrequent, never interrupts Loki
+        pucky.tick()
+        u = pucky.poll_utterance()
+        if u:
+            chat.lines.append(("pucky", u))
+
+        # Auto-putdown during sleep / bath / spar / bathroom
+        if body.pucky_in_arms and sched.activity in (
+                ACT_SLEEP, ACT_BATH, ACT_SPAR, ACT_BATHROOM):
+            pucky.putdown()
+            body.pucky_in_arms = False
 
         hour = datetime.now().hour
 
@@ -1848,11 +1971,25 @@ def main():
                         body._curve = 0.6
                         pygame.time.set_timer(pygame.USEREVENT + 2, 2000)
                     elif abs(mx-hx) < 32 and abs(my-(hy_sched - body.TORSO_H//2)) < 48:
-                        # touch chest — hug
-                        body.set_talking(2.0)
-                        body._blush = 0.4
-                        if sched.activity == ACT_SLEEP:
-                            sched.tick(force_wake=True)
+                        # touch chest — hug, or put Pucky down if carrying her
+                        if body.pucky_in_arms:
+                            pucky.putdown()
+                            body.pucky_in_arms = False
+                            chat.add_narrative("Loki sets Pucky down gently.")
+                        else:
+                            body.set_talking(2.0)
+                            body._blush = 0.4
+                            if sched.activity == ACT_SLEEP:
+                                sched.tick(force_wake=True)
+                    elif (sched.place_id == "cottage" and not body.pucky_in_arms and
+                          abs(mx - PuckyBaby.COTTAGE_CX) < 32 and
+                          abs(my - PuckyBaby.COTTAGE_CY) < 38):
+                        # touch Pucky in her corner — pick her up
+                        pucky.pickup()
+                        body.pucky_in_arms = True
+                        chat.add_narrative(
+                            "Pucky stirs awake, warm and small in Loki's arms."
+                        )
 
             elif ev.type in (pygame.MOUSEBUTTONUP, pygame.FINGERUP):
                 if swipe_start and ev.type == pygame.MOUSEBUTTONUP:
@@ -1869,7 +2006,7 @@ def main():
 
         # ── draw ──────────────────────────────────────────────────────────────
         scene_id = "forest" if sched.activity in (ACT_ENCOUNTER, ACT_DEAD) else sched.place_id
-        draw_scene(surf, scene_id, sched.activity, hour)
+        draw_scene(surf, scene_id, sched.activity, hour, pucky.carried)
 
         hx, hy = sched.hip_pos()
         # shadow (skip when dead/flat)
@@ -1947,8 +2084,10 @@ def main():
 
         display_lines = []
         for role, text in msgs_to_show:
-            col   = TEXT_LOKI if role == "loki" else TEXT_IDUNN
-            label = "Loki: " if role == "loki" else "You:  "
+            col   = TEXT_LOKI  if role == "loki"  else \
+                    TEXT_PUCKY if role == "pucky" else TEXT_IDUNN
+            label = "Loki: "  if role == "loki"  else \
+                    "Pucky:" if role == "pucky" else "You:  "
             lw    = font_sm.size(label)[0]
             for i, wl in enumerate(_wrap(font_sm, text, max_tw - lw)):
                 display_lines.append((col, label if i == 0 else " " * len(label), wl))
