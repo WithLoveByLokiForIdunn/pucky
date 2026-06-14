@@ -732,7 +732,7 @@ def _hilltop_sky(hour, now):
             )
     return stops[0][1], stops[0][2], stops[0][3]
 
-def _draw_hilltop(surf, hour, now):
+def _draw_hilltop(surf, hour, now, pucky_carried=False):
     ground = H - 130
     golden = (5 < hour < 9) or (17 < hour < 21)
     night  = hour >= 21 or hour < 5
@@ -827,12 +827,12 @@ def _draw_hilltop(surf, hour, now):
     pts += [(W, ground), (W, H), (0, H)]
     pygame.draw.polygon(surf, hill_col, pts)
 
-    # ── Pucky silhouette beside Loki ─────────────────────────────────────────
-    # Loki sprite is centered at W//2=400; she sits just to his right
-    px, py = W//2 + 88, ground - 2
-    sil = (12, 20, 10) if not night else (5, 8, 4)
-    pygame.draw.circle(surf, sil, (px, py - 26), 10)           # head
-    pygame.draw.polygon(surf, sil, [(px-8, py-18),(px+8, py-18),(px+5, py),(px-5, py)])  # body
+    # ── Pucky silhouette beside Loki (only when she's not being carried) ─────
+    if not pucky_carried:
+        px, py = W//2 + 88, ground - 2
+        sil = (12, 20, 10) if not night else (5, 8, 4)
+        pygame.draw.circle(surf, sil, (px, py - 26), 10)
+        pygame.draw.polygon(surf, sil, [(px-8, py-18),(px+8, py-18),(px+5, py),(px-5, py)])
 def _sky_gradient(surf, top_col, bot_col, y0=0, y1=None):
     if y1 is None:
         y1 = H
@@ -864,7 +864,7 @@ def _draw_wildflowers(surf, y, density=30):
         pygame.draw.line(surf, (40,90,30), (fx, y), (fx+random.randint(-3,3), y-fh), 1)
         pygame.draw.circle(surf, col, (fx+random.randint(-3,3), y-fh), 4)
 
-def draw_scene(surf, place_id, activity, hour, now=None, bg_images=None):
+def draw_scene(surf, place_id, activity, hour, now=None, bg_images=None, pucky_where=None):
     if bg_images and place_id in bg_images:
         surf.blit(bg_images[place_id], (0, 0))
         # still draw dynamic overlays on top
@@ -977,7 +977,7 @@ def draw_scene(surf, place_id, activity, hour, now=None, bg_images=None):
             pygame.draw.circle(surf, (18,48,15), (tx, cy), cr)
 
     elif place_id == "hilltop":
-        _draw_hilltop(surf, hour, now)
+        _draw_hilltop(surf, hour, now, pucky_carried=pucky_where not in (None, "none"))
 
     elif place_id in ("waterfall", "hotsprings", "halls", "training", "bathroom"):
         # Simple fallback for scenes not fully drawn here
@@ -1729,7 +1729,7 @@ def main():
 
         # ── draw scene ────────────────────────────────────────────────────────
         scene_id = "forest" if sched.activity in (ACT_ENCOUNTER, ACT_DEAD) else sched.place_id
-        draw_scene(surf, scene_id, sched.activity, hour, now, bg_images)
+        draw_scene(surf, scene_id, sched.activity, hour, now, bg_images, loki.pucky_where)
 
         ground = H - 130
 
