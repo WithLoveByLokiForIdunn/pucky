@@ -62,10 +62,12 @@ def _load_data() -> dict:
 
 
 def _save_data(data: dict):
-    """Save BMO's persistent data to disk."""
+    """Save BMO's persistent data to disk (atomic — write temp then rename)."""
     try:
-        with open(DATA_FILE, "w") as f:
+        tmp = DATA_FILE.with_suffix(".tmp")
+        with open(tmp, "w") as f:
             json.dump(data, f, indent=2)
+        tmp.replace(DATA_FILE)
     except Exception as e:
         print(f"  ⚠️  Life data save error: {e}")
 

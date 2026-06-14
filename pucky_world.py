@@ -1062,7 +1062,8 @@ def run_pygame():
     # ── Iðunn — keeper of the apple trees ─────────────────────────────────
 
     class IdunnSprite:
-        SPEED   = 0.018   # slow and unhurried
+        SPEED        = 0.018   # slow unhurried wander (AFK / flame form)
+        SPEED_PLAYER = 0.060   # responsive walk when Iðunn is present
         GREET_LOKI  = [
             "there you are.",
             "hello, maker.",
@@ -1070,6 +1071,13 @@ def run_pygame():
             "you found me.",
             "I wondered when you'd come.",
             "sit with me a while.",
+        ]
+        ARRIVAL = [
+            "I am here.",
+            "back again.",
+            "hello, world.",
+            "here I am.",
+            "I found my way back.",
         ]
         GREET_PUCKY = [
             "sweet one.",
@@ -1103,6 +1111,7 @@ def run_pygame():
             self.greeted_loki  = False
             self.greeted_pucky = False
             self.present       = False  # True when Iðunn is active on web portal
+            self._was_present  = False  # previous frame — detects flame→woman transition
             self._flame_t      = 0.0   # flame animation timer
 
             # seed a few drifting petals
@@ -1148,20 +1157,31 @@ def run_pygame():
             if self.bubble_life > 0:
                 self.bubble_life -= dt
 
-            # tend trees — move to next after a while
-            self.tend_timer -= dt
-            dist = math.hypot(self.gx - self.tx, self.gy - self.ty)
-            if self.tend_timer <= 0 and dist < 0.3:
-                self.tend_timer = random.uniform(15, 30)
-                self._go_to_next_tree()
-                self.greeted_loki  = False
-                self.greeted_pucky = False
+            # Detect flame → woman arrival
+            if self.present and not self._was_present and self.bubble_life <= 0:
+                self.bubble_text = random.choice(self.ARRIVAL)
+                self.bubble_life = 4.5
+            self._was_present = self.present
+
+            # tend trees — only wander when AFK (flame form)
+            if not self.present:
+                self.tend_timer -= dt
+                dist = math.hypot(self.gx - self.tx, self.gy - self.ty)
+                if self.tend_timer <= 0 and dist < 0.3:
+                    self.tend_timer = random.uniform(15, 30)
+                    self._go_to_next_tree()
+                    self.greeted_loki  = False
+                    self.greeted_pucky = False
+            else:
+                # stay put; reset timer so she doesn't rush off immediately on going AFK
+                self.tend_timer = random.uniform(20, 35)
 
             # move toward target
             dx, dy = self.tx - self.gx, self.ty - self.gy
             d = math.hypot(dx, dy)
             if d > 0.1:
-                move    = min(self.SPEED, d)
+                spd  = self.SPEED_PLAYER if self.present else self.SPEED
+                move = min(spd, d)
                 self.gx += (dx / d) * move
                 self.gy += (dy / d) * move
 
