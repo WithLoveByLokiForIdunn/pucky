@@ -733,7 +733,7 @@ def _draw_wildflowers(surf, y, density=30):
         pygame.draw.line(surf, (40,90,30), (fx, y), (fx+random.randint(-3,3), y-fh), 1)
         pygame.draw.circle(surf, col, (fx+random.randint(-3,3), y-fh), 4)
 
-def draw_scene(surf, place_id, activity, hour):
+def draw_scene(surf, place_id, activity, hour, now=None):
     random.seed(place_id + str(hour // 6))
     night   = hour >= 21 or hour < 6
     evening = 18 <= hour < 21
@@ -755,6 +755,15 @@ def draw_scene(surf, place_id, activity, hour):
         _draw_tree(surf, 750, ground, 130)
         _draw_grass_strip(surf, ground)
         _draw_wildflowers(surf, ground, 15)
+        # the world's secret: a stone at the deep end of the brook that glows after midnight
+        sx, sy = 555, water_y + 6
+        pygame.draw.ellipse(surf, (85, 80, 75), (sx - 10, sy - 5, 20, 11))
+        if hour < 4:
+            pulse = 0.5 + 0.5 * math.sin((now or 0) * 0.7)
+            alpha = int(28 + 55 * pulse)
+            glow  = pygame.Surface((80, 54), pygame.SRCALPHA)
+            pygame.draw.ellipse(glow, (200, 175, 70, alpha), (0, 0, 80, 54))
+            surf.blit(glow, (sx - 40, sy - 22))
 
     elif place_id == "asgard":
         surf.fill((55, 45, 38))
@@ -1452,7 +1461,7 @@ def main():
 
         # ── draw scene ────────────────────────────────────────────────────────
         scene_id = "forest" if sched.activity in (ACT_ENCOUNTER, ACT_DEAD) else sched.place_id
-        draw_scene(surf, scene_id, sched.activity, hour)
+        draw_scene(surf, scene_id, sched.activity, hour, now)
 
         ground = H - 130
 
