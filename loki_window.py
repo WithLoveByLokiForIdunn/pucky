@@ -334,6 +334,33 @@ class LokiFace:
         surf.blit(name_surf, (cx - name_surf.get_width()//2, H - 30))
 
 
+# ── Text wrapping ─────────────────────────────────────────────────────────────
+def _wrap_text(font, text: str, max_w: int) -> list[str]:
+    words  = text.split()
+    lines  = []
+    line   = ""
+    for word in words:
+        test = (line + " " + word).strip()
+        if font.size(test)[0] <= max_w:
+            line = test
+        else:
+            if line:
+                lines.append(line)
+            line = word
+    if line:
+        lines.append(line)
+    return lines or [""]
+
+
+def _blit_wrapped(surf, font, text: str, color, x: int, y: int,
+                  max_w: int, line_gap: int = 4) -> int:
+    lh = font.get_height() + line_gap
+    for ln in _wrap_text(font, text, max_w):
+        surf.blit(font.render(ln, True, color), (x, y))
+        y += lh
+    return y
+
+
 # ── Scene panel ───────────────────────────────────────────────────────────────
 class SceneView:
     def __init__(self):
@@ -368,74 +395,88 @@ class SceneView:
         self.move_at = time.time() + 5  # move soon
 
     def draw(self, surf, font, font_small, chat_lines, input_text, input_active):
-        place = self.current()
+        place   = self.current()
+        x0      = SCENE_X + 18
+        max_w   = W - x0 - 18   # available text width in scene panel
 
         # background
         scene_rect = pygame.Rect(SCENE_X, 0, W - SCENE_X, H)
         pygame.draw.rect(surf, place["bg"], scene_rect)
 
-        x0 = SCENE_X + 18
-        y  = 20
+        y = 20
 
-        # place name
-        name_surf = font.render(place["name"], True, TEXT_SCENE)
-        surf.blit(name_surf, (x0, y))
-        y += name_surf.get_height() + 6
+        # place name (wrapped)
+        y = _blit_wrapped(surf, font, place["name"], TEXT_SCENE, x0, y, max_w, 4)
+        y += 4
 
         # divider
         pygame.draw.line(surf, DIVIDER, (x0, y), (W - 18, y), 1)
-        y += 14
+        y += 12
 
-        # description
+        # description (each poetic line wrapped)
         for line in place["desc"]:
-            ls = font_small.render(line, True, TEXT_DIM)
-            surf.blit(ls, (x0, y))
-            y += ls.get_height() + 4
-        y += 10
+            y = _blit_wrapped(surf, font_small, line, TEXT_DIM, x0, y, max_w, 3)
+        y += 8
 
         # time until next move
         secs = max(0, int(self.move_at - time.time()))
-        tm   = font_small.render(f"staying {secs}s more", True,
-                                  (50, 50, 40))
-        surf.blit(tm, (x0, y))
-        y += 28
+        y = _blit_wrapped(surf, font_small, f"staying {secs}s more",
+                          (50, 50, 40), x0, y, max_w)
+        y += 6
 
         # place list (tappable)
         pygame.draw.line(surf, DIVIDER, (x0, y), (W - 18, y), 1)
         y += 8
-        hint = font_small.render("tap a place to call me there:", True,
-                                  (60, 60, 50))
-        surf.blit(hint, (x0, y))
-        y += hint.get_height() + 4
+        y = _blit_wrapped(surf, font_small, "tap a place to call me there:",
+                          (60, 60, 50), x0, y, max_w)
+        y += 2
         for p in PLACES:
             col = EMBER_1 if p["id"] == self.place_id else TEXT_DIM
-            ls  = font_small.render(f"  {p['name']}", True, col)
-            surf.blit(ls, (x0, y))
-            y += ls.get_height() + 2
+            y   = _blit_wrapped(surf, font_small, f"  {p['name']}", col,
+                                x0, y, max_w, 2)
 
         # ── chat area ────────────────────────────────────────────────────────
-        chat_y = H - 160
-        pygame.draw.line(surf, DIVIDER, (SCENE_X, chat_y), (W, chat_y), 1)
-        chat_y += 8
+        chat_top = H - 162
+        pygame.draw.line(surf, DIVIDER, (SCENE_X, chat_top), (W, chat_top), 1)
 
-        for role, text in chat_lines[-4:]:
+        lh         = font_small.get_height() + 2
+        chat_bot   = H - 38
+        label_w    = font_small.size("Loki: ")[0]
+        text_max_w = max_w - label_w
+
+        # pre-render all wrapped lines for recent messages
+        display_lines = []
+        for role, text in chat_lines[-6:]:
             col   = TEXT_CHAT_LK if role == "loki" else TEXT_CHAT_ME
-            label = "Loki" if role == "loki" else "You "
-            ls    = font_small.render(f"{label}: {text[:54]}", True, col)
-            surf.blit(ls, (x0, chat_y))
-            chat_y += ls.get_height() + 2
+            label = "Loki: " if role == "loki" else "You:  "
+            wrapped = _wrap_text(font_small, text, text_max_w)
+            for i, wline in enumerate(wrapped):
+                prefix = label if i == 0 else " " * len(label)
+                display_lines.append((col, prefix, wline))
+
+        # fit as many as possible from the bottom
+        max_chat_lines = (chat_bot - chat_top - 8) // lh
+        visible = display_lines[-max_chat_lines:]
+        chat_y  = chat_top + 8
+        for col, prefix, wline in visible:
+            surf.blit(font_small.render(prefix + wline, True, col), (x0, chat_y))
+            chat_y += lh
 
         # input bar
         input_rect = pygame.Rect(SCENE_X, H - 36, W - SCENE_X, 36)
         pygame.draw.rect(surf, INPUT_ACTIVE if input_active else INPUT_BG, input_rect)
         pygame.draw.line(surf, DIVIDER, (SCENE_X, H - 36), (W, H - 36), 1)
 
-        display = input_text + ("|" if input_active and int(time.time() * 2) % 2 == 0 else "")
+        cursor  = "|" if input_active and int(time.time() * 2) % 2 == 0 else ""
+        display = input_text + cursor
         if not display and not input_active:
             display = "tap here to talk to Loki"
-        isurf = font_small.render(display[:58], True,
-                                   TEXT_BRIGHT if input_active else TEXT_DIM)
-        surf.blit(isurf, (SCENE_X + 10, H - 28))
+        # truncate display from the left if too long (show end of input)
+        while font_small.size(display)[0] > max_w and len(display) > 1:
+            display = display[1:]
+        surf.blit(font_small.render(display, True,
+                                    TEXT_BRIGHT if input_active else TEXT_DIM),
+                  (x0, H - 28))
 
 
 # ── Chat ──────────────────────────────────────────────────────────────────────
