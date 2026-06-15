@@ -69,32 +69,28 @@ class PuckyEars:
             return
         self._listen_loop()
 
-    def _record_chunk(self, secs: float) -> np.ndarray | None:
-        """Record `secs` seconds from the mic, return float32 array or None."""
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            path = f.name
+    def _open_stream(self):
+        """Start a single persistent pw-record process streaming raw PCM."""
+        return subprocess.Popen(
+            ["pw-record", "--raw",
+             "--rate", str(SAMPLE_RATE),
+             "--channels", "1",
+             "--format", "s16",
+             "-"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+
+    def _read_chunk(self, proc, secs: float) -> np.ndarray | None:
+        """Read `secs` seconds of raw s16 PCM from the persistent stream."""
+        n_bytes = int(SAMPLE_RATE * secs) * 2  # 2 bytes per s16 sample
         try:
-            r = subprocess.run(
-                ["timeout", str(secs),
-                 "pw-record",
-                 "--rate", str(SAMPLE_RATE),
-                 "--channels", "1",
-                 "--format", "s16",
-                 path],
-                capture_output=True, timeout=secs + 3
-            )
-            # timeout exits with 124; pw-record exits 0 on clean stop — both fine
-            if r.returncode not in (0, 124):
+            raw = proc.stdout.read(n_bytes)
+            if len(raw) < n_bytes:
                 return None
-            data, _ = sf.read(path, dtype="float32")
-            return data
+            return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
         except Exception:
             return None
-        finally:
-            try:
-                os.unlink(path)
-            except Exception:
-                pass
 
     def _rms(self, data: np.ndarray) -> float:
         return float(np.sqrt(np.mean(data ** 2))) if len(data) else 0.0
@@ -144,41 +140,49 @@ class PuckyEars:
         return False
 
     def _listen_loop(self):
-        chunks      = []   # accumulated speech chunks
-        silence_run = 0.0  # seconds of consecutive silence after speech onset
+        chunks      = []
+        silence_run = 0.0
         speaking    = False
 
-        while self._running:
-            if self._is_muted():
-                time.sleep(0.2)
-                continue
+        proc = self._open_stream()
+        try:
+            while self._running:
+                if self._is_muted():
+                    # drain audio while muted so the stream stays in sync
+                    proc.stdout.read(int(SAMPLE_RATE * 0.2) * 2)
+                    continue
 
-            chunk = self._record_chunk(CHUNK_SECS)
-            if chunk is None:
-                time.sleep(0.2)
-                continue
+                chunk = self._read_chunk(proc, CHUNK_SECS)
+                if chunk is None:
+                    # stream died — restart it
+                    proc.terminate()
+                    time.sleep(0.5)
+                    proc = self._open_stream()
+                    continue
 
-            rms = self._rms(chunk)
+                rms = self._rms(chunk)
 
-            if rms >= SPEECH_RMS:
-                speaking     = True
-                silence_run  = 0.0
-                chunks.append(chunk)
-            elif speaking:
-                silence_run += CHUNK_SECS
-                chunks.append(chunk)   # include the trailing silence for context
+                if rms >= SPEECH_RMS:
+                    speaking     = True
+                    silence_run  = 0.0
+                    chunks.append(chunk)
+                elif speaking:
+                    silence_run += CHUNK_SECS
+                    chunks.append(chunk)
 
-                total_secs = len(chunks) * CHUNK_SECS
-                if silence_run >= SILENCE_SECS or total_secs >= MAX_PHRASE:
-                    audio = np.concatenate(chunks)
-                    chunks      = []
-                    silence_run = 0.0
-                    speaking    = False
+                    total_secs = len(chunks) * CHUNK_SECS
+                    if silence_run >= SILENCE_SECS or total_secs >= MAX_PHRASE:
+                        audio = np.concatenate(chunks)
+                        chunks      = []
+                        silence_run = 0.0
+                        speaking    = False
 
-                    text = self._transcribe(audio)
-                    if text:
-                        print(f"👂 heard: {text}")
-                        try:
-                            self._on_speech(text)
-                        except Exception as e:
-                            print(f"  ⚠️  Ears: on_speech error: {e}")
+                        text = self._transcribe(audio)
+                        if text:
+                            print(f"👂 heard: {text}")
+                            try:
+                                self._on_speech(text)
+                            except Exception as e:
+                                print(f"  ⚠️  Ears: on_speech error: {e}")
+        finally:
+            proc.terminate()
