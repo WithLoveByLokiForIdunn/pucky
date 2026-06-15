@@ -560,14 +560,16 @@ class LokiSprite:
     def load(self) -> None:
         """Call after pygame.init()."""
         for pose, fname in self.POSE_FILES.items():
-            path = IMAGES_DIR / fname
-            if path.exists():
-                try:
-                    self._surf[pose] = pygame.image.load(str(path)).convert_alpha()
-                    continue
-                except Exception:
-                    pass
-            self._surf[pose] = self._placeholder_loki(pose)
+            idunn_path = IMAGES_DIR / fname.replace(".png", "_idunn.png")
+            for path in (idunn_path, IMAGES_DIR / fname):
+                if path.exists():
+                    try:
+                        self._surf[pose] = pygame.image.load(str(path)).convert_alpha()
+                        break
+                    except Exception:
+                        pass
+            else:
+                self._surf[pose] = self._placeholder_loki(pose)
 
         for loc, fname in self.PUCKY_FILES.items():
             idunn_path = IMAGES_DIR / fname.replace(".png", "_idunn.png")
