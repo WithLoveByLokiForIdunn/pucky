@@ -2202,6 +2202,7 @@ def _wrap(font, text, max_w):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
+    global _game_mode, _game_type, _ball_game
     pygame.mixer.pre_init(22050, -16, 2, 512)
     pygame.init()
     pygame.display.set_caption("Loki — world2")
