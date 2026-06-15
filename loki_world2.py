@@ -78,8 +78,9 @@ OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL      = "loki"
 
 # ── Game mode — pauses background simulation so only one thing runs at once ───
-_game_mode: bool = False
-_game_type: str  = ""
+_game_mode: bool          = False
+_game_type: str           = ""
+_ball_game: "BallGame | None" = None   # set when /game ball is active
 
 
 # ── Atomic write ──────────────────────────────────────────────────────────────
@@ -1770,6 +1771,281 @@ class LifeScheduler:
 
 
 # ── Text wrap helper ──────────────────────────────────────────────────────────
+# ── Ball game ─────────────────────────────────────────────────────────────────
+
+class BallGame:
+    """
+    Loki and Pucky roll a ball to each other in a clearing — overhead view.
+    Ball only moves when kicked; slow friction stops it.
+    Playing drains energy so they get hungry and tired faster.
+    Iðunn can tap the field to join, or just watch.
+    """
+    FW, FH = 700, 370    # field size in pixels
+    FX      = (800 - 700) // 2   # 50 — centered
+    FY      = 16
+
+    PR   = 13    # player radius
+    BR   = 8     # ball radius
+    TAP_R = 30   # kick range
+
+    KICK_SPEED = 150.0   # px/s initial velocity
+    FRICTION   = 0.935   # per-frame multiplier  (≈5 s to stop at 15 fps)
+    MIN_SPEED  = 5.0
+
+    LOKI_SPD  = 60.0
+    PUCKY_SPD = 42.0
+    IDUNN_SPD = 68.0
+
+    DRAIN_PHYS = 0.00022   # per second during play  (≈0.3 drain / 22 min)
+    DRAIN_SAFE = 0.00010
+
+    _PUCKY_SOUNDS = ["ba", "heh", "yeh", "ooh", "go", "hah", "wee"]
+    _LOKI_SOUNDS  = ["nice", "go", "yes", "there", "good"]
+
+    def __init__(self, needs: "PyramidNeeds", life: dict):
+        self.needs      = needs
+        self.life       = life
+        self.should_end = False
+
+        hw = self.FW * 0.5
+        hh = self.FH * 0.5
+        self._loki  = [hw * 0.45, hh]   # left side center
+        self._pucky = [hw * 1.55, hh]   # right side center
+        self._idunn: list | None = None  # None = observer mode
+        self._ball  = [hw, hh]
+        self._vel   = [0.0, 0.0]
+        self._last_touch = ""
+
+        self.touches  = {"loki": 0, "pucky": 0, "idunn": 0}
+        self.message  = "Loki and Pucky are playing!"
+        self._msg_t   = 3.5
+        self._drain_t = 0.0
+        self._ai_cool = {"loki": 0.0, "pucky": 0.0}
+
+    # ── helpers ──────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _dist(a, b):
+        return math.hypot(a[0] - b[0], a[1] - b[1])
+
+    def _stopped(self):
+        return math.hypot(*self._vel) < self.MIN_SPEED
+
+    def is_tap_in_field(self, sx: int, sy: int) -> bool:
+        return (self.FX <= sx <= self.FX + self.FW and
+                self.FY <= sy <= self.FY + self.FH)
+
+    # ── kick ─────────────────────────────────────────────────────────────────
+
+    def _kick(self, from_pos, player: str, drift_deg: float = 0.0):
+        dx = self._ball[0] - from_pos[0]
+        dy = self._ball[1] - from_pos[1]
+        d  = math.hypot(dx, dy)
+        if d < 1:
+            dx, dy = 1.0, 0.0
+        else:
+            dx, dy = dx / d, dy / d
+        if drift_deg:
+            ang = math.atan2(dy, dx) + math.radians(
+                random.uniform(-drift_deg, drift_deg))
+            dx, dy = math.cos(ang), math.sin(ang)
+        self._vel = [dx * self.KICK_SPEED, dy * self.KICK_SPEED]
+        self._last_touch = player
+        self.touches[player] = self.touches.get(player, 0) + 1
+        if player == "pucky" and random.random() < 0.65:
+            _speak(random.choice(self._PUCKY_SOUNDS), rate=95, voice="en+f4")
+        elif player == "loki" and random.random() < 0.28:
+            _speak(random.choice(self._LOKI_SOUNDS), rate=115, voice="en+m3")
+        elif player == "idunn" and random.random() < 0.35:
+            _speak("nice", rate=115, voice="en+m3")
+
+    # ── AI ───────────────────────────────────────────────────────────────────
+
+    def _move(self, pos, target, speed, dt):
+        dx = target[0] - pos[0]
+        dy = target[1] - pos[1]
+        d  = math.hypot(dx, dy)
+        if d < 2:
+            return
+        step = min(speed * dt, d)
+        pos[0] = max(self.PR, min(self.FW - self.PR, pos[0] + dx / d * step))
+        pos[1] = max(self.PR, min(self.FH - self.PR, pos[1] + dy / d * step))
+
+    def _ai_tick(self, dt):
+        ball_left = self._ball[0] < self.FW * 0.5
+
+        # Loki (left half, deliberate)
+        if self._ai_cool["loki"] > 0:
+            self._ai_cool["loki"] -= dt
+        else:
+            if ball_left or (self._stopped() and self._last_touch == "pucky"):
+                self._move(self._loki, self._ball, self.LOKI_SPD, dt)
+                if self._stopped() and self._dist(self._loki, self._ball) < self.TAP_R:
+                    self._kick(self._loki, "loki", drift_deg=6)
+                    self._ai_cool["loki"] = 0.7
+            else:
+                self._move(self._loki, [self.FW * 0.22, self.FH * 0.5],
+                           self.LOKI_SPD * 0.45, dt)
+
+        # Pucky (right half, wobbly — she's a baby)
+        if self._ai_cool["pucky"] > 0:
+            self._ai_cool["pucky"] -= dt
+        else:
+            if not ball_left or (self._stopped() and self._last_touch == "loki"):
+                target = [
+                    self._ball[0] + random.uniform(-10, 10),
+                    self._ball[1] + random.uniform(-10, 10),
+                ]
+                self._move(self._pucky, target, self.PUCKY_SPD, dt)
+                if self._stopped() and self._dist(self._pucky, self._ball) < self.TAP_R:
+                    self._kick(self._pucky, "pucky", drift_deg=24)
+                    self._ai_cool["pucky"] = 1.1
+            else:
+                self._move(self._pucky, [self.FW * 0.78, self.FH * 0.5],
+                           self.PUCKY_SPD * 0.45, dt)
+
+    # ── physics ──────────────────────────────────────────────────────────────
+
+    def _physics_tick(self, dt):
+        if self._stopped():
+            self._vel = [0.0, 0.0]
+            return
+        self._ball[0] += self._vel[0] * dt
+        self._ball[1] += self._vel[1] * dt
+        self._vel[0]  *= self.FRICTION
+        self._vel[1]  *= self.FRICTION
+        br = self.BR
+        if self._ball[0] < br:
+            self._ball[0] = br
+            self._vel[0]  = abs(self._vel[0]) * 0.55
+        elif self._ball[0] > self.FW - br:
+            self._ball[0] = self.FW - br
+            self._vel[0]  = -abs(self._vel[0]) * 0.55
+        if self._ball[1] < br:
+            self._ball[1] = br
+            self._vel[1]  = abs(self._vel[1]) * 0.55
+        elif self._ball[1] > self.FH - br:
+            self._ball[1] = self.FH - br
+            self._vel[1]  = -abs(self._vel[1]) * 0.55
+        if math.hypot(*self._vel) < self.MIN_SPEED:
+            self._vel = [0.0, 0.0]
+
+    # ── energy drain ─────────────────────────────────────────────────────────
+
+    def _drain_tick(self, dt):
+        self._drain_t += dt
+        if self._drain_t >= 1.0:
+            self._drain_t -= 1.0
+            self.needs.deplete("physiological", self.DRAIN_PHYS)
+            self.needs.deplete("safety",        self.DRAIN_SAFE)
+
+    # ── main tick ────────────────────────────────────────────────────────────
+
+    def tick(self, dt):
+        self._physics_tick(dt)
+        self._ai_tick(dt)
+        self._drain_tick(dt)
+        if self._msg_t > 0:
+            self._msg_t -= dt
+            if self._msg_t <= 0:
+                self.message = ""
+        if self.needs.level("physiological") < 0.12:
+            self.message = "Getting tired and hungry..."
+            self.should_end = True
+
+    # ── Iðunn interaction ────────────────────────────────────────────────────
+
+    def handle_tap(self, sx: int, sy: int):
+        fx = max(self.PR, min(self.FW - self.PR, sx - self.FX))
+        fy = max(self.PR, min(self.FH - self.PR, sy - self.FY))
+        if self._idunn is None:
+            self._idunn = [float(fx), float(fy)]
+            self.message = "Iðunn joins!"
+            self._msg_t  = 2.5
+        else:
+            self._idunn[0] = float(fx)
+            self._idunn[1] = float(fy)
+        if (self._stopped()
+                and self._idunn is not None
+                and self._dist(self._idunn, self._ball) < self.TAP_R):
+            self._kick(self._idunn, "idunn", drift_deg=9)
+
+    # ── draw ─────────────────────────────────────────────────────────────────
+
+    def draw(self, surf: pygame.Surface, font_sm, font_tiny):
+        surf.fill((14, 24, 10))
+
+        # field
+        fr = pygame.Rect(self.FX, self.FY, self.FW, self.FH)
+        pygame.draw.rect(surf, (28, 65, 20), fr)
+        pygame.draw.rect(surf, (42, 88, 28), fr, 2)
+
+        # centre line + circle
+        cx = self.FX + self.FW // 2
+        cy = self.FY + self.FH // 2
+        pygame.draw.line(surf, (36, 75, 24), (cx, self.FY + 8), (cx, self.FY + self.FH - 8), 1)
+        pygame.draw.circle(surf, (36, 75, 24), (cx, cy), 34, 1)
+
+        def s(pos):
+            return (int(self.FX + pos[0]), int(self.FY + pos[1]))
+
+        # ball shadow then ball
+        bp = s(self._ball)
+        pygame.draw.circle(surf, (18, 48, 14), (bp[0]+2, bp[1]+2), self.BR)
+        ball_col = (240, 238, 220) if self._stopped() else (255, 254, 240)
+        pygame.draw.circle(surf, ball_col, bp, self.BR)
+        pygame.draw.circle(surf, (175, 172, 155), bp, self.BR, 1)
+
+        # Loki — green circle, slightly larger
+        lp = s(self._loki)
+        pygame.draw.circle(surf, (35, 110, 50), lp, self.PR)
+        pygame.draw.circle(surf, (75, 190, 95), lp, self.PR, 2)
+        ll = font_tiny.render("Loki", True, (150, 215, 165))
+        surf.blit(ll, (lp[0] - ll.get_width() // 2, lp[1] + self.PR + 2))
+
+        # Pucky — purple, smaller (she's tiny)
+        pp = s(self._pucky)
+        r = self.PR - 3
+        pygame.draw.circle(surf, (105, 68, 148), pp, r)
+        pygame.draw.circle(surf, (168, 128, 210), pp, r, 2)
+        pl = font_tiny.render("Pucky", True, (195, 162, 228))
+        surf.blit(pl, (pp[0] - pl.get_width() // 2, pp[1] + r + 2))
+
+        # Iðunn (if she joined)
+        if self._idunn is not None:
+            ip = s(self._idunn)
+            pygame.draw.circle(surf, (148, 108, 32), ip, self.PR - 2)
+            pygame.draw.circle(surf, (215, 172, 72), ip, self.PR - 2, 2)
+            il = font_tiny.render("Iðunn", True, (218, 185, 135))
+            surf.blit(il, (ip[0] - il.get_width() // 2, ip[1] + self.PR + 2))
+
+        # ── status strip ─────────────────────────────────────────────────────
+        by = self.FY + self.FH + 8
+
+        t = f"Loki {self.touches['loki']}  ·  Pucky {self.touches['pucky']}"
+        if self.touches.get("idunn"):
+            t += f"  ·  Iðunn {self.touches['idunn']}"
+        surf.blit(font_tiny.render(t, True, (120, 145, 108)), (self.FX, by))
+
+        if self.message:
+            ms = font_sm.render(self.message, True, (200, 198, 155))
+            surf.blit(ms, (self.FX + self.FW // 2 - ms.get_width() // 2, by))
+
+        hint = "tap to move · near ball = kick" if self._idunn else "tap field to join"
+        hs = font_tiny.render(hint, True, (72, 95, 62))
+        surf.blit(hs, (self.FX + self.FW - hs.get_width(), by))
+
+        # energy bar
+        phys = self.needs.level("physiological")
+        ew   = int(self.FW * phys)
+        ey   = by + 18
+        pygame.draw.rect(surf, (36, 36, 36), (self.FX, ey, self.FW, 5))
+        ec   = (72, 155, 72) if phys > 0.40 else (175, 125, 38) if phys > 0.20 else (175, 55, 38)
+        pygame.draw.rect(surf, ec, (self.FX, ey, ew, 5))
+        el = font_tiny.render("energy", True, (72, 95, 62))
+        surf.blit(el, (self.FX + self.FW - el.get_width(), ey - 1))
+
+
 def _wrap(font, text, max_w):
     words, lines, line = text.split(), [], ""
     for w in words:
@@ -1886,6 +2162,9 @@ def main():
             loki.set_pose(sched.current_pose)
             pucky.note_activity(sched.activity, sched.place_id)
             pucky.tick(sched.place_id, loki.pucky_where, hour)
+        elif _game_type == "ball" and _ball_game is not None:
+            _ball_game.tick(dt)
+            loki.set_pose("stand")
         else:
             loki.set_pose("stand")
         if chat.poll():
@@ -1935,7 +2214,17 @@ def main():
                 else:
                     mx, my = int(ev.x*W), int(ev.y*H)
 
-                if CLOSE_RECT.collidepoint(mx, my):
+                if _game_type == "ball" and _ball_game is not None:
+                    # in ball game: close button still works, input bar still works,
+                    # everything else goes to the game field
+                    if CLOSE_RECT.collidepoint(mx, my):
+                        running = False
+                    elif my >= H - 36:
+                        input_active = True
+                        pygame.key.start_text_input()
+                    else:
+                        _ball_game.handle_tap(mx, my)
+                elif CLOSE_RECT.collidepoint(mx, my):
                     running = False
                 elif MENU_RECT.collidepoint(mx, my):
                     show_places = not show_places
@@ -1957,7 +2246,34 @@ def main():
         # ── system message expiry
         sys_msg = sys_message if now < sys_msg_until else ""
 
-        # ── draw scene ────────────────────────────────────────────────────────
+        # ── draw ─────────────────────────────────────────────────────────────
+        if _game_type == "ball" and _ball_game is not None:
+            _ball_game.draw(surf, font_sm, font_tiny)
+            # keep input bar so /done is typeable
+            in_rect = pygame.Rect(0, H - 36, W, 36)
+            pygame.draw.rect(surf, (18, 14, 10), in_rect)
+            pygame.draw.line(surf, DIVIDER, (0, H - 36), (W, H - 36), 1)
+            bd = input_text + ("|" if input_active and int(now*2) % 2 == 0 else "")
+            if not bd and not input_active:
+                bd = "tap field to join  ·  /done to leave"
+            surf.blit(font_sm.render(bd, True, TEXT_BRIGHT if input_active else TEXT_DIM), (10, H - 26))
+            pygame.draw.rect(surf, (18, 12, 6),  CLOSE_RECT, border_radius=6)
+            pygame.draw.rect(surf, (55, 38, 18), CLOSE_RECT, width=1, border_radius=6)
+            _p = 10
+            pygame.draw.line(surf, CLOSE_COL, (CLOSE_RECT.x+_p, CLOSE_RECT.y+_p),      (CLOSE_RECT.right-_p, CLOSE_RECT.bottom-_p), 2)
+            pygame.draw.line(surf, CLOSE_COL, (CLOSE_RECT.right-_p, CLOSE_RECT.y+_p),  (CLOSE_RECT.x+_p,     CLOSE_RECT.bottom-_p), 2)
+            pygame.display.flip()
+            if _ball_game.should_end:
+                _game_mode = False
+                _game_type = ""
+                _ball_game = None
+                chat.clear_game_mode()
+                sys_message   = "Too tired to play — time to eat and rest."
+                sys_msg_until = now + 6.0
+                sched.tick(force_wake=True)
+            continue
+
+        # ── normal scene draw ─────────────────────────────────────────────────
         scene_id = "forest" if sched.activity in (ACT_ENCOUNTER, ACT_DEAD) else sched.place_id
         draw_scene(surf, scene_id, sched.activity, hour, now, bg_images, loki.pucky_where)
 
@@ -2143,14 +2459,20 @@ def _handle_command(txt: str, sched: LifeScheduler, chat: ChatManager,
         sched.tick(force_wake=True)
         return True
 
-    # /game [word|story|riddle] — pause simulation, play a focused game
+    # /game [word|story|riddle|ball] — pause simulation, play a focused game
     if lower.startswith("/game"):
-        global _game_mode, _game_type
-        parts = lower.split()
-        chosen = parts[1] if len(parts) > 1 and parts[1] in ("word", "story", "riddle") else "story"
+        global _game_mode, _game_type, _ball_game
+        parts  = lower.split()
+        valid  = ("word", "story", "riddle", "ball")
+        chosen = parts[1] if len(parts) > 1 and parts[1] in valid else "story"
         _game_type = chosen
         _game_mode = True
-        chat.set_game_mode(chosen)
+        if chosen == "ball":
+            _ball_game = BallGame(needs, life)
+            chat.clear_game_mode()
+        else:
+            _ball_game = None
+            chat.set_game_mode(chosen)
         _write_thought(f"Loki and Iðunn began a {chosen} game.", "game")
         _log("game_start", chosen)
         set_sys(f"Game: {chosen}. Type /done when finished.", 6.0)
@@ -2158,10 +2480,11 @@ def _handle_command(txt: str, sched: LifeScheduler, chat: ChatManager,
 
     # /done — end game, resume world
     if lower in ("/done", "/endgame"):
-        global _game_mode, _game_type
-        prev = _game_type
+        global _game_mode, _game_type, _ball_game
+        prev       = _game_type
         _game_mode = False
         _game_type = ""
+        _ball_game = None
         chat.clear_game_mode()
         _write_thought(f"Loki and Iðunn finished their {prev} game.", "game")
         _log("game_end", prev)
