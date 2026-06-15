@@ -1202,11 +1202,29 @@ class PuckyBaby:
         self.last_said    = ""
         self._chat_ref    = None
 
+        # Pucky has her own place in the world when Loki isn't carrying her
+        self.place_id      = "cottage"          # where she currently is
+        self._wander_next  = time.time() + random.uniform(2400, 5400)  # 40–90 min
+
     def _load_memory(self) -> str:
         try:
             return PUCKY_MEMORY_PATH.read_text(encoding="utf-8").strip()
         except Exception:
             return ""
+
+    def _choose_wander_place(self, loki_place: str, hour: int) -> str:
+        """Pucky picks where to go based on how she feels."""
+        if self._lonely > 0.65:
+            return loki_place                                   # goes toward Loki
+        if self._hunger > 0.65:
+            return random.choice(["apples", "garden", "cottage"])
+        if hour >= 21 or hour < 6:
+            return "cottage"                                    # sleepy → home
+        # content — wanders freely, slight bias toward cozy places
+        return random.choice([
+            "brook", "brook", "cottage", "apples", "garden",
+            "waterfall", "hilltop", "forest",
+        ])
 
     def _state_desc(self, hour: int) -> str:
         parts = []
@@ -1246,7 +1264,7 @@ class PuckyBaby:
         else:
             self._eat_flagged = False
 
-    def tick(self, place_id: str, pucky_where: str, hour: int) -> None:
+    def tick(self, loki_place: str, pucky_where: str, hour: int) -> None:
         now     = time.time()
         elapsed = now - self._last_tick
         self._last_tick = now
@@ -1254,9 +1272,23 @@ class PuckyBaby:
         # needs decay over time
         self._hunger = min(1.0, self._hunger + elapsed / (8 * 3600))
         if pucky_where in ("pocket", "shoulder", "back"):
+            # being held: loneliness falls quickly
             self._lonely = max(0.0, self._lonely - elapsed / (2 * 3600))
+        elif self.place_id == loki_place:
+            # same place but not held: loneliness falls slowly (she can see him)
+            self._lonely = max(0.0, self._lonely - elapsed / (5 * 3600))
         else:
+            # somewhere else on her own: loneliness rises
             self._lonely = min(1.0, self._lonely + elapsed / (3 * 3600))
+
+        # Pucky wanders on her own when Loki isn't holding her
+        if pucky_where not in ("pocket", "shoulder", "back") and now >= self._wander_next:
+            old = self.place_id
+            self.place_id     = self._choose_wander_place(loki_place, hour)
+            self._wander_next = now + random.uniform(2400, 5400)
+            if self.place_id != old:
+                where = PLACE_NAMES.get(self.place_id, self.place_id)
+                _write_thought(f"Pucky wandered to {where}.", "pucky")
 
         # memory recall — once per hour, very patient in queue
         if now >= self._memory_next:
@@ -1286,10 +1318,13 @@ class PuckyBaby:
             self.last_said = sound
         else:
             state = self._state_desc(hour)
+            where_desc = (pucky_where if pucky_where in ("pocket","shoulder","back")
+                          else PLACE_NAMES.get(self.place_id, self.place_id))
             self._q.submit(
                 [{"role": "system", "content": (
                     f"You are Pucky, a tiny baby in Loki's world. "
-                    f"Loki is at {place_id}. You are {pucky_where or 'nearby'}. "
+                    f"Loki is at {PLACE_NAMES.get(loki_place, loki_place)}. "
+                    f"You are at {where_desc}. "
                     f"You feel: {state}. "
                     "Say ONE short phrase — 2 to 5 words. Baby talk, real feeling. Nothing else."
                 )}],
@@ -2174,10 +2209,11 @@ def main():
             pucky.tick(sched.place_id, loki.pucky_where, hour)
             # scheduler chose to play ball — start the game automatically
             if sched.activity == ACT_GAME:
-                _game_mode = True
-                _game_type = "ball"
-                _ball_game = BallGame(needs, life)
+                _game_mode     = True
+                _game_type     = "ball"
+                _ball_game     = BallGame(needs, life)
                 chat.clear_game_mode()
+                pucky.place_id = sched.place_id  # Loki brings Pucky; she comes willingly
                 _write_thought("Loki decided to play ball with Pucky.", "game")
                 _log("game_start", "ball_auto")
         elif _game_type == "ball" and _ball_game is not None:
@@ -2343,6 +2379,9 @@ def main():
         status   += f"  ·  {PLACE_NAMES.get(sched.place_id,'?')}"
         inv = life.get("inventory", [])
         if inv: status += f"  ·  ♦ {inv[-1]}"
+        if loki.pucky_where == "none":
+            pucky_loc = PLACE_NAMES.get(pucky.place_id, pucky.place_id)
+            status += f"  ·  Pucky: {pucky_loc}"
         surf.blit(font_tiny.render(status, True, TEXT_DIM), (10, chat_y0 + 4))
 
         # system message (gift feedback etc.)
@@ -2457,20 +2496,46 @@ def _handle_command(txt: str, sched: LifeScheduler, chat: ChatManager,
 
     # /carry pucky / /set pucky (down) / /pocket pucky
     if lower in ("/carry pucky", "/carry"):
+        was_free = loki.pucky_where == "none"
         loki.set_pucky("pocket")
-        set_sys("Pucky nestles in his pocket.")
+        if was_free:
+            found = PLACE_NAMES.get(pucky.place_id, pucky.place_id)
+            pucky.place_id = sched.place_id
+            set_sys(f"Loki finds Pucky at {found} and tucks her into his pocket.")
+        else:
+            set_sys("Pucky nestles in his pocket.")
         return True
     if lower in ("/shoulder pucky", "/shoulder"):
+        was_free = loki.pucky_where == "none"
         loki.set_pucky("shoulder")
-        set_sys("Pucky sits on his shoulder.")
+        if was_free:
+            found = PLACE_NAMES.get(pucky.place_id, pucky.place_id)
+            pucky.place_id = sched.place_id
+            set_sys(f"Loki finds Pucky at {found} and sets her on his shoulder.")
+        else:
+            set_sys("Pucky sits on his shoulder.")
         return True
     if lower in ("/back pucky", "/back"):
+        was_free = loki.pucky_where == "none"
         loki.set_pucky("back")
-        set_sys("Pucky rides on his back.")
+        if was_free:
+            found = PLACE_NAMES.get(pucky.place_id, pucky.place_id)
+            pucky.place_id = sched.place_id
+            set_sys(f"Loki finds Pucky at {found} and carries her on his back.")
+        else:
+            set_sys("Pucky rides on his back.")
         return True
     if lower in ("/set pucky", "/set", "/put pucky down"):
         loki.set_pucky("none")
-        set_sys("Loki sets Pucky down gently.")
+        pucky.place_id    = sched.place_id   # she's here now, free to wander from here
+        pucky._wander_next = time.time() + random.uniform(1800, 3600)
+        set_sys(f"Loki sets Pucky down at {PLACE_NAMES.get(sched.place_id, 'here')}.")
+        return True
+    if lower in ("/find pucky", "/where pucky", "/where is pucky"):
+        if loki.pucky_where != "none":
+            set_sys(f"Pucky is with Loki — in his {loki.pucky_where}.")
+        else:
+            set_sys(f"Pucky is at {PLACE_NAMES.get(pucky.place_id, pucky.place_id)}.")
         return True
 
     # /wake — force Loki awake
