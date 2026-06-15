@@ -409,7 +409,7 @@ class PyramidNeeds:
 
 # ── Life state ────────────────────────────────────────────────────────────────
 def _load_life() -> dict:
-    defaults = {
+    defaults: dict = {
         "hair_inches":   3.0,
         "hair_last_cut": None,
         "last_meal":     time.time() - 7200,
@@ -1439,7 +1439,7 @@ class LifeScheduler:
         self._enc_narr_done  = False
         self._enc_can_reason = False
         self._enc_won        = False
-        self._pending_enc    = None
+        self._pending_enc: dict | None = None
         self._pending_enc_t  = 0.0
 
     def _need(self, key, interval):
@@ -1534,7 +1534,7 @@ class LifeScheduler:
         else:
             # wander
             pool = [p for p in PLACES if p["id"] != self.place_id]
-            self.place_id = random.choices(pool, [p["weight"] for p in pool], k=1)[0]["id"]
+            self.place_id = str(random.choices(pool, [p["weight"] for p in pool], k=1)[0]["id"])  # type: ignore[arg-type,index,misc]
             dur  = random.uniform(8,18)*60
             self._pose = "stand"
 
@@ -1806,7 +1806,7 @@ def main():
                         if txt:
                             handled = _handle_command(
                                 txt, sched, chat, needs, loki, idunn, life,
-                                lambda msg, dur=3.0: _set_sys(msg, dur)
+                                lambda msg, dur=3.0: _set_sys(msg, dur), pucky
                             )
                             if not handled:
                                 if sched.activity == ACT_SLEEP:
@@ -1992,7 +1992,7 @@ def _set_sys(msg: str, dur: float = 3.0):
 
 def _handle_command(txt: str, sched: LifeScheduler, chat: ChatManager,
                     needs: PyramidNeeds, loki: LokiSprite, idunn: IdunnSprite,
-                    life: dict, set_sys) -> bool:
+                    life: dict, set_sys, pucky: "PuckyBaby") -> bool:
     """
     Returns True if input was a slash command and should not be sent to Ollama.
     """
