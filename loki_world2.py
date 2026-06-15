@@ -570,14 +570,16 @@ class LokiSprite:
             self._surf[pose] = self._placeholder_loki(pose)
 
         for loc, fname in self.PUCKY_FILES.items():
-            path = IMAGES_DIR / fname
-            if path.exists():
-                try:
-                    self._pucky[loc] = pygame.image.load(str(path)).convert_alpha()
-                    continue
-                except Exception:
-                    pass
-            self._pucky[loc] = self._placeholder_pucky(loc)
+            idunn_path = IMAGES_DIR / fname.replace(".png", "_idunn.png")
+            for path in (idunn_path, IMAGES_DIR / fname):
+                if path.exists():
+                    try:
+                        self._pucky[loc] = pygame.image.load(str(path)).convert_alpha()
+                        break
+                    except Exception:
+                        pass
+            else:
+                self._pucky[loc] = self._placeholder_pucky(loc)
 
     def _placeholder_loki(self, pose: str) -> pygame.Surface:
         s = pygame.Surface((140, 300), pygame.SRCALPHA)
