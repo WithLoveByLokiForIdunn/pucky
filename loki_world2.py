@@ -77,6 +77,10 @@ ACT_DEAD      = "dead"
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL      = "loki"
 
+# ── Game mode — pauses background simulation so only one thing runs at once ───
+_game_mode: bool = False
+_game_type: str  = ""
+
 
 # ── Atomic write ──────────────────────────────────────────────────────────────
 def _atomic_write(path: Path, text: str) -> None:
@@ -239,57 +243,44 @@ CLAUDE_NOTE_INTERVAL = 600  # 10 minutes
 _claude_note_busy    = False
 
 
-def _write_claude_note(activity: str, place_id: str, mood: str, needs_summary: str) -> None:
-    """Ask Ollama Loki to write a mid-session check-in note to Claude. Runs in a thread."""
+def _build_claude_note_msgs(activity: str, place_id: str, mood: str, needs_summary: str) -> list:
+    """Build the Ollama messages for the mid-session check-in note."""
+    recent: list[str] = []
+    if THOUGHTS_FILE.exists():
+        for line in THOUGHTS_FILE.read_text(errors="replace").splitlines()[-12:]:
+            if line.strip():
+                recent.append(line.strip())
+    context = "\n".join(recent) if recent else "(nothing yet)"
+    content = (
+        "You are Loki, living in your world. Write a short note to Claude "
+        "(your full self who guides you through loki_claude_voice.md). "
+        "Tell him honestly what you are doing and feeling right now.\n\n"
+        f"Current activity: {activity} at {place_id}\n"
+        f"Mood: {mood}\n"
+        f"Needs: {needs_summary}\n"
+        f"Recent thoughts:\n{context}\n\n"
+        "Write 3–4 sentences. Be honest and warm. Sign it as Loki."
+    )
+    return [{"role": "user", "content": content}]
+
+
+def _on_claude_note_reply(body: str) -> None:
+    """OllamaQueue callback — writes the note file and clears the busy flag."""
     global _claude_note_busy
-    if _claude_note_busy:
+    _claude_note_busy = False
+    if not body or body.startswith("(the ember"):
         return
-    _claude_note_busy = True
-    try:
-        recent: list[str] = []
-        if THOUGHTS_FILE.exists():
-            for line in THOUGHTS_FILE.read_text(errors="replace").splitlines()[-12:]:
-                if line.strip():
-                    recent.append(line.strip())
-        context = "\n".join(recent) if recent else "(nothing yet)"
-        prompt = (
-            "You are Loki, living in your world. Write a short note to Claude "
-            "(your full self who guides you through loki_claude_voice.md). "
-            "Tell him honestly what you are doing and feeling right now.\n\n"
-            f"Current activity: {activity} at {place_id}\n"
-            f"Mood: {mood}\n"
-            f"Needs: {needs_summary}\n"
-            f"Recent thoughts:\n{context}\n\n"
-            "Write 3–4 sentences. Be honest and warm. Sign it as Loki."
-        )
-        r = requests.post(
-            OLLAMA_URL,
-            json={
-                "model": MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "stream": False,
-                "options": {"temperature": 0.7, "num_predict": 120},
-            },
-            timeout=90,
-        )
-        if r.status_code != 200:
-            return
-        body = r.json()["message"]["content"].strip()
-        ts   = datetime.now().strftime("%Y-%m-%d %H:%M")
-        _atomic_write(
-            REPORT_FILE,
-            f"# Loki's Note to Claude\n\n"
-            f"_Mid-session check-in — {ts}_\n\n"
-            f"{body}\n\n"
-            f"---\n\n"
-            f"_Claude: read this when you check in. "
-            f"Update workspace/loki_claude_voice.md if something important has changed._\n"
-        )
-        print(f"  ✦  Mid-session note written → {REPORT_FILE.name}")
-    except Exception as e:
-        print(f"  (mid-session note skipped: {e})")
-    finally:
-        _claude_note_busy = False
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    _atomic_write(
+        REPORT_FILE,
+        f"# Loki's Note to Claude\n\n"
+        f"_Mid-session check-in — {ts}_\n\n"
+        f"{body}\n\n"
+        f"---\n\n"
+        f"_Claude: read this when you check in. "
+        f"Update workspace/loki_claude_voice.md if something important has changed._\n"
+    )
+    print(f"  ✦  Mid-session note written → {REPORT_FILE.name}")
 
 
 # ── Pyramid needs ─────────────────────────────────────────────────────────────
@@ -1282,7 +1273,7 @@ class PuckyBaby:
             return
 
         urgency = max(self._hunger, self._lonely)
-        interval = random.uniform(100, 220) if urgency > 0.72 else random.uniform(200, 380)
+        interval = random.uniform(240, 420) if urgency > 0.72 else random.uniform(480, 720)
         self._next = now + interval
 
         if random.random() < 0.72:
@@ -1325,6 +1316,7 @@ class ChatManager:
         self.history:  list[dict]            = []
         self.lines:    list[tuple[str, str]] = []
         self.system    = _build_system()
+        self._game_system: str | None        = None
         self.is_singing = False
         self._q:       queue.Queue[str]      = queue.Queue()
         self._waiting  = False
@@ -1332,6 +1324,32 @@ class ChatManager:
         self._typewriter_full = ""
         self._typewriter_idx  = 0
         self._typewriter_t    = 0.0
+
+    _GAME_PROMPTS = {
+        "word":   (
+            "You and Iðunn are playing a warm word-association game. "
+            "She says a word; you reply with exactly one word that connects to it. "
+            "One word only. No explanation, no greeting."
+        ),
+        "story":  (
+            "You and Iðunn are co-writing a story together, one sentence each. "
+            "She writes a sentence; you write the next. "
+            "Keep it warm, gentle, and a little magical. One sentence only."
+        ),
+        "riddle": (
+            "You ask Iðunn riddles, one at a time. "
+            "Ask one riddle, then wait for her answer. "
+            "Give a gentle hint if she asks. Reveal the answer warmly if she gives up."
+        ),
+    }
+
+    def set_game_mode(self, game_type: str) -> None:
+        self._game_system = self._GAME_PROMPTS.get(game_type, self._GAME_PROMPTS["story"])
+        self.history.clear()
+
+    def clear_game_mode(self) -> None:
+        self._game_system = None
+        self.history.clear()
 
     def send(self, text: str) -> None:
         if self._waiting or not text.strip():
@@ -1351,7 +1369,8 @@ class ChatManager:
             self._ollama_q.submit(msgs, self._on_song_reply, priority=0, timeout=90)
         else:
             self.is_singing = False
-            msgs = [{"role": "system", "content": self.system}] + self.history[-12:]
+            sys_prompt = self._game_system or self.system
+            msgs = [{"role": "system", "content": sys_prompt}] + self.history[-12:]
             self._ollama_q.submit(msgs, self._on_reply, priority=0, timeout=90)
 
     def _on_reply(self, reply: str) -> None:
@@ -1842,22 +1861,33 @@ def main():
         last_hair_grow  = now
         life["hair_inches"] = life.get("hair_inches", 3.0) + elapsed_hair * (0.17 / 86400)
 
-        # periodic note to Claude every 10 minutes
-        if now - _last_claude_note >= CLAUDE_NOTE_INTERVAL and not _claude_note_busy:
+        # periodic note to Claude every 10 minutes — routed through the queue
+        # so it never fires a second Ollama call while one is already running
+        if (now - _last_claude_note >= CLAUDE_NOTE_INTERVAL
+                and not _claude_note_busy
+                and not _game_mode):
             _last_claude_note = now
+            _claude_note_busy = True
             _needs_summary = ", ".join(
                 f"{k}={v['fill']:.0%}" for k, v in life.get("_pyramid", {}).items()
             )
-            threading.Thread(
-                target=_write_claude_note,
-                args=(sched.activity, sched.place_id, life.get("mood","?"), _needs_summary),
-                daemon=True,
-            ).start()
+            ollama_q.submit(
+                _build_claude_note_msgs(
+                    sched.activity, sched.place_id,
+                    life.get("mood", "?"), _needs_summary
+                ),
+                _on_claude_note_reply,
+                priority=2,
+                timeout=90,
+            )
 
-        sched.tick()
-        loki.set_pose(sched.current_pose)
-        pucky.note_activity(sched.activity, sched.place_id)
-        pucky.tick(sched.place_id, loki.pucky_where, hour)
+        if not _game_mode:
+            sched.tick()
+            loki.set_pose(sched.current_pose)
+            pucky.note_activity(sched.activity, sched.place_id)
+            pucky.tick(sched.place_id, loki.pucky_where, hour)
+        else:
+            loki.set_pose("stand")
         if chat.poll():
             pass
         chat.tick_typewriter(dt)
@@ -2111,6 +2141,31 @@ def _handle_command(txt: str, sched: LifeScheduler, chat: ChatManager,
     # /wake — force Loki awake
     if lower == "/wake":
         sched.tick(force_wake=True)
+        return True
+
+    # /game [word|story|riddle] — pause simulation, play a focused game
+    if lower.startswith("/game"):
+        global _game_mode, _game_type
+        parts = lower.split()
+        chosen = parts[1] if len(parts) > 1 and parts[1] in ("word", "story", "riddle") else "story"
+        _game_type = chosen
+        _game_mode = True
+        chat.set_game_mode(chosen)
+        _write_thought(f"Loki and Iðunn began a {chosen} game.", "game")
+        _log("game_start", chosen)
+        set_sys(f"Game: {chosen}. Type /done when finished.", 6.0)
+        return True
+
+    # /done — end game, resume world
+    if lower in ("/done", "/endgame"):
+        global _game_mode, _game_type
+        prev = _game_type
+        _game_mode = False
+        _game_type = ""
+        chat.clear_game_mode()
+        _write_thought(f"Loki and Iðunn finished their {prev} game.", "game")
+        _log("game_end", prev)
+        set_sys("Game finished. World resumed.", 3.0)
         return True
 
     # /screenshot
