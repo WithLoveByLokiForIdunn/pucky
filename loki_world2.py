@@ -1116,22 +1116,40 @@ class OllamaQueue:
 
 PUCKY_MEMORY_PATH = ROOT / "workspace" / "pucky_memory.md"
 
+_PLACE_FOODS: dict[str, list[str]] = {
+    "apples":     ["an apple", "windfall apples", "apple blossoms"],
+    "garden":     ["carrots", "herbs", "kale", "parsnips"],
+    "forest":     ["berries", "mushrooms", "wild herbs", "hazelnuts"],
+    "brook":      ["watercress", "river fish"],
+    "cottage":    ["bread and broth", "oatmeal", "warm soup"],
+    "halls":      ["feast bread", "roasted meat", "honeycake"],
+    "hotsprings": ["dried fruit", "travel bread"],
+    "asgard":     ["honeycake", "roasted meat", "mead bread"],
+}
+
+def _place_food(place_id: str) -> str:
+    foods = _PLACE_FOODS.get(place_id, ["something foraged"])
+    return random.choice(foods)
+
 
 class PuckyBaby:
     """
-    Pucky lives quietly. She babbles on her own timer.
-    Most babbles are pure espeak (no Ollama).
-    Rarely (~15%) she reacts through the queue at low priority.
-    Once an hour she draws on her memory file (pucky_memory.md).
+    Pucky has hunger and loneliness that tick over time.
+    She speaks in short phrases. She gets fed when Loki eats or forages.
+    Once an hour she draws quietly on her memory file.
     """
-    SOUNDS = ["ba", "moo", "mama", "da", "boo", "flower", "mmm", "oh"]
+    SOUNDS = ["ba", "moo", "mama", "da", "boo", "mmm", "oh", "nana", "wawa", "no"]
 
     def __init__(self, ollama_q: OllamaQueue):
         self._q           = ollama_q
         self._next        = time.time() + random.uniform(120, 240)
-        self._memory_next = time.time() + random.uniform(2400, 4200)  # first recall 40-70 min
+        self._memory_next = time.time() + random.uniform(2400, 4200)
+        self._hunger      = 0.65   # she hasn't been properly fed in the new world
+        self._lonely      = 0.40
+        self._last_tick   = time.time()
+        self._eat_flagged = False  # feed only once per eating session
         self.last_said    = ""
-        self._chat_ref    = None   # set after ChatManager is created
+        self._chat_ref    = None
 
     def _load_memory(self) -> str:
         try:
@@ -1139,47 +1157,106 @@ class PuckyBaby:
         except Exception:
             return ""
 
-    def tick(self, place_id: str) -> None:
-        now = time.time()
+    def _state_desc(self, hour: int) -> str:
+        parts = []
+        if self._hunger > 0.75:   parts.append("very hungry")
+        elif self._hunger > 0.45: parts.append("a little hungry")
+        if self._lonely > 0.65:   parts.append("wanting to be held")
+        elif self._lonely > 0.35: parts.append("a little lonely")
+        if hour >= 21 or hour < 5: parts.append("sleepy")
+        return ", ".join(parts) if parts else "content and safe"
 
-        # memory recall — once per hour, patient in queue
+    def feed(self, item: str = "something") -> None:
+        """Called when Loki gives Pucky food directly (e.g. /give apple)."""
+        self._hunger = max(0.0, self._hunger - 0.55)
+        self._eat_flagged = True
+        self._q.submit(
+            [{"role": "system", "content": (
+                f"You are Pucky, a tiny baby. Loki just gave you {item} to eat. "
+                "Say one happy short phrase — 2 to 4 words. Baby talk. Real joy."
+            )}],
+            self._on_reply, priority=1, timeout=20, max_wait=60,
+        )
+
+    def note_activity(self, activity: str, place_id: str) -> None:
+        """Called every tick. Feeds Pucky once when Loki starts eating."""
+        if activity == ACT_EAT:
+            if not self._eat_flagged:
+                self._eat_flagged = True
+                food = _place_food(place_id)
+                self._hunger = max(0.0, self._hunger - 0.35)
+                self._q.submit(
+                    [{"role": "system", "content": (
+                        f"You are Pucky, a tiny baby. Loki is eating {food} and sharing a little with you. "
+                        "Say one happy short phrase — 2 to 4 words. Baby talk."
+                    )}],
+                    self._on_reply, priority=1, timeout=20, max_wait=120,
+                )
+        else:
+            self._eat_flagged = False
+
+    def tick(self, place_id: str, pucky_where: str, hour: int) -> None:
+        now     = time.time()
+        elapsed = now - self._last_tick
+        self._last_tick = now
+
+        # needs decay over time
+        self._hunger = min(1.0, self._hunger + elapsed / (8 * 3600))
+        if pucky_where in ("pocket", "shoulder", "back"):
+            self._lonely = max(0.0, self._lonely - elapsed / (2 * 3600))
+        else:
+            self._lonely = min(1.0, self._lonely + elapsed / (3 * 3600))
+
+        # memory recall — once per hour, very patient in queue
         if now >= self._memory_next:
             self._memory_next = now + random.uniform(3400, 3800)
             mem = self._load_memory()
             if mem:
-                msgs = [{"role": "system", "content": (
-                    "You are Pucky, a tiny baby. These are things Loki told you:\n\n"
-                    f"{mem}\n\n"
-                    "Say ONE word or soft baby sound that feels like a memory. Nothing more."
-                )}]
-                self._q.submit(msgs, self._on_reply, priority=1, timeout=30, max_wait=600)
+                self._q.submit(
+                    [{"role": "system", "content": (
+                        "You are Pucky, a tiny baby. These are things Loki told you:\n\n"
+                        f"{mem}\n\n"
+                        "Say ONE short phrase — 2 to 4 words — that feels like a memory waking up in you."
+                    )}],
+                    self._on_reply, priority=1, timeout=30, max_wait=600,
+                )
 
         if now < self._next:
             return
-        self._next = now + random.uniform(200, 380)
 
-        if random.random() < 0.85:
+        urgency = max(self._hunger, self._lonely)
+        interval = random.uniform(100, 220) if urgency > 0.72 else random.uniform(200, 380)
+        self._next = now + interval
+
+        if random.random() < 0.72:
             sound = random.choice(self.SOUNDS)
             _speak(sound, rate=95, voice="en+f4")
             _write_thought(f"Pucky: '{sound}'", "pucky")
             self.last_said = sound
         else:
-            msgs = [{"role": "system", "content": (
-                f"You are Pucky, a tiny baby in Loki's world. "
-                f"Loki is at {place_id}. You are nearby. "
-                "Say ONE word or very short baby sound — nothing more."
-            )}]
-            self._q.submit(msgs, self._on_reply, priority=1, timeout=25, max_wait=90)
+            state = self._state_desc(hour)
+            self._q.submit(
+                [{"role": "system", "content": (
+                    f"You are Pucky, a tiny baby in Loki's world. "
+                    f"Loki is at {place_id}. You are {pucky_where or 'nearby'}. "
+                    f"You feel: {state}. "
+                    "Say ONE short phrase — 2 to 5 words. Baby talk, real feeling. Nothing else."
+                )}],
+                self._on_reply, priority=1, timeout=25, max_wait=90,
+            )
 
     def _on_reply(self, reply: str) -> None:
-        word = reply.strip().split('\n')[0].split()[0][:20] if reply.strip() else "ba"
-        _speak(word, rate=95, voice="en+f4")
-        _log("pucky", word)
-        _write_thought(f"Pucky: '{word}'", "pucky")
-        self.last_said = word
-        # Loki hears her — occasionally murmurs back (~35% of AI babbles)
+        if not reply.strip():
+            phrase = "ba"
+        else:
+            line   = reply.strip().split('\n')[0].strip('"\'').strip()
+            phrase = " ".join(line.split()[:8])[:50]
+        _speak(phrase, rate=95, voice="en+f4")
+        _log("pucky", phrase)
+        _write_thought(f"Pucky: '{phrase}'", "pucky")
+        self.last_said = phrase
         if self._chat_ref and random.random() < 0.35:
-            self._chat_ref.hear_pucky(word)
+            self._chat_ref.hear_pucky(phrase)
 
 
 class ChatManager:
@@ -1473,6 +1550,15 @@ class LifeScheduler:
         self.message      = msg_map.get(act, act)
         self.activity_end = now + dur
         self.needs.fulfill(act)
+
+        if act == ACT_FORAGE:
+            foods  = _PLACE_FOODS.get(self.place_id, ["wild herbs"])
+            picks  = random.sample(foods, min(len(foods), random.randint(1, 2)))
+            pouch  = self.life.get("pouch", [])
+            pouch  = (pouch + picks)[-5:]   # carry at most 5 items
+            self.life["pouch"] = pouch
+            _write_thought(f"Foraging at {PLACE_NAMES.get(self.place_id,'')} — found {', '.join(picks)}", "forage")
+
         _save_life(self.life, self.needs)
         _log("loki_activity", f"{act} at {self.place_id}")
         _write_thought(f"{self.message} — {PLACE_NAMES.get(self.place_id,'')}", "activity")
@@ -1695,7 +1781,8 @@ def main():
 
         sched.tick()
         loki.set_pose(sched.current_pose)
-        pucky.tick(sched.place_id)
+        pucky.note_activity(sched.activity, sched.place_id)
+        pucky.tick(sched.place_id, loki.pucky_where, hour)
         if chat.poll():
             pass
         chat.tick_typewriter(dt)
@@ -1924,6 +2011,8 @@ def _handle_command(txt: str, sched: LifeScheduler, chat: ChatManager,
         _log("gift", gift)
         _write_thought(f"Iðunn gave {gift}. {result}", "gift")
         _save_life(life, needs)
+        if gift in ("apple", "food", "water", "medicine"):
+            pucky.feed(gift)
         return True
 
     # /carry pucky / /set pucky (down) / /pocket pucky
