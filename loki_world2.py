@@ -2683,7 +2683,6 @@ def _handle_command(txt: str, sched: LifeScheduler, chat: ChatManager,
 
     # /done — end game, resume world
     if lower in ("/done", "/endgame"):
-        global _game_mode, _game_type, _ball_game
         prev       = _game_type
         _game_mode = False
         _game_type = ""
