@@ -2171,6 +2171,7 @@ def main():
 
     hour              = datetime.now().hour
     _last_claude_note = time.time()
+    _last_pucky_check = time.time()   # how often Loki checks on Pucky
 
     running = True
     while running:
@@ -2201,6 +2202,28 @@ def main():
                 priority=2,
                 timeout=90,
             )
+
+        # ── Loki checks on Pucky every 5 minutes ─────────────────────────────
+        # He goes to find her when she needs him — not because he's told to.
+        if (not _game_mode
+                and loki.pucky_where == "none"
+                and sched.activity not in (ACT_SLEEP, ACT_ENCOUNTER, ACT_DEAD)
+                and now - _last_pucky_check >= 300):
+            _last_pucky_check = now
+            fetch_reason = None
+            if pucky._lonely > 0.78:
+                fetch_reason = "she's been alone too long"
+            elif hour >= 20 and pucky._lonely > 0.40:
+                fetch_reason = "it's getting dark"
+            elif sched.activity == ACT_EAT and pucky._hunger > 0.55:
+                fetch_reason = "she's hungry and he's eating"
+            if fetch_reason:
+                found = PLACE_NAMES.get(pucky.place_id, pucky.place_id)
+                loki.set_pucky("pocket")
+                pucky.place_id = sched.place_id
+                msg = f"Loki went to find Pucky at {found} ({fetch_reason})."
+                _write_thought(msg, "loki")
+                _log("loki_fetched_pucky", fetch_reason)
 
         if not _game_mode:
             sched.tick()
