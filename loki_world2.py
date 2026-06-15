@@ -72,6 +72,7 @@ ACT_REST      = "rest"
 ACT_WAKING    = "waking"
 ACT_ENCOUNTER = "encounter"
 ACT_DEAD      = "dead"
+ACT_GAME      = "play_ball"
 
 # ── Ollama ────────────────────────────────────────────────────────────────────
 OLLAMA_URL = "http://localhost:11434/api/chat"
@@ -310,6 +311,7 @@ ACTIVITY_FILLS = {
     ACT_SPAR:     {"esteem": 0.75},
     ACT_FORAGE:   {"esteem": 0.40, "actualization": 0.35},
     ACT_WANDER:   {"actualization": 0.28},
+    ACT_GAME:     {"social": 0.22, "esteem": 0.28},
     "chat":       {"social": 0.35},
 }
 
@@ -1582,6 +1584,9 @@ class LifeScheduler:
             if not self._need("last_spar", 12*3600) and 9 <= hour <= 14: return ACT_SPAR
             return ACT_FORAGE
         if self._need("last_spar", 20*3600) and 9 <= hour <= 12: return ACT_SPAR
+        if (self._need("last_game", 3*3600) and ph > 0.35
+                and 9 <= hour <= 20 and random.random() < 0.12):
+            return ACT_GAME
         if random.random() < 0.3: return ACT_FORAGE
         if random.random() < 0.2: return ACT_REST
         return ACT_WANDER
@@ -1597,6 +1602,7 @@ class LifeScheduler:
             ACT_SPAR:     ("spar",     "training",  random.uniform(45,70)*60),
             ACT_FORAGE:   ("crouch",   None,        random.uniform(20,50)*60),
             ACT_REST:     ("sit",      None,        random.uniform(15,30)*60),
+            ACT_GAME:     ("stand",    None,        random.uniform(20,40)*60),
         }
         if act in pose_map:
             pose, place, dur = pose_map[act]
@@ -1624,12 +1630,16 @@ class LifeScheduler:
             ACT_BATH: "soaking", ACT_SPAR: f"sparring with {self.spar_partner}",
             ACT_FORAGE: "foraging", ACT_REST: "resting",
             ACT_WANDER: f"at {PLACE_NAMES.get(self.place_id,'somewhere')}",
+            ACT_GAME: "playing ball with Pucky",
         }
         if act == ACT_SPAR:
             self.spar_partner = random.choice(SPAR_PARTNERS)
         self.message      = msg_map.get(act, act)
         self.activity_end = now + dur
         self.needs.fulfill(act)
+
+        if act == ACT_GAME:
+            self.life["last_game"] = now
 
         if act == ACT_FORAGE:
             foods  = _PLACE_FOODS.get(self.place_id, ["wild herbs"])
@@ -2162,6 +2172,14 @@ def main():
             loki.set_pose(sched.current_pose)
             pucky.note_activity(sched.activity, sched.place_id)
             pucky.tick(sched.place_id, loki.pucky_where, hour)
+            # scheduler chose to play ball — start the game automatically
+            if sched.activity == ACT_GAME:
+                _game_mode = True
+                _game_type = "ball"
+                _ball_game = BallGame(needs, life)
+                chat.clear_game_mode()
+                _write_thought("Loki decided to play ball with Pucky.", "game")
+                _log("game_start", "ball_auto")
         elif _game_type == "ball" and _ball_game is not None:
             _ball_game.tick(dt)
             loki.set_pose("stand")
@@ -2264,13 +2282,14 @@ def main():
             pygame.draw.line(surf, CLOSE_COL, (CLOSE_RECT.right-_p, CLOSE_RECT.y+_p),  (CLOSE_RECT.x+_p,     CLOSE_RECT.bottom-_p), 2)
             pygame.display.flip()
             if _ball_game.should_end:
-                _game_mode = False
-                _game_type = ""
-                _ball_game = None
+                _game_mode         = False
+                _game_type         = ""
+                _ball_game         = None
                 chat.clear_game_mode()
-                sys_message   = "Too tired to play — time to eat and rest."
-                sys_msg_until = now + 6.0
-                sched.tick(force_wake=True)
+                sched.activity     = ACT_WANDER
+                sched.activity_end = now        # pick next activity immediately
+                sys_message        = "Too tired to play — time to eat and rest."
+                sys_msg_until      = now + 6.0
             continue
 
         # ── normal scene draw ─────────────────────────────────────────────────
@@ -2486,6 +2505,9 @@ def _handle_command(txt: str, sched: LifeScheduler, chat: ChatManager,
         _game_type = ""
         _ball_game = None
         chat.clear_game_mode()
+        if sched.activity == ACT_GAME:
+            sched.activity     = ACT_WANDER
+            sched.activity_end = time.time()
         _write_thought(f"Loki and Iðunn finished their {prev} game.", "game")
         _log("game_end", prev)
         set_sys("Game finished. World resumed.", 3.0)
