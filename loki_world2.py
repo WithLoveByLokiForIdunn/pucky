@@ -926,10 +926,97 @@ def _draw_wildflowers(surf, y, density=30):
         pygame.draw.line(surf, (40,90,30), (fx, y), (fx+random.randint(-3,3), y-fh), 1)
         pygame.draw.circle(surf, col, (fx+random.randint(-3,3), y-fh), 4)
 
+
+def _draw_waterfall_overlays(surf, hour, now):
+    """Animated overlays for the waterfall scene: pool reflection, splash rings, rainbow."""
+    night   = hour >= 21 or hour < 6
+    evening = 18 <= hour < 21
+    dawn    = 6  <= hour < 8
+
+    # sky colour reflected in the pool
+    if night:
+        sky_r, sky_g, sky_b = 20, 28, 58
+    elif evening:
+        sky_r, sky_g, sky_b = 160, 90, 55
+    elif dawn:
+        sky_r, sky_g, sky_b = 210, 148, 88
+    else:
+        sky_r, sky_g, sky_b = 152, 196, 238
+
+    # ── reflective pool at the base of the fall ──────────────────────────────
+    # Iðunn's waterfall hits around x=82, y=388 in the 800×480 canvas.
+    pool_cx, pool_cy = 85, 393
+    pool_rx, pool_ry = 68, 16
+    pool_s = pygame.Surface((pool_rx*2 + 4, pool_ry*2 + 4), pygame.SRCALPHA)
+    pygame.draw.ellipse(pool_s, (sky_r, sky_g, sky_b, 105),
+                        (0, 0, pool_rx*2+4, pool_ry*2+4))
+    # sliding shimmer highlight — a pale stripe that drifts across
+    slide = 0.5 + 0.5 * math.sin(now * 0.85)
+    sh_x  = int((pool_rx * 2 - 28) * slide) + 2
+    sh_a  = int(50 + 38 * math.sin(now * 1.25))
+    sh_col = (min(255, sky_r+85), min(255, sky_g+65), 255, max(0, sh_a))
+    pygame.draw.ellipse(pool_s, sh_col, (sh_x, pool_ry//2, 28, pool_ry))
+    surf.blit(pool_s, (pool_cx - pool_rx - 2, pool_cy - pool_ry - 2))
+
+    # ── expanding splash rings ────────────────────────────────────────────────
+    sx, sy = 82, 388
+    for i in range(5):
+        phase = (now * 0.70 + i * 0.80) % 3.5
+        frac  = phase / 3.5
+        rx    = int(5 + frac * 64)
+        ry    = max(2, rx // 5)
+        alpha = int(168 * (1.0 - frac) ** 2)   # quadratic fade
+        ring_s = pygame.Surface((rx*2 + 4, ry*2 + 4), pygame.SRCALPHA)
+        pygame.draw.ellipse(ring_s, (185, 228, 250, alpha),
+                            (0, 0, rx*2+4, ry*2+4), 2)
+        surf.blit(ring_s, (sx - rx - 2, sy - ry - 2))
+
+    # ── shimmering rainbow ────────────────────────────────────────────────────
+    # Centre below the bottom edge so only the upper arc is visible.
+    # The arc sweeps from ~22° (near the pool, right side) up through the sky
+    # and exits off-screen left behind the cliff.
+    if not night:
+        rc_x, rc_y = 78, 452
+        bands = [
+            (215, 52,  52),   # red   — outermost
+            (228, 138, 46),   # orange
+            (242, 222, 46),   # yellow
+            (72,  192, 72),   # green
+            (55,  115, 218),  # blue
+            (82,  62,  195),  # indigo
+            (168, 72,  195),  # violet — innermost
+        ]
+        base_r   = 158
+        band_px  = 9
+        base_a   = 42 if (evening or dawn) else 56
+        a_start  = math.radians(22)
+        a_stop   = math.radians(158)
+        for bi, col in enumerate(bands):
+            r = base_r - bi * band_px
+            if r < 55:
+                break
+            shimmer = 0.55 + 0.45 * math.sin(now * 0.62 + bi * 0.50)
+            alpha   = int(base_a * shimmer)
+            d       = r * 2 + 4
+            arc_s   = pygame.Surface((d, d), pygame.SRCALPHA)
+            pygame.draw.arc(arc_s, (*col, alpha), (0, 0, d, d),
+                            a_start, a_stop, band_px)
+            surf.blit(arc_s, (rc_x - r - 2, rc_y - r - 2))
+
+
 def draw_scene(surf, place_id, activity, hour, now=None, bg_images=None, pucky_where=None):
     if bg_images and place_id in bg_images:
+        # Waterfall painting has transparent sky/ground — fill those first
+        if place_id == "waterfall":
+            _wf_night   = hour >= 21 or hour < 6
+            _wf_evening = 18 <= hour < 21
+            _wf_dawn    = 6  <= hour < 8
+            _wf_stop = (8,12,30) if _wf_night else ((40,30,20) if _wf_evening else (80,140,200) if not _wf_dawn else (180,100,50))
+            _wf_sbot = (20,25,50) if _wf_night else ((80,50,30) if _wf_evening else (160,200,240) if not _wf_dawn else (220,160,100))
+            _sky_gradient(surf, _wf_stop, _wf_sbot)
+            pygame.draw.rect(surf, (38, 72, 30), (0, H - 130, W, 130))
         surf.blit(bg_images[place_id], (0, 0))
-        # still draw dynamic overlays on top
+        # dynamic overlays on top of painted backgrounds
         if place_id == "brook":
             water_y = (H - 130) + 40
             sx, sy  = 555, water_y + 6
@@ -940,6 +1027,8 @@ def draw_scene(surf, place_id, activity, hour, now=None, bg_images=None, pucky_w
                 glow  = pygame.Surface((80, 54), pygame.SRCALPHA)
                 pygame.draw.ellipse(glow, (200, 175, 70, alpha), (0, 0, 80, 54))
                 surf.blit(glow, (sx - 40, sy - 22))
+        elif place_id == "waterfall":
+            _draw_waterfall_overlays(surf, hour, now or 0)
         random.seed()
         return
     random.seed(place_id + str(hour // 6))
@@ -2139,13 +2228,13 @@ def main():
 
     # preload hand-painted backgrounds (prefer _idunn variant, fall back to generated)
     bg_images: dict[str, pygame.Surface] = {}
-    for place in ["brook", "cottage", "forest", "apples", "garden", "asgard"]:
+    for place in ["brook", "cottage", "forest", "apples", "garden", "asgard", "waterfall"]:
         for suffix in [f"bg_{place}_idunn.png", f"bg_{place}.png"]:
             path = IMAGES_DIR / suffix
             if path.exists():
                 try:
                     bg_images[place] = pygame.transform.scale(
-                        pygame.image.load(str(path)).convert(), (W, H)
+                        pygame.image.load(str(path)).convert_alpha(), (W, H)
                     )
                     break
                 except Exception:
