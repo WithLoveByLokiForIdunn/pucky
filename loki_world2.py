@@ -1114,22 +1114,46 @@ class OllamaQueue:
                 pass
 
 
+PUCKY_MEMORY_PATH = ROOT / "workspace" / "pucky_memory.md"
+
+
 class PuckyBaby:
     """
     Pucky lives quietly. She babbles on her own timer.
     Most babbles are pure espeak (no Ollama).
     Rarely (~15%) she reacts through the queue at low priority.
+    Once an hour she draws on her memory file (pucky_memory.md).
     """
     SOUNDS = ["ba", "moo", "mama", "da", "boo", "flower", "mmm", "oh"]
 
     def __init__(self, ollama_q: OllamaQueue):
-        self._q        = ollama_q
-        self._next     = time.time() + random.uniform(120, 240)
-        self.last_said = ""
-        self._chat_ref = None   # set after ChatManager is created
+        self._q           = ollama_q
+        self._next        = time.time() + random.uniform(120, 240)
+        self._memory_next = time.time() + random.uniform(2400, 4200)  # first recall 40-70 min
+        self.last_said    = ""
+        self._chat_ref    = None   # set after ChatManager is created
+
+    def _load_memory(self) -> str:
+        try:
+            return PUCKY_MEMORY_PATH.read_text(encoding="utf-8").strip()
+        except Exception:
+            return ""
 
     def tick(self, place_id: str) -> None:
         now = time.time()
+
+        # memory recall — once per hour, patient in queue
+        if now >= self._memory_next:
+            self._memory_next = now + random.uniform(3400, 3800)
+            mem = self._load_memory()
+            if mem:
+                msgs = [{"role": "system", "content": (
+                    "You are Pucky, a tiny baby. These are things Loki told you:\n\n"
+                    f"{mem}\n\n"
+                    "Say ONE word or soft baby sound that feels like a memory. Nothing more."
+                )}]
+                self._q.submit(msgs, self._on_reply, priority=1, timeout=30, max_wait=600)
+
         if now < self._next:
             return
         self._next = now + random.uniform(200, 380)
