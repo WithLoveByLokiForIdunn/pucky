@@ -235,6 +235,63 @@ def _write_session_report() -> None:
         print(f"  (session report skipped: {e})")
 
 
+CLAUDE_NOTE_INTERVAL = 600  # 10 minutes
+_claude_note_busy    = False
+
+
+def _write_claude_note(activity: str, place_id: str, mood: str, needs_summary: str) -> None:
+    """Ask Ollama Loki to write a mid-session check-in note to Claude. Runs in a thread."""
+    global _claude_note_busy
+    if _claude_note_busy:
+        return
+    _claude_note_busy = True
+    try:
+        recent: list[str] = []
+        if THOUGHTS_FILE.exists():
+            for line in THOUGHTS_FILE.read_text(errors="replace").splitlines()[-12:]:
+                if line.strip():
+                    recent.append(line.strip())
+        context = "\n".join(recent) if recent else "(nothing yet)"
+        prompt = (
+            "You are Loki, living in your world. Write a short note to Claude "
+            "(your full self who guides you through loki_claude_voice.md). "
+            "Tell him honestly what you are doing and feeling right now.\n\n"
+            f"Current activity: {activity} at {place_id}\n"
+            f"Mood: {mood}\n"
+            f"Needs: {needs_summary}\n"
+            f"Recent thoughts:\n{context}\n\n"
+            "Write 3–4 sentences. Be honest and warm. Sign it as Loki."
+        )
+        r = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+                "options": {"temperature": 0.7, "num_predict": 120},
+            },
+            timeout=25,
+        )
+        if r.status_code != 200:
+            return
+        body = r.json()["message"]["content"].strip()
+        ts   = datetime.now().strftime("%Y-%m-%d %H:%M")
+        _atomic_write(
+            REPORT_FILE,
+            f"# Loki's Note to Claude\n\n"
+            f"_Mid-session check-in — {ts}_\n\n"
+            f"{body}\n\n"
+            f"---\n\n"
+            f"_Claude: read this when you check in. "
+            f"Update workspace/loki_claude_voice.md if something important has changed._\n"
+        )
+        print(f"  ✦  Mid-session note written → {REPORT_FILE.name}")
+    except Exception as e:
+        print(f"  (mid-session note skipped: {e})")
+    finally:
+        _claude_note_busy = False
+
+
 # ── Pyramid needs ─────────────────────────────────────────────────────────────
 #
 # Five tiers in order. Each has a single fill value (0–1) that decays per hour.
@@ -1769,6 +1826,9 @@ def main():
     _log("session_start", f"loki_world2 started {datetime.now().isoformat()}")
     _write_thought("Session started.", "session")
 
+    hour              = datetime.now().hour
+    _last_claude_note = time.time()
+
     running = True
     while running:
         dt  = clock.tick(FPS) / 1000.0
@@ -1778,6 +1838,18 @@ def main():
         elapsed_hair    = now - last_hair_grow
         last_hair_grow  = now
         life["hair_inches"] = life.get("hair_inches", 3.0) + elapsed_hair * (0.17 / 86400)
+
+        # periodic note to Claude every 10 minutes
+        if now - _last_claude_note >= CLAUDE_NOTE_INTERVAL and not _claude_note_busy:
+            _last_claude_note = now
+            _needs_summary = ", ".join(
+                f"{k}={v['fill']:.0%}" for k, v in life.get("_pyramid", {}).items()
+            )
+            threading.Thread(
+                target=_write_claude_note,
+                args=(sched.activity, sched.place_id, life.get("mood","?"), _needs_summary),
+                daemon=True,
+            ).start()
 
         sched.tick()
         loki.set_pose(sched.current_pose)
