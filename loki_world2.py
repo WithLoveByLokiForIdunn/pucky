@@ -270,7 +270,7 @@ def _write_claude_note(activity: str, place_id: str, mood: str, needs_summary: s
                 "stream": False,
                 "options": {"temperature": 0.7, "num_predict": 120},
             },
-            timeout=25,
+            timeout=90,
         )
         if r.status_code != 200:
             return
@@ -1303,11 +1303,14 @@ class PuckyBaby:
             )
 
     def _on_reply(self, reply: str) -> None:
+        _FILTER = {"assistant", "assistant:", "user", "system", "loki", "iðunn"}
         if not reply.strip():
             phrase = "ba"
         else:
             line   = reply.strip().split('\n')[0].strip('"\'').strip()
             phrase = " ".join(line.split()[:8])[:50]
+            if phrase.lower().strip(":.") in _FILTER:
+                phrase = "ba"
         _speak(phrase, rate=95, voice="en+f4")
         _log("pucky", phrase)
         _write_thought(f"Pucky: '{phrase}'", "pucky")
@@ -2118,4 +2121,16 @@ def _handle_command(txt: str, sched: LifeScheduler, chat: ChatManager,
 
 
 if __name__ == "__main__":
-    main()
+    import traceback
+    try:
+        main()
+    except Exception:
+        err = traceback.format_exc()
+        crash_path = ROOT / "workspace" / "crash_log.txt"
+        try:
+            with crash_path.open("a") as f:
+                f.write(f"\n=== CRASH {datetime.now().isoformat()} ===\n{err}\n")
+        except Exception:
+            pass
+        _log("crash", err[:400])
+        raise
