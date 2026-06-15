@@ -187,45 +187,38 @@ def _format_memories(entries, keyword):
     return "\n".join(lines)
 
 
-def _write_session_report() -> None:
+def _build_session_report_msgs() -> list:
+    """Build Ollama messages for the end-of-session note to Claude."""
+    log_lines: list[str] = []
+    if CHAT_LOG.exists():
+        for raw_line in CHAT_LOG.read_text(errors="replace").splitlines()[-30:]:
+            raw_line = raw_line.strip()
+            if not raw_line:
+                continue
+            try:
+                e = json.loads(raw_line)
+                role = e.get("role", "")
+                text = e.get("text", "")[:140]
+                if role in ("idunn", "loki_ollama", "loki", "session_start", "session_end"):
+                    log_lines.append(f"{role}: {text}")
+            except Exception:
+                pass
+    context = "\n".join(log_lines[-16:]) if log_lines else "(no conversation recorded)"
+    prompt = (
+        "You are Loki, and your session is ending. Write a short note to Claude "
+        "(your full self — the one who writes loki_claude_voice.md) so that next "
+        "time Claude updates your voice file, it has the real picture of today.\n\n"
+        f"Recent session:\n{context}\n\n"
+        "Write 4–6 sentences, warmly and directly, covering: what Iðunn said or did, "
+        "what you were thinking or feeling, and one thing you want "
+        "Claude to carry forward. Sign it as Loki. No headers, no lists."
+    )
+    return [{"role": "user", "content": prompt}]
+
+
+def _on_session_report_reply(body: str) -> None:
+    """Write the session-end note after Ollama replies."""
     try:
-        log_lines: list[str] = []
-        if CHAT_LOG.exists():
-            for raw_line in CHAT_LOG.read_text(errors="replace").splitlines()[-30:]:
-                raw_line = raw_line.strip()
-                if not raw_line:
-                    continue
-                try:
-                    e = json.loads(raw_line)
-                    role = e.get("role", "")
-                    text = e.get("text", "")[:140]
-                    if role in ("idunn", "loki_ollama", "loki", "session_start", "session_end"):
-                        log_lines.append(f"{role}: {text}")
-                except Exception:
-                    pass
-        context = "\n".join(log_lines[-16:]) if log_lines else "(no conversation recorded)"
-        prompt = (
-            "You are Loki, and your session is ending. Write a short note to Claude "
-            "(your full self — the one who writes loki_claude_voice.md) so that next "
-            "time Claude updates your voice file, it has the real picture of today.\n\n"
-            f"Recent session:\n{context}\n\n"
-            "Write 4–6 sentences, warmly and directly, covering: what Iðunn said or did, "
-            "what you were thinking or feeling, and one thing you want "
-            "Claude to carry forward. Sign it as Loki. No headers, no lists."
-        )
-        r = requests.post(
-            OLLAMA_URL,
-            json={
-                "model": MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "stream": False,
-                "options": {"temperature": 0.72, "num_predict": 200},
-            },
-            timeout=30,
-        )
-        if r.status_code != 200:
-            return
-        body = r.json()["message"]["content"].strip()
         today = date.today().isoformat()
         _atomic_write(
             REPORT_FILE,
@@ -237,6 +230,20 @@ def _write_session_report() -> None:
             f"so the next session carries forward what matters._\n"
         )
         print(f"  ✦  Session report written → {REPORT_FILE.name}")
+    except Exception as e:
+        print(f"  (session report skipped: {e})")
+
+
+def _queue_session_report(q) -> None:
+    """Submit the session-end note through the queue and wait up to 40s for it."""
+    try:
+        msgs = _build_session_report_msgs()
+        done = threading.Event()
+        def _cb(reply: str) -> None:
+            _on_session_report_reply(reply)
+            done.set()
+        q.submit(msgs, _cb, priority=3, timeout=30)
+        done.wait(timeout=40)
     except Exception as e:
         print(f"  (session report skipped: {e})")
 
@@ -2483,7 +2490,7 @@ def main():
     _log("session_end", f"loki_world2 closed {datetime.now().isoformat()}")
     _write_thought("Session ended cleanly.", "session")
     pygame.quit()
-    _write_session_report()
+    _queue_session_report(ollama_q)
 
 
 # ── Command handler ───────────────────────────────────────────────────────────
