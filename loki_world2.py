@@ -936,8 +936,8 @@ def _draw_cottage_overlays(surf, W, H, hour, now):
 
     # ── Fire inside the stone fireplace arch ──────────────────────────
     # Dark arch firebox mouth (annotation): centre≈(620,310) in 800×480 PNG
-    fx_c = int(W * 620/800)
-    fy_b = int(H * 310/480)
+    fx_c = int(W * 620/800) + 30
+    fy_b = int(H * 310/480) - 40
     for i in range(7):
         ft   = t*2.1 + i*0.75
         fl_x = fx_c + int(math.sin(ft)*16)
@@ -970,9 +970,9 @@ def _draw_cottage_overlays(surf, W, H, hour, now):
     # ── Books on the wooden shelves ───────────────────────────────────
     # Top shelf: Memory (blue) + Story (red); second shelf: Canvas (green)
     _book_data = [
-        ((75,105,168),(50, 75,138), int(W*432/800), int(H* 73/480), "Mem"),
-        ((158, 65, 58),(125, 45, 42), int(W*460/800), int(H* 73/480), "Sto"),
-        ((58, 118, 62),( 40, 85, 44), int(W*432/800), int(H*135/480), "Ske"),
+        ((75,105,168),(50, 75,138), int(W*432/800)+20, int(H* 73/480), "Mem"),
+        ((158, 65, 58),(125, 45, 42), int(W*460/800)+20, int(H* 73/480), "Sto"),
+        ((58, 118, 62),( 40, 85, 44), int(W*432/800)+20, int(H*135/480), "Ske"),
     ]
     _bw = int(W*24/800); _bh = int(H*44/480)
     try:

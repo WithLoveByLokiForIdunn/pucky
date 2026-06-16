@@ -983,8 +983,8 @@ class CottageView:
 
         # ── Fire inside the stone fireplace arch ──────────────────────
         # Dark arch firebox mouth (annotation): centre≈(620,310) in 800×480 PNG
-        fx_c = int(W * 620/800)
-        fy_b = int(H * 310/480)
+        fx_c = int(W * 620/800) + 30
+        fy_b = int(H * 310/480) - 40
         for i in range(7):
             ft   = t*2.1 + i*0.75
             fl_x = fx_c + int(math.sin(ft)*16)
@@ -1023,9 +1023,9 @@ class CottageView:
         # Top shelf: Memory (red) + Story (green); second shelf: Canvas (blue)
         bw2 = int(W*24/800);  bh2 = int(H*44/480)
         for bname, blabel, (bc,bc2), bx2, by2 in [
-            ("memory","Mem",BOOK_COLS["memory"], int(W*432/800), int(H* 73/480)),
-            ("story", "Sto",BOOK_COLS["story"],  int(W*460/800), int(H* 73/480)),
-            ("canvas","Ske",BOOK_COLS["canvas"],  int(W*432/800), int(H*135/480)),
+            ("memory","Mem",BOOK_COLS["memory"], int(W*432/800)+20, int(H* 73/480)),
+            ("story", "Sto",BOOK_COLS["story"],  int(W*460/800)+20, int(H* 73/480)),
+            ("canvas","Ske",BOOK_COLS["canvas"],  int(W*432/800)+20, int(H*135/480)),
         ]:
             pygame.draw.rect(surf,bc, (bx2,by2,bw2,bh2),border_radius=2)
             pygame.draw.rect(surf,bc2,(bx2,by2,bw2,bh2),1,border_radius=2)
