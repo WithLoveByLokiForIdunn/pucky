@@ -1077,8 +1077,17 @@ def _draw_waterfall_overlays(surf, hour, now):
 
 def draw_scene(surf, place_id, activity, hour, now=None, bg_images=None, pucky_where=None):
     if bg_images and place_id in bg_images:
-        # Waterfall painting has transparent sky/ground — fill those first
-        if place_id == "waterfall":
+        # Cottage and waterfall paintings have transparent areas — fill sky/ground first
+        if place_id == "cottage":
+            if hour >= 21 or hour < 6:
+                _sky = (8, 12, 30);    _gnd = (38, 52, 32)
+            elif 7 <= hour < 19:
+                _sky = (80, 140, 200); _gnd = (88, 138, 62)
+            else:
+                _sky = (180, 100, 50); _gnd = (80, 90, 48)
+            surf.fill(_sky)
+            pygame.draw.rect(surf, _gnd, (0, int(H * 0.55), W, H - int(H * 0.55)))
+        elif place_id == "waterfall":
             _wf_night   = hour >= 21 or hour < 6
             _wf_evening = 18 <= hour < 21
             _wf_dawn    = 6  <= hour < 8
