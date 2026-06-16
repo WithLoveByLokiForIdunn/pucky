@@ -41,37 +41,52 @@ WIN_H = int(os.environ.get("PUCKY_WIN_H", 640))
 
 PHONEMES = [
     # (display_name, vowel_key, kind)
-    ("aa",    "a",  "vowel"),
-    ("eh",    "e",  "vowel"),
-    ("ii",    "i",  "vowel"),
-    ("oh",    "o",  "vowel"),
-    ("uu",    "u",  "vowel"),
-    ("ma",    "ma", "warm"),
-    ("na",    "na", "warm"),
-    ("la",    "la", "warm"),
-    ("hum",   "m",  "warm"),
-    ("h",     "h",  "cons"),
-    ("ss",    "s",  "cons"),
-    ("ff",    "f",  "cons"),
-    ("kk",    "k",  "cons"),
-    ("tt",    "t",  "cons"),
-    ("buh",   "b",  "cons"),
-    ("duh",   "d",  "cons"),
+    ("aa",    "a",   "vowel"),
+    ("eh",    "e",   "vowel"),
+    ("ii",    "i",   "vowel"),
+    ("oh",    "o",   "vowel"),
+    ("uu",    "u",   "vowel"),
+    ("uh",    "uh",  "vowel"),
+    ("ih",    "ih",  "vowel"),
+    ("ah",    "ah",  "vowel"),
+    ("ay",    "ay",  "vowel"),
+    ("er",    "er",  "vowel"),
+    ("wa",    "wa",  "warm"),
+    ("ma",    "ma",  "warm"),
+    ("na",    "na",  "warm"),
+    ("la",    "la",  "warm"),
+    ("hum",   "m",   "warm"),
+    ("h",     "h",   "cons"),
+    ("ss",    "s",   "cons"),
+    ("ff",    "f",   "cons"),
+    ("kk",    "k",   "cons"),
+    ("cah",   "cah", "cons"),
+    ("tt",    "t",   "cons"),
+    ("buh",   "b",   "cons"),
+    ("puh",   "p",   "cons"),
+    ("duh",   "d",   "cons"),
+    ("guh",   "g",   "cons"),
 ]
 
 # vowel key → sample file stem (mirrors bmo_voice.py VOWEL_MAP)
 VOWEL_MAP = {
     "a": "aa", "e": "eh", "i": "ii", "o": "oh", "u": "uu",
+    "uh": "uh", "ih": "ih", "ah": "ah", "ay": "ay", "er": "er",
+    "wa": "wa",
     "m": "hum", "h": "breath", "s": "ss", "f": "ff",
-    "k": "kk",  "t": "tt",    "b": "buh", "d": "duh",
+    "k": "kk",  "cah": "cah", "t": "tt",
+    "b": "buh", "p": "puh", "d": "duh", "g": "guh",
     "ma": "ma", "na": "na", "la": "la",
 }
 
 SAMPLE_BASE = {
     "aa": 62, "eh": 62, "ii": 64, "oh": 64, "uu": 64,
+    "uh": 62, "ih": 62, "ah": 62, "ay": 62, "er": 62,
+    "wa": 62,
     "ma": 61, "na": 62, "la": 63, "hum": 66,
     "breath": None, "ss": None, "ff": None,
-    "kk":    None,  "tt": None,  "buh": None, "duh": None,
+    "kk": None, "cah": None, "tt": None,
+    "buh": None, "puh": None, "duh": None, "guh": None,
 }
 
 # ── Colours ───────────────────────────────────────────────────────────────────
@@ -319,8 +334,8 @@ class VoiceBuilder:
 
     # Layout constants
     PALETTE_Y  = 45
-    PALETTE_H  = 100
-    SEQ_Y      = 150
+    PALETTE_H  = 120
+    SEQ_Y      = 172
     SEQ_H      = CARD_H + 20
     CTRL_Y     = SEQ_Y + SEQ_H + 8
     CTRL_H     = 90
@@ -358,10 +373,9 @@ class VoiceBuilder:
     # ─── Palette ──────────────────────────────────────────────────────────────
 
     def _build_palette(self):
-        """Build rects for all phoneme buttons in two rows."""
-        cols = 8
+        cols = 9
         btn_w = WIN_W // cols
-        btn_h = 44
+        btn_h = 38
         self._pal_rects = []
         for i, ph in enumerate(PHONEMES):
             row = i // cols
