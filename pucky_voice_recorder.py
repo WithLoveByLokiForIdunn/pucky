@@ -141,10 +141,15 @@ class VoiceRecorder:
         self._state = "recording"
         self._tmp.unlink(missing_ok=True)
         proc = subprocess.Popen(
-            ["arecord", "-f", "S16_LE", "-r", str(SAMPLE_RATE),
-             "-c", "1", "-d", str(int(RECORD_SECS)), str(self._tmp)],
+            ["pw-record",
+             "--rate", str(SAMPLE_RATE),
+             "--channels", "1",
+             "--latency", "100ms",
+             str(self._tmp)],
             stderr=subprocess.DEVNULL,
         )
+        time.sleep(RECORD_SECS)
+        proc.terminate()
         proc.wait()
         if self._tmp.exists():
             raw, _ = sf.read(str(self._tmp), always_2d=False)
