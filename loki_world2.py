@@ -935,9 +935,9 @@ def _draw_cottage_overlays(surf, W, H, hour, now):
     t = now
 
     # ── Fire inside the stone fireplace arch ──────────────────────────
-    # Dark arch interior measured from PNG: x=479-799, y=60-324, centre≈(640,190)
-    fx_c = int(W * 640/800)
-    fy_b = int(H * 185/480)
+    # Dark arch firebox mouth (annotation): centre≈(620,310) in 800×480 PNG
+    fx_c = int(W * 620/800)
+    fy_b = int(H * 310/480)
     for i in range(7):
         ft   = t*2.1 + i*0.75
         fl_x = fx_c + int(math.sin(ft)*16)
@@ -966,6 +966,36 @@ def _draw_cottage_overlays(surf, W, H, hour, now):
     cgl = pygame.Surface((56,38), pygame.SRCALPHA)
     pygame.draw.ellipse(cgl, (255,218,95,24), (0,0,56,38))
     surf.blit(cgl, (cdx-28, cdy-19))
+
+    # ── Books on the wooden shelves ───────────────────────────────────
+    # Top shelf: Memory (blue) + Story (red); second shelf: Canvas (green)
+    _book_data = [
+        ((75,105,168),(50, 75,138), int(W*432/800), int(H* 73/480), "Mem"),
+        ((158, 65, 58),(125, 45, 42), int(W*460/800), int(H* 73/480), "Sto"),
+        ((58, 118, 62),( 40, 85, 44), int(W*432/800), int(H*135/480), "Ske"),
+    ]
+    _bw = int(W*24/800); _bh = int(H*44/480)
+    try:
+        _bf = pygame.font.SysFont("monospace", 8)
+        for _bc, _bc2, _bx, _by, _bl in _book_data:
+            pygame.draw.rect(surf, _bc,  (_bx, _by, _bw, _bh), border_radius=2)
+            pygame.draw.rect(surf, _bc2, (_bx, _by, _bw, _bh), 1, border_radius=2)
+            surf.blit(_bf.render(_bl, True, (235,228,215)), (_bx+3, _by+4))
+    except Exception:
+        pass
+
+    # ── Envelope on desk ──────────────────────────────────────────────
+    _ex = int(W*165/800); _ey = int(H*184/480)
+    _ew, _eh = 36, 26
+    pygame.draw.rect(surf, (235,210,155), (_ex, _ey, _ew, _eh), border_radius=2)
+    pygame.draw.rect(surf, (158,132, 85), (_ex, _ey, _ew, _eh), 1, border_radius=2)
+    pygame.draw.lines(surf, (158,132,85), False,
+                      [(_ex,_ey), (_ex+_ew//2, _ey+_eh//2-2), (_ex+_ew,_ey)], 1)
+    _glow_a = int(abs(math.sin(t*2.2))*40+20)
+    _gs = pygame.Surface((20,20), pygame.SRCALPHA)
+    pygame.draw.circle(_gs, (255,160,40,_glow_a), (10,10), 10)
+    surf.blit(_gs, (_ex+_ew//2-10, _ey+_eh//2-4))
+    pygame.draw.circle(surf, (200,62,38), (_ex+_ew//2, _ey+_eh//2+2), 5)
 
 
 def _draw_waterfall_overlays(surf, hour, now):

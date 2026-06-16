@@ -982,10 +982,9 @@ class CottageView:
         import pygame, datetime as _dt
 
         # ── Fire inside the stone fireplace arch ──────────────────────
-        # Dark arch interior measured from PNG: x=479-799, y=60-324, centre≈(640,190)
-        # fy_b is the grate/log level — placed in the middle of the dark interior
-        fx_c = int(W * 640/800)
-        fy_b = int(H * 185/480)
+        # Dark arch firebox mouth (annotation): centre≈(620,310) in 800×480 PNG
+        fx_c = int(W * 620/800)
+        fy_b = int(H * 310/480)
         for i in range(7):
             ft   = t*2.1 + i*0.75
             fl_x = fx_c + int(math.sin(ft)*16)
