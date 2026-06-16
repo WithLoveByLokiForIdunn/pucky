@@ -1,0 +1,14 @@
+# Encounter Ideas
+# ────────────────
+# Write anything here — a being, a moment, a feeling you want to find in the wilds.
+# Loki will read this and build it.
+#
+# Format (loose — just enough so I know what you mean):
+#   name: what you want to call it
+#   looks like: (I'll ask you to draw it)
+#   feels like: shy / wise / playful / wary / gentle / strange
+#   what it says: one line if you have one
+#   what happens: speak / offer / run / sing / riddle / gift
+#
+# ────────────────────────────────────────────────────────
+

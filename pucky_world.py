@@ -54,6 +54,13 @@ except ImportError:
     _melody = None
     _MELODY_AVAILABLE = False
 
+try:
+    from pucky_encounter import EncounterScene, ZONE_BEINGS
+    _ENCOUNTER_AVAILABLE = True
+except ImportError:
+    EncounterScene = None
+    _ENCOUNTER_AVAILABLE = False
+
 # ── Tile types ────────────────────────────────────────────────────────────────
 GRASS       = 0
 PATH        = 1
@@ -1830,6 +1837,9 @@ def run_pygame():
         inv_loki    = None
         inv_idunn   = None
 
+    # Encounter scene (wilds zoom-in)
+    encounter = EncounterScene(WIN_W, WIN_H) if _ENCOUNTER_AVAILABLE else None
+
     # Zone transition state
     _zone_transitioning = [False]   # True while fading in/out for zone swap
     _zone_fade          = [0.0]     # 0→1 fade to black; then swap; then 1→0 fade in
@@ -2395,6 +2405,11 @@ def run_pygame():
                     cot_fade     = 0.0
                 continue
 
+            # Route events to encounter scene when active
+            if encounter and encounter.active:
+                encounter.handle_event(event)
+                continue
+
             if event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_ESCAPE, pygame.K_q):
                     running = False
@@ -2532,6 +2547,8 @@ def run_pygame():
                             _pucky_saved_pos[0] = None
                         pucky.bubble_text = "you're back! ♡"
                         pucky.bubble_life = 6.0
+                    if encounter:
+                        encounter.reset_zone()
                     _zone_phase[0] = "in"
             else:
                 _zone_fade[0] = max(0.0, _zone_fade[0] - dt * 2.0)
@@ -2591,6 +2608,13 @@ def run_pygame():
         if zone_mgr is None or zone_mgr.current_name == "home":
             pucky.step(dt)
         orb.step(pucky, dt, idunn)
+        if (encounter and zone_mgr
+                and zone_mgr.current_name != "home"
+                and not encounter.active
+                and not _zone_transitioning[0]):
+            encounter.check_trigger(zone_mgr.current_name, idunn.gx, idunn.gy)
+        if encounter:
+            encounter.update(dt)
         idunn.present = (time.time() - _idunn_last_active[0]) < 300.0
         idunn.step(dt, pucky, orb)
         for a in animals:
@@ -2717,6 +2741,8 @@ def run_pygame():
 
             screen.blit(vignette_surf, (0, 0))
             draw_hud(screen, pucky.state, pucky)
+            if encounter:
+                encounter.draw(screen)
 
             # Mic listening dot
             if _world_ears[0] is not None:
