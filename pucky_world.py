@@ -1835,6 +1835,7 @@ def run_pygame():
     _zone_fade          = [0.0]     # 0→1 fade to black; then swap; then 1→0 fade in
     _zone_phase         = ["out"]   # "out" = fading to black; "in" = fading back in
     _zone_gate          = [None]    # the gate being entered
+    _pucky_saved_pos    = [None]    # Pucky's home position while Iðunn is away
     _last_cal_tick      = [0.0]
 
     # Pebble card overlay state
@@ -2512,14 +2513,25 @@ def run_pygame():
             if _zone_phase[0] == "out":
                 _zone_fade[0] = min(1.0, _zone_fade[0] + dt * 2.0)
                 if _zone_fade[0] >= 1.0:
-                    # Swap zone map and reposition characters
-                    arr_x, arr_y = zone_mgr.apply_transition(WORLD_MAP, WALKABLE)
-                    orb.gx  = orb.tx  = arr_x
-                    orb.gy  = orb.ty  = arr_y
+                    _leaving_home = (zone_mgr.current_name == "home")
+                    arr_x, arr_y  = zone_mgr.apply_transition(WORLD_MAP, WALKABLE)
+                    orb.gx   = orb.tx   = arr_x
+                    orb.gy   = orb.ty   = arr_y
                     idunn.gx = idunn.tx = arr_x + 0.5
                     idunn.gy = idunn.ty = arr_y + 0.5
-                    pucky.gx = pucky.tx = 9.5   # Pucky stays at a safe centre
-                    pucky.gy = pucky.ty = 9.5
+                    if _leaving_home:
+                        # Pucky stays home — save her spot, give her a farewell bubble
+                        _pucky_saved_pos[0] = (pucky.gx, pucky.gy)
+                        pucky.bubble_text = "be careful out there..."
+                        pucky.bubble_life = 7.0
+                    else:
+                        # Returning home — put Pucky back where she was
+                        if _pucky_saved_pos[0]:
+                            pucky.gx = pucky.tx = _pucky_saved_pos[0][0]
+                            pucky.gy = pucky.ty = _pucky_saved_pos[0][1]
+                            _pucky_saved_pos[0] = None
+                        pucky.bubble_text = "you're back! ♡"
+                        pucky.bubble_life = 6.0
                     _zone_phase[0] = "in"
             else:
                 _zone_fade[0] = max(0.0, _zone_fade[0] - dt * 2.0)
@@ -2576,7 +2588,8 @@ def run_pygame():
         if in_cottage:
             cottage.update(dt)
 
-        pucky.step(dt)
+        if zone_mgr is None or zone_mgr.current_name == "home":
+            pucky.step(dt)
         orb.step(pucky, dt, idunn)
         idunn.present = (time.time() - _idunn_last_active[0]) < 300.0
         idunn.step(dt, pucky, orb)
@@ -2683,7 +2696,8 @@ def run_pygame():
                 sprites.append(("animal", a.gx + a.gy, a))
             sprites.append(("orb",   orb.gx   + orb.gy,   None))
             sprites.append(("idunn", idunn.gx + idunn.gy, None))
-            sprites.append(("pucky", pucky.gx + pucky.gy, None))
+            if zone_mgr is None or zone_mgr.current_name == "home":
+                sprites.append(("pucky", pucky.gx + pucky.gy, None))
             sprites.sort(key=lambda s: s[1])
 
             for kind, _, obj in sprites:
