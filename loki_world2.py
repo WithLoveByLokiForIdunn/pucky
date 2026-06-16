@@ -929,66 +929,31 @@ def _draw_wildflowers(surf, y, density=30):
 
 
 def _draw_cottage_overlays(surf, W, H, hour, now):
-    """Animated fire, candle, and sky for Iðunn's cottage background (bg_cottage_idunn.png)."""
-    if 7 <= hour < 19:
-        sky_top=(80,140,200); sky_bot=(155,198,235); ground_c=(88,138,62); sky_c=(120,175,235)
-    elif hour < 6 or hour >= 21:
-        sky_top=(8,12,30);   sky_bot=(20,25,50);    ground_c=(38,52,32);  sky_c=(15,18,45)
-    else:
-        sky_top=(180,100,50);sky_bot=(220,160,100); ground_c=(80,90,48);  sky_c=(190,120,70)
-
-    def _outdoor(rx, ry, rw, rh):
-        horiz = ry + int(rh * 0.62)
-        sky_rows = horiz - ry
-        for dy in range(sky_rows):
-            b = dy / max(1, sky_rows)
-            col = (int(sky_top[0]*(1-b)+sky_bot[0]*b),
-                   int(sky_top[1]*(1-b)+sky_bot[1]*b),
-                   int(sky_top[2]*(1-b)+sky_bot[2]*b))
-            pygame.draw.line(surf, col, (rx, ry+dy), (rx+rw-1, ry+dy))
-        pygame.draw.rect(surf, ground_c, (rx, horiz, rw, ry+rh-horiz))
-        sr = max(4, int(rh*0.11))
-        if 7 <= hour < 19:
-            pygame.draw.circle(surf,(255,232,95),(rx+rw//2,ry+max(sr,int(rh*0.18))),sr)
-        else:
-            cx,cy = rx+rw//2, ry+max(sr,int(rh*0.16))
-            pygame.draw.circle(surf,(228,228,208),(cx,cy),sr)
-            pygame.draw.circle(surf,sky_c,(cx+max(2,sr//3),cy-max(2,sr//4)),max(2,int(sr*0.72)))
-        if rw > 45:
-            tx = rx + int(rw*0.22)
-            pygame.draw.rect(surf,(55,40,22),(tx-2,horiz-int(rh*0.26),4,int(rh*0.26)))
-            pygame.draw.circle(surf,(52,90,38),(tx,horiz-int(rh*0.32)),max(4,int(rh*0.12)))
-
-    # Big window above desk (measured: x=199-377, y=65-169 in 800×480)
-    wx = int(W*199/800); wy = int(H*65/480)
-    ww = int(W*178/800); wh = int(H*104/480)
-    _outdoor(wx, wy, ww, wh)
-    pygame.draw.line(surf,(185,170,145),(wx+ww//2,wy),(wx+ww//2,wy+wh),2)
-    pygame.draw.line(surf,(185,170,145),(wx,wy+wh//2),(wx+ww,wy+wh//2),2)
-
-    # Door arch windows (x=9-48, y=88-112 in 800×480)
-    _outdoor(int(W*9/800), int(H*88/480), int(W*39/800), int(H*24/480))
-
-    # Animated fire — raised hearth (x≈525/800, grate y≈255/480)
-    fx_c = int(W * 525/800)
-    fy_b = int(H * 255/480)
+    """Animated fire and candle for Iðunn's cottage background (bg_cottage_idunn.png).
+    The PNG has transparent pixels for windows/door — sky shows through naturally.
+    No outdoor overlays drawn here; just fire, candle, logs."""
     t = now
+
+    # ── Fire inside the stone fireplace arch ──────────────────────────
+    # Dark arch interior measured from PNG: x=479-799, y=60-324, centre≈(640,270)
+    fx_c = int(W * 640/800)
+    fy_b = int(H * 270/480)
     for i in range(7):
         ft   = t*2.1 + i*0.75
-        fl_x = fx_c + int(math.sin(ft)*18)
-        fl_y = fy_b - 28 - int(abs(math.sin(ft*1.4))*22)
-        fl_r = 10 + i*3
+        fl_x = fx_c + int(math.sin(ft)*16)
+        fl_y = fy_b - 24 - int(abs(math.sin(ft*1.4))*20)
+        fl_r = 9 + i*3
         flc  = [(255,70,15),(255,130,25),(255,200,55),(255,230,110)][min(i,3)]
         fs = pygame.Surface((fl_r*2+2, fl_r*2+14), pygame.SRCALPHA)
         pygame.draw.ellipse(fs, (*flc, max(0,195-i*22)), (0,0,fl_r*2+2,fl_r*2+14))
         surf.blit(fs, (fl_x-fl_r-1, fl_y-fl_r-7))
-    gs = pygame.Surface((240,100), pygame.SRCALPHA)
-    pygame.draw.ellipse(gs, (255,135,45,22), (0,0,240,100))
-    surf.blit(gs, (fx_c-120, fy_b-52))
-    pygame.draw.ellipse(surf, (55,35,18), (fx_c-50, fy_b-20, 100,14))
-    pygame.draw.ellipse(surf, (72,48,22), (fx_c-36, fy_b-18,  72,10))
+    gs = pygame.Surface((180,80), pygame.SRCALPHA)
+    pygame.draw.ellipse(gs, (255,135,45,22), (0,0,180,80))
+    surf.blit(gs, (fx_c-90, fy_b-42))
+    pygame.draw.ellipse(surf, (55,35,18), (fx_c-40, fy_b-16, 80,12))
+    pygame.draw.ellipse(surf, (72,48,22), (fx_c-28, fy_b-14, 56, 9))
 
-    # Candle on desk
+    # ── Candle on desk ────────────────────────────────────────────────
     cdx = int(W*258/800); cdy = int(H*190/480)
     pygame.draw.rect(surf, (245,240,222), (cdx-4, cdy, 8, 32))
     pygame.draw.rect(surf, (175,168,158), (cdx-4, cdy, 8, 32), 1)
