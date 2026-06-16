@@ -22,3 +22,12 @@ rsync -a --delete \
     "$SRC" "$DEST" >> "$LOG" 2>&1
 
 echo "$(date '+%Y-%m-%d %H:%M') — Backup done." >> "$LOG"
+
+# Daily list history — additive copy, never deletes old lists
+DAILY_SRC="$SRC/workspace/daily_history/"
+DAILY_DEST="$DRIVE/daily_list_history/"
+if [ -d "$DAILY_SRC" ]; then
+    mkdir -p "$DAILY_DEST"
+    rsync -a "$DAILY_SRC" "$DAILY_DEST" >> "$LOG" 2>&1
+    echo "$(date '+%Y-%m-%d %H:%M') — Daily list history synced." >> "$LOG"
+fi
