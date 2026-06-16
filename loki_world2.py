@@ -935,9 +935,9 @@ def _draw_cottage_overlays(surf, W, H, hour, now):
     t = now
 
     # ── Fire inside the stone fireplace arch ──────────────────────────
-    # Dark arch interior measured from PNG: x=479-799, y=60-324, centre≈(640,270)
+    # Dark arch interior measured from PNG: x=479-799, y=60-324, centre≈(640,190)
     fx_c = int(W * 640/800)
-    fy_b = int(H * 270/480)
+    fy_b = int(H * 185/480)
     for i in range(7):
         ft   = t*2.1 + i*0.75
         fl_x = fx_c + int(math.sin(ft)*16)

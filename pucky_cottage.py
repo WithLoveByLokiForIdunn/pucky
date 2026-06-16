@@ -982,10 +982,10 @@ class CottageView:
         import pygame, datetime as _dt
 
         # ── Fire inside the stone fireplace arch ──────────────────────
-        # Dark arch interior measured from PNG: x=479-799, y=60-324, centre≈(640,270)
-        # fy_b is the grate level (lower portion of the arch opening)
+        # Dark arch interior measured from PNG: x=479-799, y=60-324, centre≈(640,190)
+        # fy_b is the grate/log level — placed in the middle of the dark interior
         fx_c = int(W * 640/800)
-        fy_b = int(H * 270/480)
+        fy_b = int(H * 185/480)
         for i in range(7):
             ft   = t*2.1 + i*0.75
             fl_x = fx_c + int(math.sin(ft)*16)
@@ -1020,15 +1020,14 @@ class CottageView:
         self.letterbox.draw_envelope(surf, env_x, env_y, t)
         self._rects["envelope"] = pygame.Rect(env_x-2, env_y-2, 42, 32)
 
-        # ── Books on the actual wooden shelf (x=424-534, y≈65 in PNG) ─
-        book_defs = [
-            ("memory","Mem",BOOK_COLS["memory"], int(W*432/800)),
-            ("story", "Sto",BOOK_COLS["story"],  int(W*460/800)),
-            ("canvas","Ske",BOOK_COLS["canvas"],  int(W*488/800)),
-        ]
-        for bname, blabel, (bc,bc2), bx2 in book_defs:
-            bw2 = int(W*24/800);  bh2 = int(H*44/480)
-            by2 = int(H*73/480)
+        # ── Books on the wooden shelves ───────────────────────────────
+        # Top shelf: Memory (red) + Story (green); second shelf: Canvas (blue)
+        bw2 = int(W*24/800);  bh2 = int(H*44/480)
+        for bname, blabel, (bc,bc2), bx2, by2 in [
+            ("memory","Mem",BOOK_COLS["memory"], int(W*432/800), int(H* 73/480)),
+            ("story", "Sto",BOOK_COLS["story"],  int(W*460/800), int(H* 73/480)),
+            ("canvas","Ske",BOOK_COLS["canvas"],  int(W*432/800), int(H*135/480)),
+        ]:
             pygame.draw.rect(surf,bc, (bx2,by2,bw2,bh2),border_radius=2)
             pygame.draw.rect(surf,bc2,(bx2,by2,bw2,bh2),1,border_radius=2)
             try:
