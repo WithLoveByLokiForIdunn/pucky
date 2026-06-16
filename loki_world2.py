@@ -928,6 +928,61 @@ def _draw_wildflowers(surf, y, density=30):
         pygame.draw.circle(surf, col, (fx+random.randint(-3,3), y-fh), 4)
 
 
+def _draw_cottage_overlays(surf, W, H, hour, now):
+    """Animated fire, candle, and sky for Iðunn's cottage background (bg_cottage_idunn.png)."""
+    # Time-of-day sky in window above desk (left-center, x≈108 y≈62 w≈168 h≈124)
+    if 7 <= hour < 19:
+        sky_c = (120, 175, 235); ground_c = (108, 158, 78)
+    elif hour < 6 or hour >= 21:
+        sky_c = (18,  22,  55);  ground_c = (40,  55,  35)
+    else:
+        sky_c = (200, 140, 100); ground_c = (95, 105,  55)
+    wx, wy, ww, wh = 108, 62, 168, 124
+    pygame.draw.rect(surf, sky_c,    (wx, wy, ww, wh))
+    pygame.draw.rect(surf, ground_c, (wx, wy+wh-28, ww, 28))
+    pygame.draw.rect(surf, (55,40,22), (wx+16, wy+wh-44, 5, 17))
+    pygame.draw.circle(surf, (52,90,38), (wx+18, wy+wh-52), 13)
+    if 7 <= hour < 19:
+        pygame.draw.circle(surf, (255,232,95), (wx+ww//2, wy+20), 12)
+    else:
+        pygame.draw.circle(surf, (228,228,208), (wx+ww//2, wy+18), 9)
+        pygame.draw.circle(surf, sky_c, (wx+ww//2+4, wy+14), 7)
+    pygame.draw.line(surf, (185,170,145), (wx+ww//2, wy), (wx+ww//2, wy+wh), 2)
+    pygame.draw.line(surf, (185,170,145), (wx, wy+wh//2), (wx+ww, wy+wh//2), 2)
+
+    # Animated fire in hearth (far right, center x≈553 floor y≈315)
+    fx_c, fy_b = 553, 315
+    t = now
+    for i in range(7):
+        ft   = t*2.1 + i*0.75
+        fl_x = fx_c + int(math.sin(ft)*18)
+        fl_y = fy_b - 28 - int(abs(math.sin(ft*1.4))*22)
+        fl_r = 10 + i*3
+        flc  = [(255,70,15),(255,130,25),(255,200,55),(255,230,110)][min(i,3)]
+        fs = pygame.Surface((fl_r*2+2, fl_r*2+14), pygame.SRCALPHA)
+        pygame.draw.ellipse(fs, (*flc, max(0,195-i*22)), (0,0,fl_r*2+2,fl_r*2+14))
+        surf.blit(fs, (fl_x-fl_r-1, fl_y-fl_r-7))
+    gs = pygame.Surface((240,100), pygame.SRCALPHA)
+    pygame.draw.ellipse(gs, (255,135,45,22), (0,0,240,100))
+    surf.blit(gs, (fx_c-120, fy_b-52))
+    pygame.draw.ellipse(surf, (55,35,18), (fx_c-50, fy_b-20, 100,14))
+    pygame.draw.ellipse(surf, (72,48,22), (fx_c-36, fy_b-18,  72,10))
+
+    # Candle on desk
+    cdx, cdy = 258, 190
+    pygame.draw.rect(surf, (245,240,222), (cdx-4, cdy, 8, 32))
+    pygame.draw.rect(surf, (175,168,158), (cdx-4, cdy, 8, 32), 1)
+    cfa    = int(abs(math.sin(t*2.9))*30+195)
+    cf_off = int(math.sin(t*5.2)*2)
+    fls = pygame.Surface((14,22), pygame.SRCALPHA)
+    pygame.draw.ellipse(fls, (255,218,75,cfa), (0,7,14,15))
+    pygame.draw.ellipse(fls, (255,155,38,cfa), (3,0, 8,15))
+    surf.blit(fls, (cdx-7+cf_off, cdy-18))
+    cgl = pygame.Surface((56,38), pygame.SRCALPHA)
+    pygame.draw.ellipse(cgl, (255,218,95,24), (0,0,56,38))
+    surf.blit(cgl, (cdx-28, cdy-19))
+
+
 def _draw_waterfall_overlays(surf, hour, now):
     """Animated overlays for the waterfall scene: pool reflection, splash rings, rainbow."""
     night   = hour >= 21 or hour < 6
@@ -1030,6 +1085,8 @@ def draw_scene(surf, place_id, activity, hour, now=None, bg_images=None, pucky_w
                 surf.blit(glow, (sx - 40, sy - 22))
         elif place_id == "waterfall":
             _draw_waterfall_overlays(surf, hour, now or 0)
+        elif place_id == "cottage":
+            _draw_cottage_overlays(surf, W, H, hour, now or 0)
         random.seed()
         return
     random.seed(place_id + str(hour // 6))

@@ -730,6 +730,7 @@ class CottageView:
 
         self.room_t     = 0.0
         self.fade_alpha = 0
+        self._bg_img    = None   # loaded lazily
 
         self.open_book  = None    # None | "memory" | "story" | "writing"
         self.book_page  = 0
@@ -974,11 +975,128 @@ class CottageView:
 
     # ── Room ──────────────────────────────────────────────────────────────────
 
+    def _draw_room_overlays_idunn(self, surf, W, H, t):
+        """Animated overlays for Iðunn's hand-drawn cottage background."""
+        import pygame, datetime as _dt
+        hour = _dt.datetime.now().hour
+        if 7 <= hour < 19:
+            sky_c = WIN_DAY;   ground_c = (108,158,78)
+        elif hour < 6 or hour >= 21:
+            sky_c = WIN_NIGHT; ground_c = (40,55,35)
+        else:
+            sky_c = WIN_DUSK;  ground_c = (95,105,55)
+
+        # ── Sky in window above desk (left-center) ────────────────────
+        wx, wy, ww, wh = 108, 62, 168, 124
+        pygame.draw.rect(surf, sky_c,    (wx, wy, ww, wh))
+        pygame.draw.rect(surf, ground_c, (wx, wy+wh-28, ww, 28))
+        pygame.draw.rect(surf, (55,40,22), (wx+16, wy+wh-44, 5, 17))
+        pygame.draw.circle(surf, (52,90,38), (wx+18, wy+wh-52), 13)
+        pygame.draw.rect(surf, (55,40,22), (wx+140, wy+wh-40, 5, 14))
+        pygame.draw.circle(surf, (42,78,30), (wx+142, wy+wh-49), 11)
+        if 7 <= hour < 19:
+            pygame.draw.circle(surf, (255,232,95), (wx+ww//2, wy+20), 12)
+        else:
+            pygame.draw.circle(surf, (228,228,208), (wx+ww//2, wy+18), 9)
+            pygame.draw.circle(surf, sky_c, (wx+ww//2+4, wy+14), 7)
+            rng_s = random.Random(88)
+            for _ in range(11):
+                sx2 = rng_s.randint(wx+4, wx+ww-4)
+                sy2 = rng_s.randint(wy+4, wy+wh-32)
+                pygame.draw.circle(surf, (205,205,228), (sx2,sy2), 1)
+        pygame.draw.line(surf, (185,170,145), (wx+ww//2, wy), (wx+ww//2, wy+wh), 2)
+        pygame.draw.line(surf, (185,170,145), (wx, wy+wh//2), (wx+ww, wy+wh//2), 2)
+
+        # ── Fire in fireplace (far right, hearth center x≈553, floor y≈315) ──
+        fx_c, fy_b = 553, 315
+        for i in range(7):
+            ft      = t*2.1 + i*0.75
+            fl_x    = fx_c + int(math.sin(ft)*18)
+            fl_y    = fy_b - 28 - int(abs(math.sin(ft*1.4))*22)
+            fl_r    = 10 + i*3
+            flc     = [(255,70,15),(255,130,25),(255,200,55),(255,230,110)][min(i,3)]
+            fs = pygame.Surface((fl_r*2+2, fl_r*2+14), pygame.SRCALPHA)
+            pygame.draw.ellipse(fs, (*flc, max(0,195-i*22)), (0,0,fl_r*2+2,fl_r*2+14))
+            surf.blit(fs, (fl_x-fl_r-1, fl_y-fl_r-7))
+        gs = pygame.Surface((240,100), pygame.SRCALPHA)
+        pygame.draw.ellipse(gs, (255,135,45,22), (0,0,240,100))
+        surf.blit(gs, (fx_c-120, fy_b-52))
+        pygame.draw.ellipse(surf, (55,35,18), (fx_c-50, fy_b-20, 100,14))
+        pygame.draw.ellipse(surf, (72,48,22), (fx_c-36, fy_b-18,  72,10))
+
+        # ── Candle on desk ────────────────────────────────────────────
+        cdx, cdy = 258, 190
+        pygame.draw.rect(surf, (245,240,222), (cdx-4, cdy, 8, 32))
+        pygame.draw.rect(surf, (175,168,158), (cdx-4, cdy, 8, 32), 1)
+        cfa    = int(abs(math.sin(t*2.9))*30+195)
+        cf_off = int(math.sin(t*5.2)*2)
+        fls = pygame.Surface((14,22), pygame.SRCALPHA)
+        pygame.draw.ellipse(fls, (255,218,75,cfa), (0,7,14,15))
+        pygame.draw.ellipse(fls, (255,155,38,cfa), (3,0, 8,15))
+        surf.blit(fls, (cdx-7+cf_off, cdy-18))
+        cgl = pygame.Surface((56,38), pygame.SRCALPHA)
+        pygame.draw.ellipse(cgl, (255,218,95,24), (0,0,56,38))
+        surf.blit(cgl, (cdx-28, cdy-19))
+
+        # ── Envelope on desk ──────────────────────────────────────────
+        env_x, env_y = 108, 192
+        self.letterbox.draw_envelope(surf, env_x, env_y, t)
+        self._rects["envelope"] = pygame.Rect(env_x-2, env_y-2, 42, 32)
+
+        # ── Books on shelf (center) ───────────────────────────────────
+        book_defs = [
+            ("memory", "Mem", BOOK_COLS["memory"], 316),
+            ("story",  "Sto", BOOK_COLS["story"],  345),
+            ("canvas", "Ske", BOOK_COLS["canvas"],  374),
+        ]
+        for bname, blabel, (bc,bc2), bx2 in book_defs:
+            bw2, bh2 = 26, 52
+            by2 = 88
+            pygame.draw.rect(surf, bc,  (bx2, by2, bw2, bh2), border_radius=2)
+            pygame.draw.rect(surf, bc2, (bx2, by2, bw2, bh2), 1, border_radius=2)
+            try:
+                bt = self._fm(8).render(blabel, True, (235,228,215))
+                surf.blit(bt, (bx2+3, by2+4))
+            except Exception:
+                pass
+            self._rects[f"book_{bname}"] = pygame.Rect(bx2, by2, bw2, bh2)
+
+        # ── Write prompt on desk ──────────────────────────────────────
+        try:
+            wt = self._fm(9).render("[W] write", True, (148,125,85))
+            wr = pygame.Rect(158, 198, 90, 24)
+            self._rects["btn_write"] = wr
+            surf.blit(wt, (wr.x+3, wr.y+6))
+        except Exception:
+            pass
+
+        # ── Hint bar ──────────────────────────────────────────────────
+        try:
+            hints = "[Mem/Sto/Ske] click a book   [W] write   [✉] click envelope   [E] outside"
+            ht = self._fm(10).render(hints, True, (135,118,85))
+            pygame.draw.rect(surf, (235,225,205), (0,H-22,W,22))
+            surf.blit(ht, (10, H-18))
+        except Exception:
+            pass
+
     def _draw_room(self, surf):
         import pygame
+        from pathlib import Path as _Path
         W, H  = self.W, self.H
         t     = self.room_t
         floor_y = int(H * 0.68)
+
+        # ── Iðunn's hand-drawn background ────────────────────────────
+        bg_path = _Path(__file__).parent / "workspace" / "images" / "bg_cottage_idunn.png"
+        if bg_path.exists():
+            if self._bg_img is None:
+                raw = pygame.image.load(str(bg_path)).convert()
+                self._bg_img = pygame.transform.scale(raw, (W, H))
+            surf.blit(self._bg_img, (0, 0))
+            self._draw_room_overlays_idunn(surf, W, H, t)
+            return
+
+        # ── Procedural fallback ───────────────────────────────────────
 
         # Gradient wall
         for y in range(H):
