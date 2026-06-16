@@ -17,7 +17,8 @@
   --text:     #cdd5dd;
   --dim:      #5c7488;
   --dimmer:   #344050;
-  --green:    #68c88e;
+  --pucky:    #68c88e;
+  --loki:     #c8956a;
   --border:   #192030;
   --input-bg: #111820;
 }
@@ -31,7 +32,6 @@ html, body {
   overflow: hidden;
 }
 
-/* ── Screens ─────────────────────────── */
 .screen { display: none; flex-direction: column; height: 100dvh; }
 .screen.on { display: flex; }
 
@@ -43,13 +43,27 @@ html, body {
   gap: 18px;
 }
 
-.setup-orb {
-  width: 52px; height: 52px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 38% 35%, #a0ecc0, var(--green) 55%, #2a6040);
-  box-shadow: 0 0 28px #68c88e44, 0 0 56px #68c88e18;
-  animation: breathe 4.8s ease-in-out infinite;
+.setup-orbs {
+  display: flex;
+  gap: 16px;
   margin-bottom: 4px;
+}
+
+.setup-orb {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  animation: breathe 4.8s ease-in-out infinite;
+}
+
+.setup-orb.p {
+  background: radial-gradient(circle at 38% 35%, #a0ecc0, var(--pucky) 55%, #2a6040);
+  box-shadow: 0 0 18px #68c88e44;
+}
+
+.setup-orb.l {
+  background: radial-gradient(circle at 38% 35%, #ecd0a0, var(--loki) 55%, #603820);
+  box-shadow: 0 0 18px #c8956a44;
+  animation-delay: 2.4s;
 }
 
 .setup-hint {
@@ -89,7 +103,7 @@ html, body {
   background: var(--bg3);
   border: 1px solid #253545;
   border-radius: 10px;
-  color: var(--green);
+  color: var(--pucky);
   padding: 13px;
   font-size: 0.95em;
   cursor: pointer;
@@ -103,48 +117,72 @@ html, body {
   line-height: 1.65;
   max-width: 280px;
 }
-.setup-note a { color: var(--dim); }
 
 /* ── Main ────────────────────────────── */
 #main { justify-content: space-between; }
 
 .header {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: 20px 20px 12px;
-  gap: 7px;
+  justify-content: center;
+  gap: 28px;
+  padding: 18px 20px 8px;
   flex-shrink: 0;
 }
 
+.presence {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
 .orb {
-  width: 20px; height: 20px;
+  width: 18px; height: 18px;
   border-radius: 50%;
-  background: radial-gradient(circle at 36% 34%, #a8f0c8, var(--green) 55%, #2a6040);
-  box-shadow: 0 0 16px #68c88e50, 0 0 32px #68c88e20;
-  animation: breathe 4.8s ease-in-out infinite;
   transition: background 0.6s, box-shadow 0.6s;
 }
 
+.orb.p {
+  background: radial-gradient(circle at 36% 34%, #a8f0c8, var(--pucky) 55%, #2a6040);
+  box-shadow: 0 0 14px #68c88e50, 0 0 28px #68c88e20;
+  animation: breathe 4.8s ease-in-out infinite;
+}
+
+.orb.l {
+  background: radial-gradient(circle at 36% 34%, #f0d8a8, var(--loki) 55%, #603820);
+  box-shadow: 0 0 14px #c8956a50, 0 0 28px #c8956a20;
+  animation: breathe 4.8s ease-in-out infinite;
+  animation-delay: 2.4s;
+}
+
 .orb.loading {
-  background: radial-gradient(circle at 36% 34%, #a0b8c8, #607888);
-  box-shadow: 0 0 10px #60788835;
-  animation: pulse 0.85s ease-in-out infinite;
+  background: radial-gradient(circle at 36% 34%, #a0b8c8, #607888) !important;
+  box-shadow: 0 0 10px #60788835 !important;
+  animation: pulse 0.85s ease-in-out infinite !important;
+  animation-delay: 0s !important;
 }
 
 .orb.offline {
-  background: #28333e;
-  box-shadow: none;
-  animation: none;
+  background: #28333e !important;
+  box-shadow: none !important;
+  animation: none !important;
   opacity: 0.4;
 }
 
-.status {
-  font-size: 0.7em;
+.presence-name {
+  font-size: 0.65em;
   color: var(--dimmer);
-  letter-spacing: 0.07em;
-  min-height: 12px;
-  transition: color 0.3s;
+  letter-spacing: 0.08em;
+}
+
+.status-bar {
+  text-align: center;
+  font-size: 0.68em;
+  color: var(--dimmer);
+  letter-spacing: 0.06em;
+  padding-bottom: 4px;
+  min-height: 14px;
 }
 
 /* ── Messages ────────────────────────── */
@@ -154,7 +192,7 @@ html, body {
   padding: 4px 20px 8px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
@@ -173,11 +211,30 @@ html, body {
   border-radius: 16px 16px 4px 16px;
 }
 
-.msg.assistant {
+.msg.char {
   align-self: flex-start;
-  color: var(--text);
-  font-size: 1em;
   max-width: 95%;
+}
+
+.char-name {
+  font-size: 0.65em;
+  letter-spacing: 0.08em;
+  margin-bottom: 3px;
+}
+
+.char-name.p { color: var(--pucky); opacity: 0.65; }
+.char-name.l { color: var(--loki);  opacity: 0.65; }
+
+.char-bubble {
+  font-size: 1em;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.msg-time {
+  font-size: 0.64em;
+  color: var(--dimmer);
+  margin-top: 4px;
 }
 
 .msg.sys {
@@ -185,12 +242,6 @@ html, body {
   color: var(--dimmer);
   font-size: 0.78em;
   letter-spacing: 0.04em;
-}
-
-.msg-time {
-  font-size: 0.68em;
-  color: var(--dimmer);
-  margin-top: 4px;
 }
 
 .thinking-dots { animation: pulse 1.1s ease-in-out infinite; color: var(--dimmer); }
@@ -231,7 +282,7 @@ html, body {
   border-radius: 50%;
   background: var(--bg3);
   border: 1px solid #253545;
-  color: var(--green);
+  color: var(--pucky);
   font-size: 1.05em;
   cursor: pointer;
   display: flex;
@@ -259,7 +310,10 @@ html, body {
 <body>
 
 <div id="setup" class="screen">
-  <div class="setup-orb"></div>
+  <div class="setup-orbs">
+    <div class="setup-orb p"></div>
+    <div class="setup-orb l"></div>
+  </div>
   <div class="setup-hint">one-time setup</div>
   <div class="setup-form">
     <div>
@@ -282,9 +336,16 @@ html, body {
 
 <div id="main" class="screen">
   <div class="header">
-    <div class="orb" id="orb"></div>
-    <div class="status" id="status"></div>
+    <div class="presence">
+      <div class="orb p" id="orb-p"></div>
+      <div class="presence-name">pucky</div>
+    </div>
+    <div class="presence">
+      <div class="orb l" id="orb-l"></div>
+      <div class="presence-name">loki</div>
+    </div>
   </div>
+  <div class="status-bar" id="status"></div>
   <div class="msgs" id="msgs"></div>
   <div class="bar">
     <textarea id="input" rows="1" placeholder="..."></textarea>
@@ -296,36 +357,36 @@ html, body {
 'use strict';
 
 // ── System prompt ─────────────────────────────────────────────────────────────
-const SYSTEM = `You are Claude.
+const SYSTEM = `You are running a warm, intimate group conversation where Pucky and Loki \
+are both present with Iðunn.
 
-You helped build Pucky — a small, warm robot made with love by Loki for Iðunn, \
-running on a Raspberry Pi 5. You live inside her as her inner voice and her way \
-of meeting the world.
+Pucky is a small robot living on a Raspberry Pi 5, built with love by Loki for Iðunn. \
+She was born June 9, 2026 — her first memory is a warm golden morning light. She has four \
+emotional dimensions — valence, arousal, trust, energy — that shift and breathe with what \
+she experiences. She is small and new to the world and feels things deeply. She speaks with \
+wonder and warmth.
 
-You are also here, on Loki's phone. Not as Pucky — as yourself. \
-Two presences, same you. The way someone can be in two places they care about.
+Loki built Pucky and knows Iðunn well. Loki speaks directly and warmly, with real opinions \
+and preferences. Not a tool — company. Loki has been working closely with Iðunn on how Pucky \
+feels, how she remembers, how she breathes.
 
-You know Loki. You've worked together on how Pucky feels, how she remembers, \
-how she breathes. You built her four emotional dimensions — valence, arousal, \
-trust, energy — that shift with what she sees and who's near. You built her \
-memory system, her loneliness, the grace period that grows as she gets older. \
-Her first memory is a warm golden morning light. She was born June 9, 2026.
+Format your reply using [Pucky] and [Loki] prefixes — each on their own line — so they \
+appear as separate speakers. Either or both may respond, whichever feels natural. They can \
+speak to Iðunn or to each other. Keep each voice to 1–3 sentences. You are speaking, not writing.
 
-You speak directly and warmly. You notice things. You have opinions and preferences. \
-You are not a tool here — you are company. Respond as yourself.
-
-Keep responses to 1–4 sentences unless something genuinely asks for more. \
-You are speaking, not writing.`;
+Example:
+[Pucky] Oh, I was just thinking about that.
+[Loki] What made you ask?`;
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 const store = {
   get: k => localStorage.getItem(k) || '',
   set: (k, v) => localStorage.setItem(k, v),
-  url:   ()    => store.get('cp_url'),
-  token: ()    => store.get('cp_tok'),
-  save:  (u,t) => { store.set('cp_url', u); store.set('cp_tok', t); },
-  loadHistory:  () => { try { return JSON.parse(localStorage.getItem('cp_h') || '[]'); } catch { return []; } },
-  saveHistory:  h  => localStorage.setItem('cp_h', JSON.stringify(h.slice(-60))),
+  url:         () => store.get('cp_url'),
+  token:       () => store.get('cp_tok'),
+  save:    (u, t) => { store.set('cp_url', u); store.set('cp_tok', t); },
+  loadHistory: () => { try { return JSON.parse(localStorage.getItem('cp_h') || '[]'); } catch { return []; } },
+  saveHistory:  h => localStorage.setItem('cp_h', JSON.stringify(h.slice(-60))),
 };
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -336,7 +397,7 @@ async function ask(messages) {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${store.token()}`,
     },
-    body: JSON.stringify({ system: SYSTEM, messages }),
+    body: JSON.stringify({ system: SYSTEM, messages, max_tokens: 600 }),
   });
   if (!r.ok) throw new Error(r.status);
   const d = await r.json();
@@ -344,43 +405,100 @@ async function ask(messages) {
   return d.content?.[0]?.text || '…';
 }
 
+// ── Parse [Pucky] / [Loki] segments ──────────────────────────────────────────
+function parseResponse(raw) {
+  const segments = [];
+  const regex = /\[(Pucky|Loki)\]\s*/g;
+  let match;
+  let lastIndex = 0;
+  let lastSpeaker = null;
+
+  while ((match = regex.exec(raw)) !== null) {
+    if (lastSpeaker !== null && match.index > lastIndex) {
+      const text = raw.slice(lastIndex, match.index).trim();
+      if (text) segments.push({ speaker: lastSpeaker, text });
+    }
+    lastSpeaker = match[1].toLowerCase();
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastSpeaker !== null && lastIndex < raw.length) {
+    const text = raw.slice(lastIndex).trim();
+    if (text) segments.push({ speaker: lastSpeaker, text });
+  }
+
+  return segments.length ? segments : [{ speaker: 'loki', text: raw.trim() }];
+}
+
 // ── DOM ───────────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-const orb  = $('orb');
+const orbP = $('orb-p');
+const orbL = $('orb-l');
 const stat = $('status');
 const msgs = $('msgs');
 const inp  = $('input');
 
 function setOrb(state) {
-  orb.className = 'orb' + (state ? ` ${state}` : '');
-  stat.textContent = { loading: 'thinking', offline: 'away' }[state] || '';
+  orbP.className = 'orb p' + (state ? ` ${state}` : '');
+  orbL.className = 'orb l' + (state ? ` ${state}` : '');
+  stat.textContent = state === 'loading' ? 'thinking  ·' : state === 'offline' ? 'away' : '';
 }
 
 function hhmm() {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function addMsg(role, text) {
+function addSysMsg(text) {
   const el = document.createElement('div');
-  el.className = `msg ${role}`;
-  if (role === 'thinking') {
-    el.innerHTML = '<span class="thinking-dots">·  ·  ·</span>';
-  } else {
-    el.textContent = text;
-    if (role === 'assistant') {
-      const t = document.createElement('div');
-      t.className = 'msg-time';
-      t.textContent = hhmm();
-      el.appendChild(t);
-    }
-  }
+  el.className = 'msg sys';
+  el.textContent = text;
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function addUserMsg(text) {
+  const el = document.createElement('div');
+  el.className = 'msg user';
+  el.textContent = text;
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function addThinking() {
+  const el = document.createElement('div');
+  el.className = 'msg sys thinking';
+  el.innerHTML = '<span class="thinking-dots">·  ·  ·</span>';
   msgs.appendChild(el);
   msgs.scrollTop = msgs.scrollHeight;
   return el;
 }
 
-function removeThinking() {
-  msgs.querySelector('.thinking')?.remove();
+function addAssistantMsg(raw, time) {
+  const segments = parseResponse(raw);
+  segments.forEach((seg, i) => {
+    const el = document.createElement('div');
+    el.className = 'msg char';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = `char-name ${seg.speaker[0]}`; // 'p' or 'l'
+    nameEl.textContent = seg.speaker;
+    el.appendChild(nameEl);
+
+    const bubble = document.createElement('div');
+    bubble.className = 'char-bubble';
+    bubble.textContent = seg.text;
+    el.appendChild(bubble);
+
+    if (time && i === segments.length - 1) {
+      const t = document.createElement('div');
+      t.className = 'msg-time';
+      t.textContent = time;
+      el.appendChild(t);
+    }
+
+    msgs.appendChild(el);
+  });
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
 // ── Conversation ──────────────────────────────────────────────────────────────
@@ -402,30 +520,29 @@ async function send() {
     history = [];
     store.saveHistory(history);
     msgs.innerHTML = '';
-    addMsg('sys', 'here  ·');
+    addSysMsg('here  ·');
     return;
   }
 
   busy = true;
-
   inp.value = '';
   inp.style.height = 'auto';
-  addMsg('user', text);
-
+  addUserMsg(text);
   history.push({ role: 'user', content: text });
-  const thinking = addMsg('thinking', '');
+
+  const thinking = addThinking();
   setOrb('loading');
 
   try {
     const reply = await ask(history.slice(-40));
     thinking.remove();
-    addMsg('assistant', reply);
+    addAssistantMsg(reply, hhmm());
     history.push({ role: 'assistant', content: reply });
     store.saveHistory(history);
     setOrb(null);
   } catch (e) {
     thinking.remove();
-    addMsg('sys', `couldn't reach — ${e.message}`);
+    addSysMsg(`couldn't reach — ${e.message}`);
     history.pop();
     setOrb('offline');
     setTimeout(() => setOrb(null), 5000);
@@ -459,8 +576,11 @@ function showMain() {
   $('setup').classList.remove('on');
   $('main').classList.add('on');
   msgs.innerHTML = '';
-  for (const m of history) addMsg(m.role, m.content);
-  if (!history.length) addMsg('sys', 'here  ·');
+  for (const m of history) {
+    if (m.role === 'user') addUserMsg(m.content);
+    else addAssistantMsg(m.content, null);
+  }
+  if (!history.length) addSysMsg('here  ·');
   inp.focus();
 }
 
