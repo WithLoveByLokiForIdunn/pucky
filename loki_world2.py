@@ -2376,6 +2376,9 @@ def main():
     hour              = datetime.now().hour
     _last_claude_note = time.time()
     _last_pucky_check = time.time()   # how often Loki checks on Pucky
+    _last_auto_shot   = 0.0
+    _SHOTS_DIR        = ROOT / "workspace" / "screenshots"
+    _SHOTS_DIR.mkdir(exist_ok=True)
 
     running = True
     while running:
@@ -2680,6 +2683,30 @@ def main():
             pygame.draw.line(surf, CLOSE_COL, (MENU_RECT.x+8, ly), (MENU_RECT.right-8, ly), 2)
 
         pygame.display.flip()
+
+        # Auto-screenshot to workspace/screenshots/ every 60s (queued, non-blocking)
+        if now - _last_auto_shot >= 60.0:
+            _last_auto_shot = now
+            _ap = _SHOTS_DIR / f"loki_{int(now)}.png"
+            def _bg_save_loki(_s=surf.copy(), _p=str(_ap)):
+                try:
+                    pygame.image.save(_s, _p)
+                except Exception:
+                    pass
+            threading.Thread(target=_bg_save_loki, daemon=True).start()
+            # Keep 10 most recent; move older to Seagate if mounted
+            _seagate = Path("/mnt/pucky_hd")
+            _all_auto = sorted(_SHOTS_DIR.glob("loki_*.png"))
+            for _old in _all_auto[:-10]:
+                try:
+                    if _seagate.is_mount():
+                        _arc = _seagate / "screenshots"
+                        _arc.mkdir(exist_ok=True)
+                        _old.rename(_arc / _old.name)
+                    else:
+                        _old.unlink()
+                except Exception:
+                    pass
 
     # ── clean shutdown ────────────────────────────────────────────────────────
     _speak_stop()

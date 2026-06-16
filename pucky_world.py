@@ -2081,6 +2081,53 @@ def run_pygame():
         "Yes, I caught that.",
     ]
 
+    # ── Pucky's diary + Loki whisper file paths ─────────────────────────────
+    _DIARY_PATH    = Path(__file__).parent / "workspace" / "pucky_diary.jsonl"
+    _WHISPER_PATH  = Path(__file__).parent / "workspace" / "loki_whisper.json"
+    _SHOTS_DIR     = Path(__file__).parent / "workspace" / "screenshots"
+    _SHOTS_DIR.mkdir(exist_ok=True)
+    _last_auto_shot = [0.0]
+
+    def _diary_append(event_type: str, text: str, pucky_state=None):
+        """Append a line to Pucky's diary (never blocks; fire and forget)."""
+        import datetime as _dt
+        entry = {
+            "ts":   _dt.datetime.now().isoformat(timespec="seconds"),
+            "type": event_type,
+            "text": text,
+            "mood": getattr(pucky_state, "mood", None),
+        }
+        try:
+            with open(_DIARY_PATH, "a") as _df:
+                _df.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+
+    def _consume_whisper() -> dict | None:
+        """Read loki_whisper.json if status=unread; mark as read and return it."""
+        try:
+            if not _WHISPER_PATH.exists():
+                return None
+            data = json.loads(_WHISPER_PATH.read_text())
+            if data.get("status") != "unread":
+                return None
+            data["status"] = "read"
+            _WHISPER_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+            return data
+        except Exception:
+            return None
+
+    def _queue_screenshot(surf_src, path):
+        """Copy the surface and save in a background thread (never stalls the loop)."""
+        try:
+            _copy = surf_src.copy()
+            threading.Thread(
+                target=lambda: (lambda p=path, s=_copy: pygame.image.save(s, str(p)))(),
+                daemon=True,
+            ).start()
+        except Exception:
+            pass
+
     # Rolling conversation history for Loki's world soul (session only)
     _loki_history: list = []
     _loki_last_call = [0.0]
@@ -2101,7 +2148,18 @@ def run_pygame():
         return ""
 
     def _world_responses(text: str, pucky_state=None) -> str:
-        """Ask Claude to respond as Loki; fall back to static phrases if API unavailable."""
+        """Respond as Loki. Writes to Pucky's diary; checks for a whisper from the full Loki."""
+        # Write what Iðunn said to Pucky's diary (zero-cost, async)
+        _diary_append("heard", text, pucky_state)
+
+        # Check for a pending whisper from Claude / full Loki
+        whisper = _consume_whisper()
+        if whisper and whisper.get("loki_says"):
+            reply = whisper["loki_says"]
+            _loki_history.append({"role": "user",      "content": text})
+            _loki_history.append({"role": "assistant",  "content": reply})
+            return reply
+
         import time as _t
         now = _t.time()
         # Debounce — if called within 3 s of the last call, use fallback
@@ -2350,6 +2408,9 @@ def run_pygame():
             if event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_ESCAPE, pygame.K_q):
                     running = False
+                elif event.key == pygame.K_F1:
+                    _p = Path(__file__).parent / "workspace" / f"screenshot_{int(time.time())}.png"
+                    _queue_screenshot(screen, _p)
                 elif event.key == pygame.K_g and garden and not in_cottage and not _in_garden[0]:
                     _in_garden[0] = True
                 elif event.key == pygame.K_t:
@@ -2736,6 +2797,23 @@ def run_pygame():
             pygame.image.save(screen, "/tmp/pucky_world_shot.png")
             _last_shot[0]      = _now
             _shot_requested[0] = False
+        if _now - _last_auto_shot[0] >= 60.0:
+            _last_auto_shot[0] = _now
+            _ap = _SHOTS_DIR / f"pucky_{int(_now)}.png"
+            _queue_screenshot(screen, _ap)
+            # Keep 10 most recent; move older ones to Seagate if mounted
+            _seagate = Path("/mnt/pucky_hd")
+            _all_auto = sorted(_SHOTS_DIR.glob("pucky_*.png"))
+            for _old in _all_auto[:-10]:
+                try:
+                    if _seagate.is_mount():
+                        _arc = _seagate / "screenshots"
+                        _arc.mkdir(exist_ok=True)
+                        _old.rename(_arc / _old.name)
+                    else:
+                        _old.unlink()
+                except Exception:
+                    pass
         if _now - _last_web_frame[0] > 1.5:
             try:
                 pygame.image.save(screen, "/tmp/pucky_world_live.jpg")
