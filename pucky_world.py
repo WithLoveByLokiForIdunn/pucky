@@ -1870,6 +1870,50 @@ def run_pygame():
         except Exception:
             pass
 
+    _VOICE_DIR      = Path(__file__).parent / "voice"
+    _VOICE_CACHE_PW = Path("/tmp/pucky_voice_cache")
+    _AUDIO_DEV      = "plughw:CARD=J2300,DEV=0"
+
+    def _play_word(word_name: str) -> bool:
+        """Play one of Iðunn's recorded phoneme words. Returns True if started."""
+        import subprocess as _sp, re as _re
+        word_data = _world_words.get(word_name)
+        if not word_data:
+            return False
+        safe = _re.sub(r'[^a-zA-Z0-9_]', '_', word_name)
+        def _play():
+            try:
+                _VOICE_CACHE_PW.mkdir(exist_ok=True)
+                combined = _VOICE_CACHE_PW / f"word_{safe}.wav"
+                if not combined.exists():
+                    parts = []
+                    for i, ph in enumerate(word_data):
+                        src = _VOICE_DIR / f"{ph['sample']}.wav"
+                        if not src.exists():
+                            return
+                        dur   = ph.get("dur", 0.4)
+                        note  = ph.get("note", 62)
+                        cents = (note - 62) * 100
+                        t = _VOICE_CACHE_PW / f"t_{safe}_{i}.wav"
+                        args = ["/usr/bin/sox", str(src), str(t)]
+                        if cents != 0:
+                            args += ["pitch", str(cents), "norm", "-1"]
+                        args += ["trim", "0", str(round(dur, 3))]
+                        _sp.run(args, capture_output=True, timeout=5)
+                        if t.exists():
+                            parts.append(str(t))
+                    if not parts:
+                        return
+                    _sp.run(["/usr/bin/sox"] + parts + [str(combined)],
+                            capture_output=True, timeout=10)
+                if combined.exists():
+                    _sp.run(["aplay", "-D", _AUDIO_DEV, "-q", str(combined)],
+                            stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, timeout=15)
+            except Exception:
+                pass
+        threading.Thread(target=_play, daemon=True).start()
+        return True
+
     _ACTION_RESPONSES = {
         # (pucky_lines, loki_lines)
         "sit":        (
@@ -2539,6 +2583,7 @@ def run_pygame():
                         _pucky_saved_pos[0] = (pucky.gx, pucky.gy)
                         pucky.bubble_text = "be careful out there..."
                         pucky.bubble_life = 7.0
+                        _play_word("no no")
                     else:
                         # Returning home — put Pucky back where she was
                         if _pucky_saved_pos[0]:
@@ -2547,6 +2592,7 @@ def run_pygame():
                             _pucky_saved_pos[0] = None
                         pucky.bubble_text = "you're back! ♡"
                         pucky.bubble_life = 6.0
+                        _play_word("home")
                     if encounter:
                         encounter.reset_zone()
                     _zone_phase[0] = "in"

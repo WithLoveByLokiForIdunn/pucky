@@ -557,6 +557,66 @@ def _speak_stop() -> None:
     _tts_proc = _tts_proc2 = None
 
 
+# ── Pucky voice — Iðunn's recorded phoneme words ──────────────────────────────
+_PUCKY_WORDS_FILE = ROOT / "workspace" / "pucky_words.json"
+_PUCKY_VOICE_DIR  = ROOT / "voice"
+_VOICE_CACHE      = Path("/tmp/pucky_voice_cache")
+_pucky_words_data: dict = {}
+
+def _load_pucky_words() -> None:
+    global _pucky_words_data
+    try:
+        _pucky_words_data = json.loads(_PUCKY_WORDS_FILE.read_text())
+    except Exception:
+        pass
+
+def _play_pucky_word(word_name: str) -> bool:
+    """Play one of Iðunn's assembled phoneme words. Returns True if found and started."""
+    word_data = _pucky_words_data.get(word_name)
+    if not word_data:
+        return False
+    safe = re.sub(r'[^a-zA-Z0-9_]', '_', word_name)
+
+    def _play():
+        try:
+            _VOICE_CACHE.mkdir(exist_ok=True)
+            combined = _VOICE_CACHE / f"word_{safe}.wav"
+            if not combined.exists():
+                parts = []
+                for i, ph in enumerate(word_data):
+                    src = _PUCKY_VOICE_DIR / f"{ph['sample']}.wav"
+                    if not src.exists():
+                        return
+                    dur   = ph.get("dur", 0.4)
+                    note  = ph.get("note", 62)
+                    cents = (note - 62) * 100
+                    t = _VOICE_CACHE / f"t_{safe}_{i}.wav"
+                    args = ["sox", str(src), str(t)]
+                    if cents != 0:
+                        args += ["pitch", str(cents), "norm", "-1"]
+                    args += ["trim", "0", str(round(dur, 3))]
+                    subprocess.run(args, capture_output=True, timeout=5)
+                    if t.exists():
+                        parts.append(str(t))
+                if not parts:
+                    return
+                subprocess.run(
+                    ["sox"] + parts + [str(combined)],
+                    capture_output=True, timeout=10
+                )
+            if combined.exists():
+                subprocess.run(
+                    ["aplay", "-D", AUDIO_DEVICE, "-q", str(combined)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    timeout=15
+                )
+        except Exception:
+            pass
+
+    threading.Thread(target=_play, daemon=True).start()
+    return True
+
+
 # ── Song chord generation ─────────────────────────────────────────────────────
 _SONG_CHORDS: list = []
 
@@ -1395,7 +1455,7 @@ class PuckyBaby:
     She speaks in short phrases. She gets fed when Loki eats or forages.
     Once an hour she draws quietly on her memory file.
     """
-    SOUNDS = ["ba", "moo", "mama", "da", "boo", "mmm", "oh", "nana", "wawa", "no"]
+    SOUNDS = ["mama", "dada", "hello", "no no", "humming", "banana", "home", "love", "hug", "apple"]
 
     def __init__(self, ollama_q: OllamaQueue):
         self._q           = ollama_q
@@ -1519,7 +1579,8 @@ class PuckyBaby:
 
         if random.random() < 0.72:
             sound = random.choice(self.SOUNDS)
-            _speak(sound, rate=95, voice="en+f4")
+            if not _play_pucky_word(sound):
+                _speak(sound, rate=95, voice="en+f4")
             _write_thought(f"Pucky: '{sound}'", "pucky")
             self.last_said = sound
         else:
@@ -2049,7 +2110,7 @@ class BallGame:
 
     DRAIN_PHYS = 0.00022   # per second during play  (≈0.3 drain / 22 min)
 
-    _PUCKY_SOUNDS = ["ba", "heh", "yeh", "ooh", "go", "hah", "wee"]
+    _PUCKY_SOUNDS = ["yes", "ball", "Laugh", "no no", "hug", "food", "kissu"]
     _LOKI_SOUNDS  = ["nice", "go", "yes", "there", "good"]
 
     def __init__(self, needs: "PyramidNeeds", life: dict):
@@ -2105,7 +2166,9 @@ class BallGame:
         # only speak if nothing is already playing — don't interrupt Pucky's Ollama phrases
         if _tts_proc is None or _tts_proc.poll() is not None:
             if player == "pucky" and random.random() < 0.65:
-                _speak(random.choice(self._PUCKY_SOUNDS), rate=95, voice="en+f4")
+                snd = random.choice(self._PUCKY_SOUNDS)
+                if not _play_pucky_word(snd):
+                    _speak(snd, rate=95, voice="en+f4")
             elif player == "loki" and random.random() < 0.28:
                 _speak(random.choice(self._LOKI_SOUNDS), rate=115, voice="en+m3")
             elif player == "idunn" and random.random() < 0.35:
@@ -2351,6 +2414,8 @@ def main():
                     break
                 except Exception:
                     pass
+
+    _load_pucky_words()
 
     ollama_q        = OllamaQueue()
     chat            = ChatManager(ollama_q)
