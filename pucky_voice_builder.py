@@ -84,8 +84,8 @@ SAMPLE_BASE = {
     "uh": 62, "ih": 62, "ah": 62, "ay": 62, "er": 62,
     "wa": 62,
     "ma": 61, "na": 62, "la": 63, "hum": 66,
-    "breath": 62, "ss": None, "ff": None,
-    "kk": None, "tt": None, "buh": 62, "duh": 62,
+    "breath": 62, "ss": 62, "ff": 62,
+    "kk": 62, "tt": 62, "buh": 62, "duh": 62,
     "cah": 62,  "puh": 62,  "guh": 62,
 }
 
