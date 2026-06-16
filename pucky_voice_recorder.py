@@ -35,22 +35,40 @@ WW, WH       = 580, 118   # waveform rect
 # ── Loki's wish list ───────────────────────────────────────────────────────────
 #   (save_name, display, hint — what to say / how to say it)
 WISH = [
-    # ── phonemes ──────────────────────────────────────────────────────────────
-    ("uh",   "uh  /ʌ/",   'short vowel in "cup" — say "uh" softly'),
-    ("ih",   "ih  /ɪ/",   'short vowel in "lit" — say "ih"'),
-    ("ah",   "ah  /ɑ/",   'open vowel in "cottage" — say "ah"'),
-    ("ay",   "ay  /eɪ/",  'long A in "lake" — say "ay"'),
-    ("er",   "er  /ər/",  'ending in "flower" — say "er" gently'),
-    ("wa",   "wa  /wɑ/",  'start of "water" — say "wah"'),
-    ("puh",  "puh  /p/",  'pop of "play" — say "puh" soft burst'),
-    ("guh",  "guh  /g/",  'start of "garden" — say "guh"'),
-    ("cah",  "cah  /kɑ/", 'hard K in "cat" — say "cah" not "kay"'),
+    # ── vowels ────────────────────────────────────────────────────────────────
+    ("aa",   "aa  /ɑː/",  'long open A — say "aah" like a sigh'),
+    ("eh",   "eh  /ɛ/",   'short E — say "eh" like in "bed"'),
+    ("ii",   "ii  /iː/",  'long E — say "ee" like in "see"'),
+    ("oh",   "oh  /oʊ/",  'long O — say "oh" like in "go"'),
+    ("uu",   "uu  /uː/",  'long U — say "oo" like in "moon"'),
+    ("uh",   "uh  /ʌ/",   'short U — say "uh" like in "cup"'),
+    ("ih",   "ih  /ɪ/",   'short I — say "ih" like in "lit"'),
+    ("ah",   "ah  /ɑ/",   'open O — say "ah" like in "cottage"'),
+    ("ay",   "ay  /eɪ/",  'long A — say "ay" like in "lake"'),
+    ("er",   "er  /ər/",  'er ending — say "er" gently like in "flower"'),
+    # ── warm / sung ───────────────────────────────────────────────────────────
+    ("wa",   "wa  /wɑ/",  'say "wah" — start of "water"'),
+    ("ma",   "ma  /mɑ/",  'say "mah" — warm, motherly'),
+    ("na",   "na  /nɑ/",  'say "nah" — soft nasal'),
+    ("la",   "la  /lɑ/",  'say "lah" — singing syllable'),
+    ("hum",  "hum  /m/",  'hum with mouth closed — mmm'),
+    # ── consonants ────────────────────────────────────────────────────────────
+    ("breath", "h  /h/",  'soft breath — just exhale gently'),
+    ("ss",   "ss  /s/",   'say "sss" — snake sound, sustained'),
+    ("ff",   "ff  /f/",   'say "fff" — sustained'),
+    ("kk",   "kk  /k/",   'hard K click — "k" not "kay"'),
+    ("cah",  "cah  /kɑ/", 'hard K with vowel — "cah" like in "cat"'),
+    ("tt",   "tt  /t/",   'sharp T click — "t" not "tee"'),
+    ("buh",  "buh  /b/",  'say "buh" — soft B burst'),
+    ("puh",  "puh  /p/",  'say "puh" — soft P burst'),
+    ("duh",  "duh  /d/",  'say "duh" — soft D'),
+    ("guh",  "guh  /g/",  'say "guh" — soft G'),
     # ── battle cries ──────────────────────────────────────────────────────────
     ("cry_fight",   "⚔  fight cry",   "your battle call — say whatever feels right"),
-    ("cry_hit",     "⚔  hit grunt",   "a short grunt for landing a hit — hh! or ha!"),
-    ("cry_heavy",   "⚔  heavy hit",   "big impact sound — RAAH! or a deep groan"),
+    ("cry_hit",     "⚔  hit grunt",   "short grunt for landing a hit — ha! or hh!"),
+    ("cry_heavy",   "⚔  heavy hit",   "big impact — RAAH! or a deep groan"),
     ("cry_ouch",    "⚔  take a hit",  "getting hit — oof! or ahh!"),
-    ("cry_victory", "⚔  victory",     "winning! — cheer, laugh, whatever you feel"),
+    ("cry_victory", "⚔  victory",     "winning — cheer, laugh, whatever you feel"),
 ]
 
 # ── Colours ────────────────────────────────────────────────────────────────────
@@ -331,11 +349,25 @@ class VoiceRecorder:
         iy = 30 - self._wish_scroll
 
         for name, display, hint in WISH:
-            section = "battle" if name.startswith("cry_") else "phoneme"
+            if name.startswith("cry_"):
+                section = "battle"
+            elif name in ("aa","eh","ii","oh","uu","uh","ih","ah","ay","er"):
+                section = "vowels"
+            elif name in ("wa","ma","na","la","hum"):
+                section = "warm"
+            else:
+                section = "cons"
+
+            SEC_LABELS = {
+                "vowels": "◆  vowels",
+                "warm":   "◆  warm / sung",
+                "cons":   "◆  consonants",
+                "battle": "⚔  battle cries",
+            }
             if section != last_section:
                 if last_section is not None:
                     iy += 6
-                sec_lbl = "⚔  battle cries" if section == "battle" else "◆  phonemes"
+                sec_lbl = SEC_LABELS[section]
                 sec_col = C["battle"] if section == "battle" else C["light"]
                 t = self.font_sm.render(sec_lbl, True, sec_col)
                 surf.blit(t, (px + 8, iy + 4))
