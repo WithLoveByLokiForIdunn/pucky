@@ -1938,7 +1938,6 @@ class BallGame:
     IDUNN_SPD = 68.0
 
     DRAIN_PHYS = 0.00022   # per second during play  (≈0.3 drain / 22 min)
-    DRAIN_SAFE = 0.00010
 
     _PUCKY_SOUNDS = ["ba", "heh", "yeh", "ooh", "go", "hah", "wee"]
     _LOKI_SOUNDS  = ["nice", "go", "yes", "there", "good"]
@@ -1993,12 +1992,14 @@ class BallGame:
         self._vel = [dx * self.KICK_SPEED, dy * self.KICK_SPEED]
         self._last_touch = player
         self.touches[player] = self.touches.get(player, 0) + 1
-        if player == "pucky" and random.random() < 0.65:
-            _speak(random.choice(self._PUCKY_SOUNDS), rate=95, voice="en+f4")
-        elif player == "loki" and random.random() < 0.28:
-            _speak(random.choice(self._LOKI_SOUNDS), rate=115, voice="en+m3")
-        elif player == "idunn" and random.random() < 0.35:
-            _speak("nice", rate=115, voice="en+m3")
+        # only speak if nothing is already playing — don't interrupt Pucky's Ollama phrases
+        if _tts_proc is None or _tts_proc.poll() is not None:
+            if player == "pucky" and random.random() < 0.65:
+                _speak(random.choice(self._PUCKY_SOUNDS), rate=95, voice="en+f4")
+            elif player == "loki" and random.random() < 0.28:
+                _speak(random.choice(self._LOKI_SOUNDS), rate=115, voice="en+m3")
+            elif player == "idunn" and random.random() < 0.35:
+                _speak("nice", rate=115, voice="en+m3")
 
     # ── AI ───────────────────────────────────────────────────────────────────
 
@@ -2078,7 +2079,6 @@ class BallGame:
         if self._drain_t >= 1.0:
             self._drain_t -= 1.0
             self.needs.deplete("physiological", self.DRAIN_PHYS)
-            self.needs.deplete("safety",        self.DRAIN_SAFE)
 
     # ── main tick ────────────────────────────────────────────────────────────
 
