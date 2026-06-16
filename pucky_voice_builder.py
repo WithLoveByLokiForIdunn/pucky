@@ -85,8 +85,8 @@ SAMPLE_BASE = {
     "wa": 62,
     "ma": 61, "na": 62, "la": 63, "hum": 66,
     "breath": None, "ss": None, "ff": None,
-    "kk": None, "cah": None, "tt": None,
-    "buh": None, "puh": None, "duh": None, "guh": None,
+    "kk": None, "tt": None, "buh": None, "duh": None,
+    "cah": 62,  "puh": 62,  "guh": 62,
 }
 
 # ── Colours ───────────────────────────────────────────────────────────────────
