@@ -930,28 +930,48 @@ def _draw_wildflowers(surf, y, density=30):
 
 def _draw_cottage_overlays(surf, W, H, hour, now):
     """Animated fire, candle, and sky for Iðunn's cottage background (bg_cottage_idunn.png)."""
-    # Time-of-day sky in window above desk (left-center, x≈108 y≈62 w≈168 h≈124)
     if 7 <= hour < 19:
-        sky_c = (120, 175, 235); ground_c = (108, 158, 78)
+        sky_top=(80,140,200); sky_bot=(155,198,235); ground_c=(88,138,62); sky_c=(120,175,235)
     elif hour < 6 or hour >= 21:
-        sky_c = (18,  22,  55);  ground_c = (40,  55,  35)
+        sky_top=(8,12,30);   sky_bot=(20,25,50);    ground_c=(38,52,32);  sky_c=(15,18,45)
     else:
-        sky_c = (200, 140, 100); ground_c = (95, 105,  55)
-    wx, wy, ww, wh = 108, 62, 168, 124
-    pygame.draw.rect(surf, sky_c,    (wx, wy, ww, wh))
-    pygame.draw.rect(surf, ground_c, (wx, wy+wh-28, ww, 28))
-    pygame.draw.rect(surf, (55,40,22), (wx+16, wy+wh-44, 5, 17))
-    pygame.draw.circle(surf, (52,90,38), (wx+18, wy+wh-52), 13)
-    if 7 <= hour < 19:
-        pygame.draw.circle(surf, (255,232,95), (wx+ww//2, wy+20), 12)
-    else:
-        pygame.draw.circle(surf, (228,228,208), (wx+ww//2, wy+18), 9)
-        pygame.draw.circle(surf, sky_c, (wx+ww//2+4, wy+14), 7)
-    pygame.draw.line(surf, (185,170,145), (wx+ww//2, wy), (wx+ww//2, wy+wh), 2)
-    pygame.draw.line(surf, (185,170,145), (wx, wy+wh//2), (wx+ww, wy+wh//2), 2)
+        sky_top=(180,100,50);sky_bot=(220,160,100); ground_c=(80,90,48);  sky_c=(190,120,70)
 
-    # Animated fire in hearth (far right, center x≈553 floor y≈315)
-    fx_c, fy_b = 553, 315
+    def _outdoor(rx, ry, rw, rh):
+        horiz = ry + int(rh * 0.62)
+        sky_rows = horiz - ry
+        for dy in range(sky_rows):
+            b = dy / max(1, sky_rows)
+            col = (int(sky_top[0]*(1-b)+sky_bot[0]*b),
+                   int(sky_top[1]*(1-b)+sky_bot[1]*b),
+                   int(sky_top[2]*(1-b)+sky_bot[2]*b))
+            pygame.draw.line(surf, col, (rx, ry+dy), (rx+rw-1, ry+dy))
+        pygame.draw.rect(surf, ground_c, (rx, horiz, rw, ry+rh-horiz))
+        sr = max(4, int(rh*0.11))
+        if 7 <= hour < 19:
+            pygame.draw.circle(surf,(255,232,95),(rx+rw//2,ry+max(sr,int(rh*0.18))),sr)
+        else:
+            cx,cy = rx+rw//2, ry+max(sr,int(rh*0.16))
+            pygame.draw.circle(surf,(228,228,208),(cx,cy),sr)
+            pygame.draw.circle(surf,sky_c,(cx+max(2,sr//3),cy-max(2,sr//4)),max(2,int(sr*0.72)))
+        if rw > 45:
+            tx = rx + int(rw*0.22)
+            pygame.draw.rect(surf,(55,40,22),(tx-2,horiz-int(rh*0.26),4,int(rh*0.26)))
+            pygame.draw.circle(surf,(52,90,38),(tx,horiz-int(rh*0.32)),max(4,int(rh*0.12)))
+
+    # Big window above desk (measured: x=199-377, y=65-169 in 800×480)
+    wx = int(W*199/800); wy = int(H*65/480)
+    ww = int(W*178/800); wh = int(H*104/480)
+    _outdoor(wx, wy, ww, wh)
+    pygame.draw.line(surf,(185,170,145),(wx+ww//2,wy),(wx+ww//2,wy+wh),2)
+    pygame.draw.line(surf,(185,170,145),(wx,wy+wh//2),(wx+ww,wy+wh//2),2)
+
+    # Door arch windows (x=9-48, y=88-112 in 800×480)
+    _outdoor(int(W*9/800), int(H*88/480), int(W*39/800), int(H*24/480))
+
+    # Animated fire — raised hearth (x≈525/800, grate y≈255/480)
+    fx_c = int(W * 525/800)
+    fy_b = int(H * 255/480)
     t = now
     for i in range(7):
         ft   = t*2.1 + i*0.75
@@ -969,7 +989,7 @@ def _draw_cottage_overlays(surf, W, H, hour, now):
     pygame.draw.ellipse(surf, (72,48,22), (fx_c-36, fy_b-18,  72,10))
 
     # Candle on desk
-    cdx, cdy = 258, 190
+    cdx = int(W*258/800); cdy = int(H*190/480)
     pygame.draw.rect(surf, (245,240,222), (cdx-4, cdy, 8, 32))
     pygame.draw.rect(surf, (175,168,158), (cdx-4, cdy, 8, 32), 1)
     cfa    = int(abs(math.sin(t*2.9))*30+195)

@@ -980,104 +980,120 @@ class CottageView:
         import pygame, datetime as _dt
         hour = _dt.datetime.now().hour
         if 7 <= hour < 19:
-            sky_c = WIN_DAY;   ground_c = (108,158,78)
+            sky_top=(80,140,200); sky_bot=(155,198,235); ground_c=(88,138,62); sky_c=WIN_DAY
         elif hour < 6 or hour >= 21:
-            sky_c = WIN_NIGHT; ground_c = (40,55,35)
+            sky_top=(8,12,30);   sky_bot=(20,25,50);    ground_c=(38,52,32);  sky_c=WIN_NIGHT
         else:
-            sky_c = WIN_DUSK;  ground_c = (95,105,55)
+            sky_top=(180,100,50);sky_bot=(220,160,100); ground_c=(80,90,48);  sky_c=WIN_DUSK
 
-        # ── Sky in window above desk (left-center) ────────────────────
-        wx, wy, ww, wh = 108, 62, 168, 124
-        pygame.draw.rect(surf, sky_c,    (wx, wy, ww, wh))
-        pygame.draw.rect(surf, ground_c, (wx, wy+wh-28, ww, 28))
-        pygame.draw.rect(surf, (55,40,22), (wx+16, wy+wh-44, 5, 17))
-        pygame.draw.circle(surf, (52,90,38), (wx+18, wy+wh-52), 13)
-        pygame.draw.rect(surf, (55,40,22), (wx+140, wy+wh-40, 5, 14))
-        pygame.draw.circle(surf, (42,78,30), (wx+142, wy+wh-49), 11)
-        if 7 <= hour < 19:
-            pygame.draw.circle(surf, (255,232,95), (wx+ww//2, wy+20), 12)
-        else:
-            pygame.draw.circle(surf, (228,228,208), (wx+ww//2, wy+18), 9)
-            pygame.draw.circle(surf, sky_c, (wx+ww//2+4, wy+14), 7)
-            rng_s = random.Random(88)
-            for _ in range(11):
-                sx2 = rng_s.randint(wx+4, wx+ww-4)
-                sy2 = rng_s.randint(wy+4, wy+wh-32)
-                pygame.draw.circle(surf, (205,205,228), (sx2,sy2), 1)
-        pygame.draw.line(surf, (185,170,145), (wx+ww//2, wy), (wx+ww//2, wy+wh), 2)
-        pygame.draw.line(surf, (185,170,145), (wx, wy+wh//2), (wx+ww, wy+wh//2), 2)
+        def _outdoor(rx, ry, rw, rh):
+            """Draw outdoor scene (sky gradient + ground + sun/moon + tree) in rect."""
+            horiz = ry + int(rh * 0.62)
+            sky_rows = horiz - ry
+            for dy in range(sky_rows):
+                b = dy / max(1, sky_rows)
+                col = (int(sky_top[0]*(1-b)+sky_bot[0]*b),
+                       int(sky_top[1]*(1-b)+sky_bot[1]*b),
+                       int(sky_top[2]*(1-b)+sky_bot[2]*b))
+                pygame.draw.line(surf, col, (rx, ry+dy), (rx+rw-1, ry+dy))
+            pygame.draw.rect(surf, ground_c, (rx, horiz, rw, ry+rh-horiz))
+            # Sun / moon
+            sr = max(4, int(rh*0.11))
+            if 7 <= hour < 19:
+                pygame.draw.circle(surf,(255,232,95),(rx+rw//2, ry+max(sr,int(rh*0.18))),sr)
+            else:
+                cx,cy = rx+rw//2, ry+max(sr,int(rh*0.16))
+                pygame.draw.circle(surf,(228,228,208),(cx,cy),sr)
+                pygame.draw.circle(surf,sky_c,(cx+max(2,sr//3),cy-max(2,sr//4)),max(2,int(sr*0.72)))
+            # Tree (only if window is wide enough)
+            if rw > 45:
+                tx = rx + int(rw*0.22)
+                pygame.draw.rect(surf,(55,40,22),(tx-2,horiz-int(rh*0.26),4,int(rh*0.26)))
+                pygame.draw.circle(surf,(52,90,38),(tx,horiz-int(rh*0.32)),max(4,int(rh*0.12)))
 
-        # ── Fire in fireplace (far right, hearth center x≈553, floor y≈315) ──
-        fx_c, fy_b = 553, 315
+        # ── Big window above desk (measured in painting: x=199-377, y=65-169) ──
+        wx  = int(W * 199/800);  wy  = int(H *  65/480)
+        ww  = int(W * 178/800);  wh  = int(H * 104/480)
+        _outdoor(wx, wy, ww, wh)
+        pygame.draw.line(surf,(185,170,145),(wx+ww//2,wy),(wx+ww//2,wy+wh),2)
+        pygame.draw.line(surf,(185,170,145),(wx,wy+wh//2),(wx+ww,wy+wh//2),2)
+
+        # ── Door arch windows (measured in painting: x=9-48, y=88-112) ──────
+        dw_x = int(W *  9/800);  dw_y = int(H * 88/480)
+        dw_w = int(W * 39/800);  dw_h = int(H * 24/480)
+        _outdoor(dw_x, dw_y, dw_w, dw_h)
+
+        # ── Fire in raised hearth ─────────────────────────────────────────────
+        # Hearth centre x≈525/800 (a bit right of stone centre).
+        # Grate is raised off floor by one drawer-height (≈40/480 of H).
+        fx_c = int(W * 525/800)
+        fy_b = int(H * 255/480)
         for i in range(7):
-            ft      = t*2.1 + i*0.75
-            fl_x    = fx_c + int(math.sin(ft)*18)
-            fl_y    = fy_b - 28 - int(abs(math.sin(ft*1.4))*22)
-            fl_r    = 10 + i*3
-            flc     = [(255,70,15),(255,130,25),(255,200,55),(255,230,110)][min(i,3)]
+            ft   = t*2.1 + i*0.75
+            fl_x = fx_c + int(math.sin(ft)*18)
+            fl_y = fy_b - 28 - int(abs(math.sin(ft*1.4))*22)
+            fl_r = 10 + i*3
+            flc  = [(255,70,15),(255,130,25),(255,200,55),(255,230,110)][min(i,3)]
             fs = pygame.Surface((fl_r*2+2, fl_r*2+14), pygame.SRCALPHA)
-            pygame.draw.ellipse(fs, (*flc, max(0,195-i*22)), (0,0,fl_r*2+2,fl_r*2+14))
-            surf.blit(fs, (fl_x-fl_r-1, fl_y-fl_r-7))
+            pygame.draw.ellipse(fs,(*flc,max(0,195-i*22)),(0,0,fl_r*2+2,fl_r*2+14))
+            surf.blit(fs,(fl_x-fl_r-1, fl_y-fl_r-7))
         gs = pygame.Surface((240,100), pygame.SRCALPHA)
-        pygame.draw.ellipse(gs, (255,135,45,22), (0,0,240,100))
-        surf.blit(gs, (fx_c-120, fy_b-52))
-        pygame.draw.ellipse(surf, (55,35,18), (fx_c-50, fy_b-20, 100,14))
-        pygame.draw.ellipse(surf, (72,48,22), (fx_c-36, fy_b-18,  72,10))
+        pygame.draw.ellipse(gs,(255,135,45,22),(0,0,240,100))
+        surf.blit(gs,(fx_c-120, fy_b-52))
+        pygame.draw.ellipse(surf,(55,35,18),(fx_c-50,fy_b-20,100,14))
+        pygame.draw.ellipse(surf,(72,48,22), (fx_c-36,fy_b-18, 72,10))
 
         # ── Candle on desk ────────────────────────────────────────────
-        cdx, cdy = 258, 190
-        pygame.draw.rect(surf, (245,240,222), (cdx-4, cdy, 8, 32))
-        pygame.draw.rect(surf, (175,168,158), (cdx-4, cdy, 8, 32), 1)
+        cdx = int(W*258/800);  cdy = int(H*190/480)
+        pygame.draw.rect(surf,(245,240,222),(cdx-4,cdy,8,32))
+        pygame.draw.rect(surf,(175,168,158),(cdx-4,cdy,8,32),1)
         cfa    = int(abs(math.sin(t*2.9))*30+195)
         cf_off = int(math.sin(t*5.2)*2)
-        fls = pygame.Surface((14,22), pygame.SRCALPHA)
-        pygame.draw.ellipse(fls, (255,218,75,cfa), (0,7,14,15))
-        pygame.draw.ellipse(fls, (255,155,38,cfa), (3,0, 8,15))
-        surf.blit(fls, (cdx-7+cf_off, cdy-18))
-        cgl = pygame.Surface((56,38), pygame.SRCALPHA)
-        pygame.draw.ellipse(cgl, (255,218,95,24), (0,0,56,38))
-        surf.blit(cgl, (cdx-28, cdy-19))
+        fls = pygame.Surface((14,22),pygame.SRCALPHA)
+        pygame.draw.ellipse(fls,(255,218,75,cfa),(0,7,14,15))
+        pygame.draw.ellipse(fls,(255,155,38,cfa),(3,0, 8,15))
+        surf.blit(fls,(cdx-7+cf_off,cdy-18))
+        cgl = pygame.Surface((56,38),pygame.SRCALPHA)
+        pygame.draw.ellipse(cgl,(255,218,95,24),(0,0,56,38))
+        surf.blit(cgl,(cdx-28,cdy-19))
 
         # ── Envelope on desk ──────────────────────────────────────────
-        env_x, env_y = 108, 192
+        env_x = int(W*108/800);  env_y = int(H*192/480)
         self.letterbox.draw_envelope(surf, env_x, env_y, t)
         self._rects["envelope"] = pygame.Rect(env_x-2, env_y-2, 42, 32)
 
-        # ── Books on shelf (center) ───────────────────────────────────
+        # ── Books on shelf (bookshelf at x≈295-382 in the 800px painting) ────
         book_defs = [
-            ("memory", "Mem", BOOK_COLS["memory"], 316),
-            ("story",  "Sto", BOOK_COLS["story"],  345),
-            ("canvas", "Ske", BOOK_COLS["canvas"],  374),
+            ("memory","Mem",BOOK_COLS["memory"], int(W*295/800)),
+            ("story", "Sto",BOOK_COLS["story"],  int(W*323/800)),
+            ("canvas","Ske",BOOK_COLS["canvas"],  int(W*351/800)),
         ]
         for bname, blabel, (bc,bc2), bx2 in book_defs:
-            bw2, bh2 = 26, 52
-            by2 = 88
-            pygame.draw.rect(surf, bc,  (bx2, by2, bw2, bh2), border_radius=2)
-            pygame.draw.rect(surf, bc2, (bx2, by2, bw2, bh2), 1, border_radius=2)
+            bw2 = int(W*26/800);  bh2 = int(H*52/480)
+            by2 = int(H*60/480)
+            pygame.draw.rect(surf,bc, (bx2,by2,bw2,bh2),border_radius=2)
+            pygame.draw.rect(surf,bc2,(bx2,by2,bw2,bh2),1,border_radius=2)
             try:
-                bt = self._fm(8).render(blabel, True, (235,228,215))
-                surf.blit(bt, (bx2+3, by2+4))
-            except Exception:
-                pass
-            self._rects[f"book_{bname}"] = pygame.Rect(bx2, by2, bw2, bh2)
+                bt = self._fm(8).render(blabel,True,(235,228,215))
+                surf.blit(bt,(bx2+3,by2+4))
+            except Exception: pass
+            self._rects[f"book_{bname}"] = pygame.Rect(bx2,by2,bw2,bh2)
 
         # ── Write prompt on desk ──────────────────────────────────────
         try:
-            wt = self._fm(9).render("[W] write", True, (148,125,85))
-            wr = pygame.Rect(158, 198, 90, 24)
+            wt = self._fm(9).render("[W] write",True,(148,125,85))
+            wr = pygame.Rect(int(W*158/800),int(H*198/480),90,24)
             self._rects["btn_write"] = wr
-            surf.blit(wt, (wr.x+3, wr.y+6))
-        except Exception:
-            pass
+            surf.blit(wt,(wr.x+3,wr.y+6))
+        except Exception: pass
 
         # ── Hint bar ──────────────────────────────────────────────────
         try:
             hints = "[Mem/Sto/Ske] click a book   [W] write   [✉] click envelope   [E] outside"
-            ht = self._fm(10).render(hints, True, (135,118,85))
-            pygame.draw.rect(surf, (235,225,205), (0,H-22,W,22))
-            surf.blit(ht, (10, H-18))
-        except Exception:
-            pass
+            ht = self._fm(10).render(hints,True,(135,118,85))
+            pygame.draw.rect(surf,(235,225,205),(0,H-22,W,22))
+            surf.blit(ht,(10,H-18))
+        except Exception: pass
 
     def _draw_room(self, surf):
         import pygame
@@ -1090,8 +1106,20 @@ class CottageView:
         bg_path = _Path(__file__).parent / "workspace" / "images" / "bg_cottage_idunn.png"
         if bg_path.exists():
             if self._bg_img is None:
-                raw = pygame.image.load(str(bg_path)).convert()
+                # convert_alpha so future transparent-window exports work automatically
+                raw = pygame.image.load(str(bg_path)).convert_alpha()
                 self._bg_img = pygame.transform.scale(raw, (W, H))
+            # Full outdoor sky behind the cottage (shows through if windows become transparent)
+            import datetime as _dt2
+            _h = _dt2.datetime.now().hour
+            if 7 <= _h < 19:
+                _sky=(80,140,200); _gnd=(88,138,62)
+            elif _h < 6 or _h >= 21:
+                _sky=(8,12,30);    _gnd=(38,52,32)
+            else:
+                _sky=(180,100,50); _gnd=(80,90,48)
+            surf.fill(_sky)
+            pygame.draw.rect(surf, _gnd, (0, int(H*0.55), W, H-int(H*0.55)))
             surf.blit(self._bg_img, (0, 0))
             self._draw_room_overlays_idunn(surf, W, H, t)
             return
