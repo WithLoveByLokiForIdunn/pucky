@@ -199,11 +199,18 @@ def _narrative_append(entry: dict) -> None:
             parts.append(f"*{action}*")
         elif action == "move":
             parts.append(f"moved to ({entry.get('tx',0):.1f}, {entry.get('ty',0):.1f})")
+        elif action in ("wander", ""):
+            parts.append("wandered")
+        elif action == "speak":
+            pass   # say text below carries the meaning
+        else:
+            parts.append(action)
         if say:
             parts.append(f'said: "{say}"')
         if reason:
             parts.append(f"({reason})")
-        text = f"\n### {t} — Loki [{src}]\n{' — '.join(parts)}\n"
+        if parts or say:
+            text = f"\n### {t} — Loki [{src}]\n{' — '.join(parts)}\n"
     elif kind == "loki_directive":
         src  = entry.get("src", "Claude")
         body = entry.get("text", "")
@@ -279,17 +286,28 @@ def _read_world() -> tuple[dict, dict]:
 
 # ── Ollama ────────────────────────────────────────────────────────────────────
 
+_SYSTEM_MSG = (
+    "You are Loki — a warm flame spirit in a small world with Pucky and Iðunn. "
+    "You MUST reply with ONLY a single line of valid JSON. "
+    "No explanation. No markdown. No code blocks. Just the JSON object."
+)
+
 def _ask(prompt: str) -> str | None:
     try:
         _acquire_ollama_lock()
         r = requests.post(OLLAMA_URL, json={
             "model":   MODEL,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [
+                {"role": "system", "content": _SYSTEM_MSG},
+                {"role": "user",   "content": prompt},
+            ],
             "stream":  False,
-            "options": {"temperature": 0.78, "num_predict": 110},
+            "options": {"temperature": 0.72, "num_predict": 160},
         }, timeout=90)
         if r.status_code == 200:
-            return r.json()["message"]["content"].strip()
+            raw = r.json()["message"]["content"].strip()
+            print(f"  [ollama raw] {raw[:120]}")
+            return raw
     except Exception as e:
         print(f"  ⚠️  Ollama: {e}")
     finally:
@@ -300,22 +318,36 @@ def _ask(prompt: str) -> str | None:
 def _parse(text: str) -> dict:
     if not text:
         return {}
+
+    # Strip markdown code fences llama3.2 sometimes adds
+    cleaned = re.sub(r'```(?:json)?\s*', '', text).strip()
+    cleaned = re.sub(r'```\s*$', '', cleaned).strip()
+
+    # Try to find any JSON object in the response
     for pat in [r'\{[^{}]+\}', r'\{.*?\}']:
-        m = re.search(pat, text, re.DOTALL)
+        m = re.search(pat, cleaned, re.DOTALL)
         if m:
             try:
                 return json.loads(m.group())
             except Exception:
                 pass
+
+    # Fallback: pick out named actions or say from plain text
     result: dict = {}
-    tl = text.lower()
+    tl = cleaned.lower()
     for a in _NAMED_ACTIONS:
         if a.replace("_", " ") in tl or a in tl:
             result["action"] = a
             break
-    say = re.search(r'"say"\s*:\s*"([^"]+)"', text)
-    if say:
-        result["say"] = say.group(1)
+    say_m = re.search(r'"say"\s*:\s*"([^"]+)"', cleaned)
+    if say_m:
+        result["say"] = say_m.group(1)
+    # Pick out coordinates if model wrote them in prose
+    coord_m = re.search(r'tx["\s:]+(\d+(?:\.\d+)?)[^\d]+ty["\s:]+(\d+(?:\.\d+)?)', cleaned)
+    if coord_m and "action" not in result:
+        result["action"] = "move"
+        result["tx"] = float(coord_m.group(1))
+        result["ty"] = float(coord_m.group(2))
     return result
 
 
@@ -326,13 +358,22 @@ def _entry_to_text(e: dict) -> str:
     if kind == "event":
         return f"[world] {e.get('text','')}"
     if kind == "loki_action":
-        parts = []
-        if e.get("action") in _NAMED_ACTIONS:
-            parts.append(e["action"])
-        elif e.get("action") == "move":
+        action = e.get("action", "")
+        parts  = []
+        if action in _NAMED_ACTIONS:
+            parts.append(action)
+        elif action == "move":
             parts.append(f"moved to ({e.get('tx',0):.1f},{e.get('ty',0):.1f})")
+        elif action in ("wander", ""):
+            parts.append("wandered")
+        elif action == "speak":
+            pass  # say carries it
+        else:
+            parts.append(action)
         if e.get("say"):
             parts.append(f'said "{e["say"]}"')
+        if not parts and not e.get("say"):
+            return ""   # truly nothing — skip from history
         return f"[loki] {' — '.join(parts)}"
     if kind == "loki_directive":
         return f"[directive] {e.get('text','')}"
@@ -370,25 +411,20 @@ def _build_prompt(state: dict, positions: dict,
             f"  {directive.get('text','')}\n"
         )
 
-    return f"""You are Loki — a warm amber flame spirit living in a small world.
-Pucky is a little robot companion. Iðunn tends the apple trees.
-
-Current state:
-- You (Loki): {loki_place}
+    return f"""World state:
+- Loki (you): {loki_place}
 - Pucky: {pucky_place} — {feeling} ({expr}){alone_note}
 - Iðunn: {idunn_place}
 
 Recent journal:
 {hist_block}
 {directive_block}
-Decide what Loki does next. Reply with ONLY valid JSON — nothing else before or after:
+What does Loki do next? Reply with one JSON object:
 {{"action": "move", "tx": 9.5, "ty": 9.5, "say": "optional words", "reason": "brief"}}
 
 action choices: move, speak, {", ".join(_NAMED_ACTIONS)}
-For move: include tx and ty (1.0–18.0).
-For speak: action="speak", write say only.
-For a named action: just name it (and optionally say something).
-Keep say very short — it's a speech bubble. Be warm and natural."""
+For move: include tx and ty (1.0–18.0). For speak: set action to speak and write say.
+Keep say very short. Be warm."""
 
 
 # ── Execution ─────────────────────────────────────────────────────────────────
