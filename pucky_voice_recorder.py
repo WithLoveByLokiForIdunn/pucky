@@ -482,6 +482,18 @@ class VoiceRecorder:
                 if rect.collidepoint(mx, my):
                     self.name_buf    = name
                     self.name_active = False
+                    # if already recorded, load it for preview / redo
+                    existing = VOICE_DIR / f"{name}.wav"
+                    if existing.exists():
+                        try:
+                            raw, _ = sf.read(str(existing), always_2d=False)
+                            self.data       = raw.astype(np.float32)
+                            self.trim_start = 0.0
+                            self.trim_end   = 1.0
+                            self._state     = "review"
+                            self._set_status(f"loaded  {existing.name} — re-record or keep")
+                        except Exception:
+                            pass
                     return
 
         # controls
