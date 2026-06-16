@@ -50,6 +50,9 @@ class SoulQueue:
     Callers submit and return immediately; the response happens
     in the background when it's that request's turn.
 
+    Check `q.thinking` to know if Ollama is currently running —
+    use this to mute the microphone while the Pi is under load.
+
     Usage:
         q = SoulQueue()
         q.submit(lambda: soul._do_speak("hello"), source="voice")
@@ -62,6 +65,7 @@ class SoulQueue:
         self._pending  = set()   # track pending source types to avoid duplicates
         self._worker   = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
+        self.thinking  = False   # True while an AI call is running
 
     # ── public ────────────────────────────────────────────────────────────────
 
@@ -110,10 +114,13 @@ class SoulQueue:
                 print(f"  🚌 [{source}] waited {waited:.0f}s > {max_wait:.0f}s — dropped")
                 continue
 
+            self.thinking = True
             try:
                 task_fn()
             except Exception as e:
                 print(f"  ⚠️  SoulQueue [{source}] error: {e}")
+            finally:
+                self.thinking = False
 
             # Breathe between calls — let voice finish before the next response
             time.sleep(MIN_GAP)

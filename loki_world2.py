@@ -18,6 +18,7 @@ Run:
 
 import json
 import math
+import os
 import queue
 import random
 import re
@@ -1230,23 +1231,51 @@ class OllamaQueue:
         """Synchronous call — only use from inside a worker callback."""
         return self._do_call(messages, timeout)
 
-    def _do_call(self, messages: list, timeout: int) -> str:
-        for attempt in range(3):
+    # Shared lock with pucky_full.py / bmo_local.py so both systems
+    # can't call Ollama at the same time and overheat the Pi.
+    _SHARED_LOCK   = Path("/tmp/pucky_ollama.lock")
+    _LOCK_TTL      = 180   # steal a lock this many seconds old (crashed process)
+    _LOCK_WAIT     = 600   # wait up to 10 min if the other system is thinking
+
+    def _acquire_shared_lock(self) -> None:
+        deadline = time.time() + self._LOCK_WAIT
+        while time.time() < deadline:
+            if self._SHARED_LOCK.exists():
+                age = time.time() - self._SHARED_LOCK.stat().st_mtime
+                if age > self._LOCK_TTL:
+                    self._SHARED_LOCK.unlink(missing_ok=True)
             try:
-                r = requests.post(
-                    OLLAMA_URL,
-                    json={"model": MODEL, "messages": messages, "stream": False},
-                    timeout=timeout,
-                )
-                r.raise_for_status()
-                return r.json()["message"]["content"].strip()
-            except requests.exceptions.Timeout:
-                if attempt < 2:
-                    time.sleep(3)
-                    continue
-                return "(the ember flickered — timed out)"
-            except Exception as e:
-                return f"(the ember flickered — {e})"
+                fd = os.open(str(self._SHARED_LOCK), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(fd, str(os.getpid()).encode())
+                os.close(fd)
+                return
+            except FileExistsError:
+                time.sleep(2)
+
+    def _release_shared_lock(self) -> None:
+        self._SHARED_LOCK.unlink(missing_ok=True)
+
+    def _do_call(self, messages: list, timeout: int) -> str:
+        self._acquire_shared_lock()
+        try:
+            for attempt in range(3):
+                try:
+                    r = requests.post(
+                        OLLAMA_URL,
+                        json={"model": MODEL, "messages": messages, "stream": False},
+                        timeout=timeout,
+                    )
+                    r.raise_for_status()
+                    return r.json()["message"]["content"].strip()
+                except requests.exceptions.Timeout:
+                    if attempt < 2:
+                        time.sleep(3)
+                        continue
+                    return "(the ember flickered — timed out)"
+                except Exception as e:
+                    return f"(the ember flickered — {e})"
+        finally:
+            self._release_shared_lock()
         return "(the ember flickered)"
 
     def _run(self) -> None:

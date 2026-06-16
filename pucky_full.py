@@ -73,6 +73,7 @@ def main():
     listening = PuckyEars(
         on_speech_fn = lambda text: None,   # wired below after soul exists
         mute_fn = lambda: speech.is_speaking or singer.is_singing,
+        # mute_fn extended below to also silence during Ollama thinking
     )
 
     atom    = BMOAtom(
@@ -275,6 +276,13 @@ def main():
         soul.speak_to(text, source="voice")
 
     listening._on_speech = _on_heard
+    # Mute mic while Pucky is speaking OR while Ollama is thinking —
+    # two heavy processes at once is what overheats the Pi
+    listening._mute_fn = lambda: (
+        speech.is_speaking
+        or singer.is_singing
+        or getattr(soul, "_queue", None) is not None and soul._queue.thinking
+    )
 
     # ── Start background threads ────────────────
     life.start()
