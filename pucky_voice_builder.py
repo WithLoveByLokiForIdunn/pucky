@@ -137,9 +137,11 @@ def _process_sample(sample_name: str, midi_note: int) -> Path | None:
                 np.interp(old_idx, np.arange(orig_len), data[:, ch])
                 for ch in range(data.shape[1])
             ])
-        peak = np.max(np.abs(shifted))
-        if peak > 0:
-            shifted = shifted * (0.891 / peak)
+        orig_rms = np.sqrt(np.mean(data.astype(np.float64) ** 2))
+        shift_rms = np.sqrt(np.mean(shifted.astype(np.float64) ** 2))
+        if shift_rms > 0 and orig_rms > 0:
+            shifted = shifted * (orig_rms / shift_rms)
+        shifted = np.clip(shifted, -1.0, 1.0)
         sf.write(str(out), shifted.astype(np.float32), sr)
         return out
     except Exception:
