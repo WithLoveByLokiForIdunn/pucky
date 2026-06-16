@@ -583,7 +583,7 @@ class VoiceBuilder:
             x += bw + 6
 
     def _draw_title(self):
-        t = self.font_lg.render("Pucky Voice Builder", True, C["title"])
+        t = self.font_lg.render("Pucky Voice Builder", True, C["text"])
         self.screen.blit(t, (WIN_W//2 - t.get_width()//2, 8))
 
     # ─── Event handling ───────────────────────────────────────────────────────
