@@ -23,7 +23,7 @@ rectangle). They most need your hand.
 These have a generated scene as fallback (still nice to draw):
 
 [x] bg_brook_idunn.png         — The Flat Stone by the Brook ✓
-[ ] bg_cottage_idunn.png       — The Cottage (fireplace, window)
+[x] bg_cottage_idunn.png       — The Cottage (fireplace, window) ✓
 [ ] bg_apples_idunn.png        — The Apple Trees
 [ ] bg_garden_idunn.png        — The Garden
 [ ] bg_forest_idunn.png        — The Forest
@@ -100,11 +100,11 @@ GIMP source files (.xcf) already there:
  TOTALS
 ─────────────────────────────────────────────────────────────
 
-  Backgrounds    4 done / 11 total    (7 left)
+  Backgrounds    5 done / 11 total    (6 left)
   Loki poses     1 done / 6 total     (5 left)
   Pucky on Loki  2 done / 3 total     (1 left)
   Iðunn poses    0 done / 7 total     (7 left)
 
-  Total: 7 done · 20 still to draw
+  Total: 8 done · 19 still to draw
 
-Last updated: 2026-06-15
+Last updated: 2026-06-16
