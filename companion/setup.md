@@ -66,4 +66,33 @@ and it'll work from anywhere without the Pi.
 
 ## To reset / re-configure
 
-Long-press the orb and type `!setup` — or clear site data in browser settings.
+Type `!setup` in the input bar — or clear site data in browser settings.
+
+---
+
+## No API credits? Run locally instead
+
+If you don't have Anthropic credits, the Pi can serve both the app and
+the AI using Ollama (already set up if you ran `setup_local_ai.sh`).
+
+**Start both servers on the Pi:**
+
+```
+cd /home/bmo/pucky
+
+# serve the phone app
+python3 -m http.server 8766 &
+
+# serve the local AI backend
+python3 companion/local_server.py
+```
+
+**On your phone**, open `http://raspberrypi.local:8766` and enter:
+
+| Field | Value |
+|-------|-------|
+| Worker URL | `http://raspberrypi.local:8767` |
+| Token | *(leave blank)* |
+
+Responses will be slower than Claude (local model) but work fully offline
+once Ollama is running. Your phone and Pi must be on the same WiFi network.
