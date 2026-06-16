@@ -338,6 +338,7 @@ class LetterBox:
         self._page: int        = 0
         self._draft: str       = ""
         self._draft_cursor: float = 0.0
+        self._scroll: int      = 0   # reading scroll offset (lines)
         self._load()
 
     # ── Persistence ───────────────────────────────────────────────────────────
@@ -391,6 +392,7 @@ class LetterBox:
         self._unlocked = False
         self._pin_input = ""
         self._draft    = ""
+        self._scroll   = 0
 
     @property
     def is_open(self) -> bool:
@@ -433,30 +435,40 @@ class LetterBox:
             self.close()
             return "close"
         if key_name in ("right", "d"):
-            self._page = min(len(self.letters) - 1, self._page + 1)
+            self._page   = min(len(self.letters) - 1, self._page + 1)
+            self._scroll = 0
             self._mark_read()
         elif key_name in ("left", "a"):
-            self._page = max(0, self._page - 1)
+            self._page   = max(0, self._page - 1)
+            self._scroll = 0
             self._mark_read()
+        elif key_name == "down":
+            self._scroll += 1
+        elif key_name == "up":
+            self._scroll = max(0, self._scroll - 1)
         elif key_name == "w":
-            self._mode  = "writing"
-            self._draft = ""
+            self._mode   = "writing"
+            self._draft  = ""
         return ""
 
     def _writing_key(self, key_name: str, ch: str) -> str:
         if key_name == "escape":
-            self._mode = "reading"
-            self._draft = ""
-        elif key_name == "return":
-            if self._draft.strip():
-                self.add_letter("Iðunn", self._draft.strip())
-                self._page = len(self.letters) - 1
             self._mode  = "reading"
             self._draft = ""
+        elif key_name == "f2":
+            if self._draft.strip():
+                self.add_letter("Iðunn", self._draft.strip())
+                self._page   = len(self.letters) - 1
+                self._scroll = 0
+            self._mode  = "reading"
+            self._draft = ""
+        elif key_name == "return":
+            if len(self._draft) < 1200:
+                self._draft += "\n"
         elif key_name == "backspace":
             self._draft = self._draft[:-1]
         elif ch and ch.isprintable():
-            if len(self._draft) < 400:
+            if len(self._draft) < 1200:
                 self._draft += ch
         return ""
 
@@ -565,37 +577,54 @@ class LetterBox:
             # Header
             from_name = letter.get("from", "?")
             ts        = letter.get("timestamp", "")[:10]
-            header    = f"From: {from_name}   {ts}"
-            ht        = f_hint.render(header, True, (128, 105, 68))
+            ht = f_hint.render(f"From: {from_name}   {ts}", True, (128, 105, 68))
             surf.blit(ht, (bx + 18, by + 18))
             pygame.draw.line(surf, (198, 180, 148), (bx + 14, by + 36), (bx + bw - 14, by + 36), 1)
 
-            # Body — word wrap
-            body  = letter.get("body", "")
-            words = body.split()
-            lines, line = [], ""
-            max_w = bw - 48
-            for w in words:
-                test = (line + " " + w).lstrip()
-                if f_body.size(test)[0] <= max_w:
-                    line = test
-                else:
-                    if line: lines.append(line)
-                    line = w
-            if line: lines.append(line)
+            # Word-wrap body (respecting \n paragraphs)
+            body    = letter.get("body", "")
+            max_w   = bw - 64
+            lines   = []
+            for para in body.split("\n"):
+                if not para.strip():
+                    lines.append("")
+                    continue
+                words = para.split()
+                line  = ""
+                for w in words:
+                    test = (line + " " + w).lstrip()
+                    if f_body.size(test)[0] <= max_w:
+                        line = test
+                    else:
+                        if line: lines.append(line)
+                        line = w
+                if line: lines.append(line)
 
-            ry = by + 46
-            for ln in lines:
-                if ry > by + bh - 60:
-                    break
+            lh        = 17
+            area_top  = by + 46
+            area_bot  = by + bh - 60
+            visible   = max(1, (area_bot - area_top) // lh)
+            total     = len(lines)
+            self._scroll = max(0, min(self._scroll, max(0, total - visible)))
+
+            ry = area_top
+            for ln in lines[self._scroll : self._scroll + visible]:
                 surf.blit(f_body.render(ln, True, (72, 52, 28)), (bx + 18, ry))
-                ry += 17
+                ry += lh
+
+            # Scrollbar
+            if total > visible:
+                sb_x  = bx + bw - 14
+                sb_h  = area_bot - area_top
+                thumb_h = max(14, sb_h * visible // total)
+                thumb_y = area_top + (sb_h - thumb_h) * self._scroll // max(1, total - visible)
+                pygame.draw.rect(surf, (210, 198, 175), (sb_x, area_top, 6, sb_h), border_radius=3)
+                pygame.draw.rect(surf, (148, 125, 85),  (sb_x, thumb_y, 6, thumb_h), border_radius=3)
 
             # Page / nav / hints
-            pg = f_hint.render(f"{idx+1} / {len(letters)}", True, (158, 135, 98))
+            pg  = f_hint.render(f"{idx+1} / {len(letters)}", True, (158, 135, 98))
             surf.blit(pg, (cx - pg.get_width() // 2, by + bh - 44))
-            hints = "[◀▶] prev/next   [W] write   [Esc] close"
-            ht2   = f_hint.render(hints, True, (158, 135, 98))
+            ht2 = f_hint.render("[◀▶] prev/next   [↑↓] scroll   [W] write   [Esc] close", True, (158, 135, 98))
             surf.blit(ht2, (cx - ht2.get_width() // 2, by + bh - 28))
         except Exception:
             pass
@@ -608,27 +637,44 @@ class LetterBox:
             surf.blit(title, (cx - title.get_width() // 2, by + 20))
             pygame.draw.line(surf, (198, 180, 148), (bx + 14, by + 44), (bx + bw - 14, by + 44), 1)
 
-            # Draft text with cursor
-            draft_with_cursor = self._draft + ("|" if int(t * 2) % 2 == 0 else " ")
-            words = draft_with_cursor.split()
-            lines, line = [], ""
-            max_w = bw - 48
-            for w in words:
-                test = (line + " " + w).lstrip()
-                if f_body.size(test)[0] <= max_w:
-                    line = test
-                else:
-                    if line: lines.append(line)
-                    line = w
-            if line: lines.append(line)
+            # Word-wrap draft (respecting \n), append blinking cursor to last line
+            cursor    = "|" if int(t * 2) % 2 == 0 else " "
+            raw       = self._draft + cursor
+            max_w     = bw - 64
+            lines     = []
+            for para in raw.split("\n"):
+                if not para and para is not raw.split("\n")[-1]:
+                    lines.append("")
+                    continue
+                words = para.split()
+                line  = ""
+                for w in words:
+                    test = (line + " " + w).lstrip()
+                    if f_body.size(test)[0] <= max_w:
+                        line = test
+                    else:
+                        if line: lines.append(line)
+                        line = w
+                lines.append(line)
 
-            ry = by + 56
-            for ln in lines:
-                if ry > by + bh - 60: break
+            lh        = 17
+            area_top  = by + 56
+            area_bot  = by + bh - 44
+            visible   = max(1, (area_bot - area_top) // lh)
+            # auto-scroll to keep cursor visible
+            if len(lines) > visible:
+                w_scroll = len(lines) - visible
+            else:
+                w_scroll = 0
+
+            ry = area_top
+            for ln in lines[w_scroll : w_scroll + visible]:
                 surf.blit(f_body.render(ln, True, (58, 42, 22)), (bx + 18, ry))
-                ry += 17
+                ry += lh
 
-            hint = f_hint.render("[Enter] send   [Esc] cancel", True, (158, 135, 98))
+            char_count = f_hint.render(f"{len(self._draft)}/1200", True, (188, 165, 120))
+            surf.blit(char_count, (bx + bw - char_count.get_width() - 18, by + bh - 44))
+            hint = f_hint.render("[Enter] newline   [F2] send   [Esc] cancel", True, (158, 135, 98))
             surf.blit(hint, (cx - hint.get_width() // 2, by + bh - 28))
         except Exception:
             pass
