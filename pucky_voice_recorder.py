@@ -47,9 +47,9 @@ WISH = [
     ("cah",  "cah  /kɑ/", 'hard K in "cat" — say "cah" not "kay"'),
     # ── battle cries ──────────────────────────────────────────────────────────
     ("cry_fight",   "⚔  fight cry",   "your battle call — say whatever feels right"),
-    ("cry_hit",     "⚔  hit grunt",   "a short grunt for landing a hit — "hh!" or "ha!""),
-    ("cry_heavy",   "⚔  heavy hit",   "big impact sound — "RAAH!" or a deep groan"),
-    ("cry_ouch",    "⚔  take a hit",  "getting hit — "oof!" or "ahh!""),
+    ("cry_hit",     "⚔  hit grunt",   "a short grunt for landing a hit — hh! or ha!"),
+    ("cry_heavy",   "⚔  heavy hit",   "big impact sound — RAAH! or a deep groan"),
+    ("cry_ouch",    "⚔  take a hit",  "getting hit — oof! or ahh!"),
     ("cry_victory", "⚔  victory",     "winning! — cheer, laugh, whatever you feel"),
 ]
 
