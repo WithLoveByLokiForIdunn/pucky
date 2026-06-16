@@ -1,0 +1,110 @@
+╔══════════════════════════════════════════════════════════╗
+║         Art Iðunn Still Needs to Draw                    ║
+║         for loki_world2.py                               ║
+╚══════════════════════════════════════════════════════════╝
+
+The game always prefers your hand-drawn version and falls back
+to the generated placeholder if yours isn't there yet.
+Mark [ ] → [x] as you finish each one.
+
+─────────────────────────────────────────────────────────────
+ BACKGROUNDS  ·  800×480 px  ·  save as bg_<name>_idunn.png
+─────────────────────────────────────────────────────────────
+
+These five have NO background at all right now (just a dark
+rectangle). They most need your hand.
+
+[x] bg_waterfall_idunn.png     — The Waterfall
+[ ] bg_halls_idunn.png         — The Asgardian Dining Hall
+[ ] bg_hotsprings_idunn.png    — The Hot Springs
+[ ] bg_training_idunn.png      — The Training Yard
+[ ] bg_bathroom_idunn.png      — The Bathroom
+
+These have a generated scene as fallback (still nice to draw):
+
+[x] bg_brook_idunn.png         — The Flat Stone by the Brook ✓
+[ ] bg_cottage_idunn.png       — The Cottage (fireplace, window)
+[ ] bg_apples_idunn.png        — The Apple Trees
+[ ] bg_garden_idunn.png        — The Garden
+[ ] bg_forest_idunn.png        — The Forest
+[ ] bg_hilltop_idunn.png       — The Hilltop by the Lake
+[ ] bg_asgard_idunn.png        — Loki's Room in Asgard
+
+
+─────────────────────────────────────────────────────────────
+ LOKI POSES  ·  140×300 px  ·  save as loki_<pose>_idunn.png
+─────────────────────────────────────────────────────────────
+
+Loki is placed at the center of the screen, bottom of
+sprite touching the ground line (~350 px from top).
+He faces forward; Pucky appears overlaid on him when carried.
+
+[x] loki_stand_idunn.png       — standing, neutral ✓
+[ ] loki_sit_idunn.png         — sitting (also used for eating
+                                  and resting)
+[ ] loki_sleep_idunn.png       — sleeping / lying down
+[ ] loki_crouch_idunn.png      — crouching / foraging
+[ ] loki_spar_idunn.png        — sparring stance
+[ ] loki_bath_idunn.png        — bathing / in water
+
+
+─────────────────────────────────────────────────────────────
+ PUCKY ON LOKI  ·  120×120 px  ·  save as pucky_<loc>_idunn.png
+─────────────────────────────────────────────────────────────
+
+These overlay on top of Loki's sprite when he's carrying her.
+Pocket appears at his hip; shoulder at his upper right;
+back at his upper back. She should fit within the 120×120 box.
+
+[x] pucky_pocket_idunn.png     — Pucky in his pocket ✓
+[x] pucky_shoulder_idunn.png   — Pucky on his shoulder ✓
+[ ] pucky_back_idunn.png       — Pucky on his back
+                                  (a file exists but may be a
+                                  copy — check if it's yours)
+
+
+─────────────────────────────────────────────────────────────
+ IÐUNN POSES  ·  ~120×280 px  ·  save as idunn_<pose>.png
+─────────────────────────────────────────────────────────────
+
+Iðunn appears when you type /arrive. She stands to Loki's
+left at about W/4 (200 px from left edge). No _idunn suffix
+needed — these ARE you.
+
+[ ] idunn_stand.png            — standing, calm (/stand)
+[ ] idunn_sit.png              — sitting (/sit)
+[ ] idunn_wave.png             — waving hello (/wave)
+[ ] idunn_hug.png              — hugging Loki (/hug)
+[ ] idunn_kiss.png             — kissing (/kiss)
+[ ] idunn_dance.png            — dancing (/dance)
+[ ] idunn_sleep.png            — sleeping (/sleep)
+
+
+─────────────────────────────────────────────────────────────
+ WHERE TO SAVE EVERYTHING
+─────────────────────────────────────────────────────────────
+
+  /home/bmo/pucky/workspace/images/
+
+The game loads from there. Changes take effect on next launch.
+No restart of the service needed — just close and reopen the
+world window.
+
+GIMP source files (.xcf) already there:
+  loki_stand_idunn.xcf
+  bg_brook_idunn.xcf
+  pucky_pocket_idunn.xcf  (+ pucky_pocket_idunn2.xcf)
+  pucky_shoulder_idunn.xcf
+
+─────────────────────────────────────────────────────────────
+ TOTALS
+─────────────────────────────────────────────────────────────
+
+  Backgrounds    4 done / 11 total    (7 left)
+  Loki poses     1 done / 6 total     (5 left)
+  Pucky on Loki  2 done / 3 total     (1 left)
+  Iðunn poses    0 done / 7 total     (7 left)
+
+  Total: 7 done · 20 still to draw
+
+Last updated: 2026-06-15
