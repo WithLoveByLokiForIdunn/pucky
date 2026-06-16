@@ -302,7 +302,7 @@ def _on_claude_note_reply(body: str) -> None:
 
 PYRAMID = [
     # (name,           decay/hr, threshold)
-    ("physiological",  0.25,     0.40),
+    ("physiological",  0.09,     0.40),
     ("safety",         0.12,     0.38),
     ("social",         0.18,     0.38),
     ("esteem",         0.08,     0.35),
@@ -1461,10 +1461,12 @@ class PuckyBaby:
         self._q           = ollama_q
         self._next        = time.time() + random.uniform(120, 240)
         self._memory_next = time.time() + random.uniform(2400, 4200)
-        self._hunger      = 0.65   # she hasn't been properly fed in the new world
+        self._hunger      = 0.20   # start content; stomach is small but she just ate
         self._lonely      = 0.40
         self._last_tick   = time.time()
         self._eat_flagged = False  # feed only once per eating session
+        self._stomach_hours     = self._compute_stomach_hours()
+        self._stomach_check_t   = time.time() + 300  # refresh every 5 min
         self.last_said    = ""
         self._chat_ref    = None
 
@@ -1477,6 +1479,15 @@ class PuckyBaby:
             return PUCKY_MEMORY_PATH.read_text(encoding="utf-8").strip()
         except Exception:
             return ""
+
+    def _compute_stomach_hours(self) -> float:
+        """Pucky's stomach capacity grows with age (diary entries = lived experience)."""
+        try:
+            diary = PUCKY_MEMORY_PATH.parent / "pucky_diary.jsonl"
+            entries = diary.read_text().count('\n')
+        except Exception:
+            entries = 0
+        return 4.0 + min(8.0, entries * 0.04)
 
     def _choose_wander_place(self, loki_place: str, hour: int) -> str:
         """Pucky picks where to go based on how she feels."""
@@ -1535,8 +1546,14 @@ class PuckyBaby:
         elapsed = now - self._last_tick
         self._last_tick = now
 
-        # needs decay over time
-        self._hunger = min(1.0, self._hunger + elapsed / (8 * 3600))
+        # refresh stomach size periodically
+        if now >= self._stomach_check_t:
+            self._stomach_hours   = self._compute_stomach_hours()
+            self._stomach_check_t = now + 300
+
+        # needs decay over time — her stomach grows as she gets older
+        # starts at 4hr cycle (baby); grows toward 12hr cycle over ~200 diary entries
+        self._hunger = min(1.0, self._hunger + elapsed / (self._stomach_hours * 3600))
         if pucky_where in ("pocket", "shoulder", "back"):
             # being held: loneliness falls quickly
             self._lonely = max(0.0, self._lonely - elapsed / (2 * 3600))
@@ -1874,12 +1891,12 @@ class LifeScheduler:
         es = self.needs.level("esteem")
 
         if ph < 0.25:
-            if ph < 0.15 or self._need("last_meal",    3*3600): return ACT_EAT
+            if ph < 0.15 or self._need("last_meal",    5*3600): return ACT_EAT
             if self._need("last_bathroom", 2*3600):              return ACT_BATHROOM
             return ACT_REST
         if (hour >= 22 or hour < 7) and ph > 0.35 and sa > 0.25:
             return ACT_SLEEP
-        if self._need("last_meal",     5*3600): return ACT_EAT
+        if self._need("last_meal",    10*3600): return ACT_EAT
         if self._need("last_bathroom", 3*3600): return ACT_BATHROOM
         if self._need("last_bath",    20*3600) and 13 <= hour <= 19: return ACT_BATH
         if es < 0.35:
