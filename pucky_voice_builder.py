@@ -218,11 +218,15 @@ class Slider:
 
     def handle_event(self, ev):
         kr = self._knob_r
-        ky = self.rect.centery
+        hit = self.rect.inflate(0, 20)   # tall hit zone around the whole track
         if ev.type == pygame.MOUSEBUTTONDOWN:
-            kx = self._knob_x()
-            if math.hypot(ev.pos[0] - kx, ev.pos[1] - ky) < kr + 10:
+            if hit.collidepoint(ev.pos):
                 self._drag = True
+                rel = (ev.pos[0] - self.rect.x - kr) / max(1, self.rect.w - 2*kr)
+                rel = max(0.0, min(1.0, rel))
+                self.value = self.min + rel * (self.max - self.min)
+                if self.integer:
+                    self.value = round(self.value)
         elif ev.type == pygame.MOUSEBUTTONUP:
             self._drag = False
         elif ev.type == pygame.MOUSEMOTION and self._drag:
