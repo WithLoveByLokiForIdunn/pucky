@@ -463,8 +463,10 @@ class VoiceRecorder:
             if ev.key == pygame.K_RETURN and self._state == "review":
                 self._accept()
 
-        if ev.type == pygame.MOUSEWHEEL and ev.pos[0] >= PANEL_X:
-            self._wish_scroll = max(0, self._wish_scroll - ev.y * 20)
+        if ev.type == pygame.MOUSEWHEEL:
+            mx = pygame.mouse.get_pos()[0]
+            if mx >= PANEL_X:
+                self._wish_scroll = max(0, self._wish_scroll - ev.y * 20)
 
         if ev.type != pygame.MOUSEBUTTONDOWN:
             return
