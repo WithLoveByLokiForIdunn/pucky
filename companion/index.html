@@ -6,7 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#0b0f14">
-<title>·</title>
+<link rel="manifest" href="manifest.json">
+<title>pucky</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
@@ -590,6 +591,56 @@ function showSetup() {
 }
 
 store.url() ? showMain() : showSetup();
+
+// ── Apple touch icon (iOS home screen) ───────────────────────────────────────
+(function () {
+  const size = 180;
+  const c    = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const s   = size / 512;
+
+  ctx.fillStyle = '#0b0f14';
+  ctx.fillRect(0, 0, size, size);
+
+  function glow(cx, cy, color) {
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 110 * s);
+    g.addColorStop(0, color + '55');
+    g.addColorStop(1, color + '00');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 110 * s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function orb(cx, cy, light, mid, dark) {
+    const ox = cx - 10 * s;
+    const oy = cy - 12 * s;
+    const g  = ctx.createRadialGradient(ox, oy, 0, cx, cy, 82 * s);
+    g.addColorStop(0,    light);
+    g.addColorStop(0.48, mid);
+    g.addColorStop(1,    dark);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 82 * s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  glow(168 * s, 256 * s, '#68c88e');
+  glow(344 * s, 256 * s, '#c8956a');
+  orb(168 * s, 256 * s, '#c0f8e0', '#68c88e', '#1a3f28');
+  orb(344 * s, 256 * s, '#f8e8c0', '#c8956a', '#3f2010');
+
+  const link = document.createElement('link');
+  link.rel   = 'apple-touch-icon';
+  link.href  = c.toDataURL('image/png');
+  document.head.appendChild(link);
+})();
+
+// ── Service worker ────────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js');
+}
 </script>
 </body>
 </html>
