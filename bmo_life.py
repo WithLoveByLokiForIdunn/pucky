@@ -90,6 +90,7 @@ class BMOLife:
 
         self._lock            = threading.Lock()
         self._last_interaction= time.time()
+        self._last_save       = 0.0    # throttle disk writes
         self._running         = False
         self._thread          = None
 
@@ -193,7 +194,10 @@ class BMOLife:
                 self.data.get("interaction_count", 0) + 1
             self.data["last_interaction"] = datetime.now(
                 timezone.utc).isoformat()
-            _save_data(self.data)
+            # Write at most once every 30 seconds — SD card care
+            if now - self._last_save >= 30.0:
+                _save_data(self.data)
+                self._last_save = now
 
         if was_away:
             # They came back — big relief moment, start anxiety window

@@ -32,6 +32,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from bmo_queue import SoulQueue
+
 # ─── load API key ─────────────────────────────
 # Checks (in order):
 #   1. ANTHROPIC_API_KEY environment variable
@@ -131,6 +133,7 @@ class PuckyClaude:
             self._client = None
 
         self._lock    = threading.Lock()
+        self._queue   = SoulQueue()
 
         # Persistent history — survives reboots
         self.history  = self._load_history()
@@ -245,40 +248,48 @@ If you feel quiet, a single soft line is enough."""
     #  PUBLIC: RESPOND TO SOMEONE
     # ─────────────────────────────────────────
 
-    def speak_to(self, user_text: str, source: str = "voice") -> dict:
+    def speak_to(self, user_text: str, source: str = "voice") -> None:
         """
         Someone spoke to or interacted with Pucky.
-        Claude responds as her.
-        Returns {"expression": str, "words": str}
+        Queues the response — returns immediately so the caller's thread
+        is never blocked. Pucky responds when it's her turn.
         """
-        context  = self._state_context()
-        message  = f"{context}\n\n[{source}]: {user_text}"
-        response = self._call_claude(message)
-        result   = self._parse(response)
-        self._act(result)
-        return result
+        context = self._state_context()
+        message = f"{context}\n\n[{source}]: {user_text}"
+
+        def _task():
+            response = self._call_claude(message)
+            result   = self._parse(response)
+            self._act(result)
+
+        queue_source = source if source in ("voice", "system") else "life"
+        self._queue.submit(_task, source=queue_source)
 
     # ─────────────────────────────────────────
     #  PUBLIC: AUTONOMOUS THOUGHT
     # ─────────────────────────────────────────
 
-    def autonomous_thought(self, trigger: str = "quiet moment") -> Optional[dict]:
+    def autonomous_thought(self, trigger: str = "quiet moment",
+                           source: str = "auto") -> None:
         """
         Pucky has an unprompted thought — loneliness, wonder,
-        something noticed. Called from the background thread
-        or from external events (vision, touch).
+        something noticed. Queues it — returns immediately.
+        If a thought is already queued, this one is quietly skipped.
         """
-        context  = self._state_context()
-        message  = (
+        context = self._state_context()
+        message = (
             f"{context}\n\n"
             f"[inner moment — {trigger}]\n"
             f"A feeling or thought is rising. Let it out."
         )
-        response = self._call_claude(message)
-        result   = self._parse(response)
-        self._act(result)
-        self._last_autonomous_time = time.time()
-        return result
+
+        def _task():
+            response = self._call_claude(message)
+            result   = self._parse(response)
+            self._act(result)
+            self._last_autonomous_time = time.time()
+
+        self._queue.submit(_task, source=source)
 
     # ─────────────────────────────────────────
     #  CLAUDE API CALL

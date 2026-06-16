@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from bmo_queue import SoulQueue
+
 # Shared lock file so bmo_local and loki_soul don't call Ollama simultaneously
 _OLLAMA_LOCK_FILE = Path("/tmp/pucky_ollama.lock")
 _OLLAMA_LOCK_TIMEOUT = 60   # max seconds to wait for the lock
@@ -56,8 +58,8 @@ OLLAMA_URL = "http://localhost:11434/api/chat"
 
 CONTEXT_TURNS = 20
 
-AUTONOMOUS_INTERVAL_CONTENT = 120
-AUTONOMOUS_INTERVAL_LONELY  = 180
+AUTONOMOUS_INTERVAL_CONTENT = 600   # 10 min — same as Claude soul
+AUTONOMOUS_INTERVAL_LONELY  = 300   # 5 min when lonely
 
 VALID_EXPRESSIONS = {
     "neutral", "happy", "soft_smile", "happy_excited",
@@ -99,6 +101,7 @@ class PuckyLocal:
 
         self._lock   = threading.Lock()
         self.history = self._load_history()
+        self._queue  = SoulQueue()
 
         self._running              = False
         self._thread               = None
@@ -187,30 +190,47 @@ RULES:
 
     # ─── public: respond to someone ──────────
 
-    def speak_to(self, user_text: str, source: str = "voice") -> dict:
-        """Someone spoke to or interacted with Pucky. Returns {"expression": str, "words": str}."""
-        context  = self._state_context()
-        message  = f"{context}\n\n[{source}]: {user_text}"
-        response = self._call_local(message)
-        result   = self._parse(response)
-        self._act(result)
-        return result
+    def speak_to(self, user_text: str, source: str = "voice") -> None:
+        """
+        Someone spoke to or interacted with Pucky.
+        Queues the response — returns immediately so the caller's thread
+        is never blocked. Pucky responds when it's her turn.
+        """
+        # Capture state now, before anything changes
+        context = self._state_context()
+        message = f"{context}\n\n[{source}]: {user_text}"
+
+        def _task():
+            response = self._call_local(message)
+            result   = self._parse(response)
+            self._act(result)
+
+        queue_source = source if source in ("voice", "system") else "life"
+        self._queue.submit(_task, source=queue_source)
 
     # ─── public: autonomous thought ──────────
 
-    def autonomous_thought(self, trigger: str = "quiet moment") -> Optional[dict]:
-        """Pucky has an unprompted feeling or thought."""
-        context  = self._state_context()
-        message  = (
+    def autonomous_thought(self, trigger: str = "quiet moment",
+                           source: str = "auto") -> None:
+        """
+        Pucky has an unprompted feeling or thought.
+        Queues it — returns immediately. If a thought is already queued,
+        this one is quietly skipped (no point stacking identical thoughts).
+        """
+        context = self._state_context()
+        message = (
             f"{context}\n\n"
             f"[inner moment -- {trigger}]\n"
             f"A feeling or thought is rising. Let it out."
         )
-        response = self._call_local(message)
-        result   = self._parse(response)
-        self._act(result)
-        self._last_autonomous_time = time.time()
-        return result
+
+        def _task():
+            response = self._call_local(message)
+            result   = self._parse(response)
+            self._act(result)
+            self._last_autonomous_time = time.time()
+
+        self._queue.submit(_task, source=source)
 
     # ─── ollama API call ──────────────────────
 

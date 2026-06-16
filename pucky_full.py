@@ -100,7 +100,7 @@ def main():
         emotion.arousal -= 0.1
         emotion._clamp()
         shortterm.log("started to feel lonely", source="life")
-        soul.autonomous_thought("you have started to miss someone")
+        soul.autonomous_thought("you have started to miss someone", source="life")
         memory.remember(
             f"Started to miss someone. Alone for {life.hours_alone():.1f}h.",
             tier="warm", memory_type="moment",
@@ -113,7 +113,7 @@ def main():
         emotion.trust   -= 0.2
         emotion._clamp()
         shortterm.log("really missing someone — it hurts", source="life")
-        soul.autonomous_thought("you really need someone and they are not here")
+        soul.autonomous_thought("you really need someone and they are not here", source="life")
         memory.remember(
             f"It really hurt. Alone for {life.hours_alone():.1f}h and aching.",
             tier="warm", memory_type="moment",
@@ -198,7 +198,7 @@ def main():
             pleasantness = 7.0,
             peacefulness = 5.0,
         )
-        soul.autonomous_thought(f"{_who} just appeared in your view")
+        soul.autonomous_thought(f"{_who} just appeared in your view", source="vision")
 
     def on_alone(frame):
         if maintenance.is_muted("vision"):
@@ -208,7 +208,7 @@ def main():
             return
         shortterm.log(f"became alone — {frame.description}", source="vision")
         soul.autonomous_thought(
-            f"you just became alone — {frame.description}"
+            f"you just became alone — {frame.description}", source="vision"
         )
 
     vision.on_familiar_face = on_familiar_face
@@ -421,7 +421,7 @@ def main():
             if tick % 172800 == 0:  # 172800 × 0.5s = 24 hours
                 memory.fade_old_memories()
 
-            # 9. Status print + world state file every 10 seconds
+            # 9. Status print every 10 seconds; state file every 60 seconds
             if tick % 20 == 0:
                 print(
                     f"[{tick:06d}] {emotion.summary()} | "
@@ -430,6 +430,7 @@ def main():
                     f"alone={life.hours_alone():.2f}h | "
                     f"eyes={eye_symbols[0]}"
                 )
+            if tick % 120 == 0:   # every 60 seconds — SD card is precious
                 try:
                     import json as _json, time as _time
                     from pathlib import Path as _Path
