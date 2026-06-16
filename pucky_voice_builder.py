@@ -122,15 +122,36 @@ def _process_sample(sample_name: str, midi_note: int) -> Path | None:
     out = CACHE_DIR / f"{sample_name}_{midi_note}.wav"
     if out.exists():
         return out
-    cents = (midi_note - base) * 100
     try:
-        subprocess.run(
-            ["sox", str(src), str(out), "pitch", str(cents), "norm", "-1"],
-            capture_output=True, timeout=10
-        )
-        return out if out.exists() else src
+        import numpy as np
+        import soundfile as sf
+        data, sr = sf.read(str(src), always_2d=False)
+        ratio = 2.0 ** ((midi_note - base) / 12.0)
+        orig_len = len(data)
+        new_len = max(1, int(orig_len / ratio))
+        old_idx = np.linspace(0, orig_len - 1, new_len)
+        if data.ndim == 1:
+            shifted = np.interp(old_idx, np.arange(orig_len), data)
+        else:
+            shifted = np.column_stack([
+                np.interp(old_idx, np.arange(orig_len), data[:, ch])
+                for ch in range(data.shape[1])
+            ])
+        peak = np.max(np.abs(shifted))
+        if peak > 0:
+            shifted = shifted * (0.891 / peak)
+        sf.write(str(out), shifted.astype(np.float32), sr)
+        return out
     except Exception:
-        return src
+        cents = (midi_note - base) * 100
+        try:
+            subprocess.run(
+                ["sox", str(src), str(out), "pitch", str(cents), "norm", "-1"],
+                capture_output=True, timeout=10
+            )
+            return out if out.exists() else src
+        except Exception:
+            return src
 
 def _play_sample(sample_name: str, midi_note: int, duration: float,
                  mixer=None):
