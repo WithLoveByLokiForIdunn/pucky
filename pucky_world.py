@@ -2148,18 +2148,7 @@ def run_pygame():
         return ""
 
     def _world_responses(text: str, pucky_state=None) -> str:
-        """Respond as Loki. Writes to Pucky's diary; checks for a whisper from the full Loki."""
-        # Write what Iðunn said to Pucky's diary (zero-cost, async)
-        _diary_append("heard", text, pucky_state)
-
-        # Check for a pending whisper from Claude / full Loki
-        whisper = _consume_whisper()
-        if whisper and whisper.get("loki_says"):
-            reply = whisper["loki_says"]
-            _loki_history.append({"role": "user",      "content": text})
-            _loki_history.append({"role": "assistant",  "content": reply})
-            return reply
-
+        """Fallback response as Loki when no whisper and no matched intent. Tries API, else static."""
         import time as _t
         now = _t.time()
         # Debounce — if called within 3 s of the last call, use fallback
@@ -2472,12 +2461,21 @@ def run_pygame():
                 threading.Thread(target=_singer.hum_curious, daemon=True).start()
             # Parse intent, dispatch actions, speak response — async so world doesn't stall
             def _act_async(text=_heard, _orb=orb, _pucky=pucky, _idunn=idunn, _sp=_world_speech):
-                intent = _parse_intent(text)
-                spoken = _dispatch_intent(intent, _idunn, _pucky, _orb)
-                if spoken is None:
-                    spoken = _world_responses(text, _pucky.state)
-                    _orb.bubble_text = spoken
-                    _orb.bubble_life = max(4.0, len(spoken) * 0.07)
+                # Always write to the diary first
+                _diary_append("heard", text, _pucky.state)
+                # Whisper from full Loki takes priority over all other responses
+                whisper = _consume_whisper()
+                if whisper and whisper.get("loki_says"):
+                    spoken = whisper["loki_says"]
+                    _loki_history.append({"role": "user",      "content": text})
+                    _loki_history.append({"role": "assistant",  "content": spoken})
+                else:
+                    intent = _parse_intent(text)
+                    spoken = _dispatch_intent(intent, _idunn, _pucky, _orb)
+                    if spoken is None:
+                        spoken = _world_responses(text, _pucky.state)
+                _orb.bubble_text = spoken
+                _orb.bubble_life = max(4.0, len(spoken) * 0.07)
                 sp = _sp[0]
                 if sp and spoken:
                     sp.say(spoken)
