@@ -397,9 +397,50 @@ class VoiceBuilder:
 
         def _run():
             self._playing = True
-            for sample_name, note, dur in snapshot:
-                _play_sample(sample_name, note, dur, self.mixer)
-                time.sleep(max(0.0, dur - 0.02))
+            CACHE_DIR.mkdir(exist_ok=True)
+
+            # Pitch-shift + trim each phoneme to its exact duration
+            trimmed = []
+            for i, (sample_name, note, dur) in enumerate(snapshot):
+                path = _process_sample(sample_name, note)
+                if not path:
+                    continue
+                t = CACHE_DIR / f"_trim_{i}.wav"
+                subprocess.run(
+                    ["sox", str(path), str(t), "trim", "0", str(round(dur, 3))],
+                    capture_output=True, timeout=5
+                )
+                if t.exists():
+                    trimmed.append(str(t))
+
+            if not trimmed:
+                self._playing = False
+                return
+
+            # Concatenate into one gapless wav
+            combined = CACHE_DIR / "word_combined.wav"
+            subprocess.run(
+                ["sox"] + trimmed + [str(combined)],
+                capture_output=True, timeout=10
+            )
+
+            if combined.exists():
+                if self.mixer:
+                    try:
+                        snd = self.mixer.Sound(str(combined))
+                        snd.set_volume(0.88)
+                        ch = self.mixer.find_channel(True)
+                        if ch:
+                            ch.play(snd)
+                            total = sum(d for _, _, d in snapshot) + 0.3
+                            end = time.time() + total
+                            while ch.get_busy() and time.time() < end:
+                                time.sleep(0.02)
+                    except Exception:
+                        subprocess.run(["pw-play", str(combined)], timeout=30)
+                else:
+                    subprocess.run(["pw-play", str(combined)], timeout=30)
+
             self._playing = False
 
         threading.Thread(target=_run, daemon=True).start()
