@@ -227,5 +227,17 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .mem-text{font-size:.88em;color:var(--text);line-height:1.6}
 .mem-empty{color:var(--dimmer);font-size:.88em;text-align:center;padding:40px 0}
 
+/* ── Voice Recording ── */
+.voice-controls{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:9px;padding-top:9px;
+  border-top:1px solid var(--border)}
+.voice-btn{font-size:.78em;padding:5px 11px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg);color:var(--dim);cursor:pointer;white-space:nowrap;line-height:1.5}
+.voice-btn:active{background:var(--bg3)}
+.voice-btn.rec{color:var(--danger);border-color:var(--danger)}
+.voice-btn.play{color:var(--pucky);border-color:var(--pucky)}
+.rec-dot{color:var(--danger);font-size:.8em;animation:pulse 1s ease-in-out infinite}
+.voice-has{font-size:.7em;opacity:.6}
+
 /* ── Animations ── */
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}

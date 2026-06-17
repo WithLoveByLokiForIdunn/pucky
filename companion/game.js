@@ -891,6 +891,94 @@ function renderCompanions(){
   </div>`).join('');
 }
 
+// ── VoiceDB ───────────────────────────────────────────────────────────────────
+
+const VDB = (() => {
+  let _db = null;
+  function open() {
+    return new Promise((res, rej) => {
+      if (_db) { res(_db); return; }
+      const req = indexedDB.open('grove_voices', 1);
+      req.onupgradeneeded = e => e.target.result.createObjectStore('clips');
+      req.onsuccess = e => { _db = e.target.result; res(_db); };
+      req.onerror = () => rej(req.error);
+    });
+  }
+  async function op(mode, fn) {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const t = db.transaction('clips', mode);
+      const r = fn(t.objectStore('clips'));
+      r.onsuccess = () => res(r.result);
+      r.onerror  = () => rej(r.error);
+    });
+  }
+  return {
+    save:   (id, blob) => op('readwrite', s => s.put(blob, id)),
+    load:   (id)       => op('readonly',  s => s.get(id)),
+    remove: (id)       => op('readwrite', s => s.delete(id)),
+    has:    async (id) => (await op('readonly', s => s.get(id))) != null,
+  };
+})();
+
+// ── Voice Recording ───────────────────────────────────────────────────────────
+
+let _recorder = null;
+let _recChunks = [];
+let _recBeingId = null;
+let _voiceHas = {}; // cache: beingId -> bool
+
+async function refreshVoiceStates() {
+  for (const b of S.world.beings) {
+    _voiceHas[b.id] = await VDB.has(b.id);
+  }
+}
+
+async function startRecording(beingId) {
+  if (_recorder) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    _recChunks = [];
+    _recBeingId = beingId;
+    _recorder = new MediaRecorder(stream);
+    _recorder.ondataavailable = e => { if (e.data.size > 0) _recChunks.push(e.data); };
+    _recorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(_recChunks, { type: _recorder.mimeType || 'audio/webm' });
+      await VDB.save(_recBeingId, blob);
+      _voiceHas[_recBeingId] = true;
+      _recorder = null;
+      _recBeingId = null;
+      renderWorldContent();
+    };
+    _recorder.start();
+    renderWorldContent(); // show ⏹ stop button
+  } catch(e) {
+    _recorder = null;
+    _recBeingId = null;
+    alert('Microphone access needed.\n\niPhone: Settings → Safari → Microphone → Allow.');
+  }
+}
+
+function stopRecording() {
+  if (_recorder && _recorder.state === 'recording') _recorder.stop();
+}
+
+async function playVoice(beingId) {
+  const blob = await VDB.load(beingId);
+  if (!blob) return;
+  const url = URL.createObjectURL(blob);
+  const a = new Audio(url);
+  a.onended = () => URL.revokeObjectURL(url);
+  a.play().catch(() => {});
+}
+
+async function deleteVoice(beingId) {
+  await VDB.remove(beingId);
+  _voiceHas[beingId] = false;
+  renderWorldContent();
+}
+
 // ── World Tab ─────────────────────────────────────────────────────────────────
 
 let worldSubtab = 'places';
@@ -905,7 +993,8 @@ function setWorldSubtab(tab){
   renderWorldContent();
 }
 
-function renderWorld(){
+async function renderWorld(){
+  await refreshVoiceStates();
   renderWorldContent();
 }
 
@@ -1002,16 +1091,27 @@ function renderBeings(){
         </div>
       </div>` : '';
 
+    const hasVoice   = _voiceHas[being.id] || false;
+    const isRecording = _recBeingId === being.id;
+    const voiceControls = `<div class="voice-controls">
+      ${isRecording
+        ? `<button class="voice-btn rec" onclick="stopRecording()">⏹ stop</button><span class="rec-dot">●</span>`
+        : `<button class="voice-btn"     onclick="startRecording('${being.id}')">🎤 record voice</button>`}
+      ${hasVoice && !isRecording ? `<button class="voice-btn play" onclick="playVoice('${being.id}')">▶ play</button>` : ''}
+      ${hasVoice && !isRecording ? `<button class="voice-btn"      onclick="deleteVoice('${being.id}')">✕ voice</button>` : ''}
+    </div>`;
+
     return `<div class="being-card">
       <div class="being-head">
         <div class="being-emoji">${being.emoji}</div>
         <div class="being-meta">
-          <div class="being-name">${esc(being.name)}</div>
+          <div class="being-name">${esc(being.name)}${hasVoice ? ' <span class="voice-has">🎤</span>' : ''}</div>
           ${beingTypeBadge(being.type)}
         </div>
       </div>
       <div class="being-desc">${esc(being.description)}</div>
       <div class="being-phrase">"${esc(being.phrase)}"</div>
+      ${voiceControls}
       <div class="being-actions">
         ${editBtn}${delBtn}
       </div>
