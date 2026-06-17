@@ -227,6 +227,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .mem-text{font-size:.88em;color:var(--text);line-height:1.6}
 .mem-empty{color:var(--dimmer);font-size:.88em;text-align:center;padding:40px 0}
 
+/* ── Chapter Complete ── */
+.ch-card{padding:4px 0 8px}
+.ch-day{font-size:.72em;color:var(--gold);letter-spacing:.05em;margin-bottom:10px}
+.ch-mems{border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:5px}
+.ch-mem-line{font-size:.83em;color:var(--dim);line-height:1.55;font-style:italic}
+
 /* ── Voice Recording ── */
 .voice-controls{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:9px;padding-top:9px;
   border-top:1px solid var(--border)}

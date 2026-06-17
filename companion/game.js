@@ -380,7 +380,7 @@ ${S.pucky.name} is watching with great attention from three feet away. You come 
           memory:`Tried to help Loki build and mostly got in the way. They didn't mind.` }) },
     ]},
 
-  { id:'merchant', type:'encounter', weight:5, title:'The Wandering Merchant',
+  { id:'merchant', type:'encounter', weight:5, beingType:'merchant', title:'The Wandering Merchant',
     text: S=>{
       const m = getBeingById('merchant');
       const mName = m ? m.name : 'Mara';
@@ -676,6 +676,14 @@ function renderScene(scene){
     const check = c.stat ? `<div class="check">${c.stat.toUpperCase()} check · DC ${c.dc}${c.helper?` · ${S[c.helper].name} helps`:''}</div>` : '';
     return `<button class="choice-btn" onclick="choose(${i})">${choiceText}${check}</button>`;
   }).join('');
+
+  // Auto-play voice if scene has an associated being with a recording
+  if(scene.beingType){
+    const being = S.world.beings.find(b => b.type === scene.beingType);
+    if(being && _voiceHas[being.id]){
+      setTimeout(() => playVoice(being.id), 500);
+    }
+  }
 }
 
 function choose(i){
@@ -725,17 +733,53 @@ function choose(i){
 
 function advance(){
   const wasBoss = S.currentSceneId === '__boss__';
+  const oldChapter = S.progress.chapter;
   if(wasBoss){
     S.progress.chapter++;
     S.progress.scenesThisChapter=0;
     S.progress.day++;
+    save();
+    renderParty();
+    showChapterComplete(oldChapter);
   } else {
     S.progress.scenesThisChapter++;
     S.progress.totalScenes++;
     if(!S.recentScenes) S.recentScenes=[];
     S.recentScenes.push(S.currentSceneId);
     if(S.recentScenes.length > 5) S.recentScenes.shift();
+    const next = pickScene();
+    S.currentSceneId = next.id;
+    save();
+    renderParty();
+    renderScene(next);
+    document.getElementById('scene-area').scrollTop = 0;
   }
+}
+
+function showChapterComplete(ch){
+  const sa = document.getElementById('scene-area');
+  const ca = document.getElementById('choices-area');
+  const chMems = S.memories.filter(m => m.chapter === ch);
+  const preview = chMems.slice(-3).map(m =>
+    `<div class="ch-mem-line">· ${m.text}</div>`).join('');
+  sa.innerHTML = `
+    <div class="scene-title" style="animation:rise .3s ease">chapter ${ch} complete</div>
+    <div class="ch-card" style="animation:rise .35s ease">
+      <div class="ch-day">day ${S.progress.day - 1} · ${chMems.length} ${chMems.length===1?'memory':'memories'} kept</div>
+      ${preview ? `<div class="ch-mems">${preview}</div>` : ''}
+    </div>`;
+  ca.innerHTML = `
+    <button class="choice-btn" onclick="saveMemoriesThenContinue()">📖 save memories → continue</button>
+    <button class="continue-btn" onclick="continueFromChapter()">continue →</button>`;
+  document.getElementById('scene-area').scrollTop = 0;
+}
+
+function saveMemoriesThenContinue(){
+  downloadMemories();
+  setTimeout(continueFromChapter, 400);
+}
+
+function continueFromChapter(){
   const next = pickScene();
   S.currentSceneId = next.id;
   save();
