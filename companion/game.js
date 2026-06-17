@@ -35,6 +35,7 @@ const DEFAULTS = {
   recentScenes:[],
   inventory:[],
   pendingBonus: null,
+  mapState: null, // { mapId, currentRoomId } when navigating, null otherwise
   world: null, // populated on init
 };
 
@@ -459,6 +460,7 @@ function defaultWorld(){
     currentPlace: 'grove',
     places: PLACES_BUILTIN.map(p=>({...p, beings:[...p.beings]})),
     beings: BEINGS_BUILTIN.map(b=>({...b})),
+    maps: [],
   };
 }
 
@@ -470,9 +472,11 @@ function mergeState(saved){
   // Always ensure new fields exist
   if(!merged.inventory)     merged.inventory     = [];
   if(!merged.pendingBonus)  merged.pendingBonus  = null;
+  if(merged.mapState === undefined) merged.mapState = null;
   if(!merged.world || !merged.world.beings){
     merged.world = defaultWorld();
   }
+  if(!merged.world.maps) merged.world.maps = [];
   return merged;
 }
 
@@ -629,7 +633,15 @@ function renderParty(){
   const loc = document.getElementById('location-hint');
   if(loc){
     const place = getCurrentPlace();
-    loc.textContent = place ? `📍 ${place.name}` : '';
+    if(place){
+      const placeMap = S.world.maps.find(m=>m.placeId===place.id);
+      const exploreBtn = placeMap && !S.mapState
+        ? `<button class="map-explore-btn" onclick="enterMap('${placeMap.id}')">🗺 explore →</button>`
+        : '';
+      loc.innerHTML = `<span>📍 ${esc(place.name)}</span>${exploreBtn}`;
+    } else {
+      loc.textContent = '';
+    }
   }
 
   // Update pending bonus indicator
@@ -1007,6 +1019,8 @@ function renderWorldContent(){
   const wc = document.getElementById('world-content');
   if(worldSubtab === 'places'){
     wc.innerHTML = renderPlaces();
+  } else if(worldSubtab === 'maps'){
+    wc.innerHTML = renderMaps();
   } else {
     wc.innerHTML = renderBeings();
   }
@@ -1184,6 +1198,452 @@ function deleteBeing(beingId){
   renderWorldContent();
 }
 
+// ── Maps ──────────────────────────────────────────────────────────────────────
+
+let mapEditorPlaceId = null;
+const mapRoomEditOpen = {}; // roomId -> bool
+const mapExitFormOpen = {}; // roomId -> bool
+
+function getMapForPlace(placeId){
+  return S.world.maps.find(m=>m.placeId===placeId) || null;
+}
+
+function renderMaps(){
+  const places = S.world.places;
+  const sel = mapEditorPlaceId || (places[0] ? places[0].id : null);
+  mapEditorPlaceId = sel;
+
+  const dropdown = `<select class="map-subtab-select" onchange="mapEditorPlaceId=this.value;renderWorldContent()">
+    ${places.map(p=>`<option value="${esc(p.id)}"${p.id===sel?' selected':''}>${esc(p.emoji)} ${esc(p.name)}</option>`).join('')}
+  </select>`;
+
+  if(!sel) return `<div style="color:var(--dimmer);font-size:.88em;padding:20px 0;text-align:center">no places yet</div>`;
+
+  const map = getMapForPlace(sel);
+  const place = places.find(p=>p.id===sel);
+
+  if(!map){
+    return `${dropdown}
+      <div style="color:var(--dimmer);font-size:.85em;margin-bottom:14px">No map for ${esc(place ? place.name : sel)} yet.</div>
+      <button class="world-add-btn" onclick="createMap('${esc(sel)}')">+ create map for this place</button>`;
+  }
+
+  const rooms = map.rooms || [];
+  const roomCards = rooms.map(room=>{
+    const isStart = map.startRoomId === room.id;
+    const exits = room.exits || [];
+    const beingsHere = (room.beings || []).map(bid=>{
+      const b = getBeingById(bid);
+      return b ? `${b.emoji} ${b.name}` : null;
+    }).filter(Boolean).join(', ');
+
+    const exitsHtml = exits.length
+      ? `<div class="map-exits-section">
+          <div class="map-exits-label">exits</div>
+          ${exits.map((ex,ei)=>`<div class="map-exit-row">
+            <span class="map-exit-label">${esc(ex.label)} → ${ex.roomId ? esc((rooms.find(r=>r.id===ex.roomId)||{}).name||'?') : 'exit map'}</span>
+            <button class="map-exit-del" onclick="deleteExit('${esc(map.id)}','${esc(room.id)}',${ei})">×</button>
+          </div>`).join('')}
+        </div>`
+      : '';
+
+    const editForm = mapRoomEditOpen[room.id] ? renderRoomEditForm(map, room) : '';
+    const exitForm = mapExitFormOpen[room.id] ? renderAddExitForm(map, room) : '';
+
+    return `<div class="map-room-card">
+      <div class="map-room-head">
+        <div class="map-room-emoji">${room.emoji||'🏠'}</div>
+        <div class="map-room-name">${esc(room.name)}</div>
+        ${isStart ? '<div class="map-room-star">★ start</div>' : ''}
+      </div>
+      ${room.description ? `<div class="map-room-desc">${esc(room.description)}</div>` : ''}
+      ${beingsHere ? `<div style="font-size:.72em;color:var(--dimmer);margin-bottom:6px">beings: ${beingsHere}</div>` : ''}
+      ${exitsHtml}
+      <div class="map-room-actions">
+        <button class="world-action-btn" onclick="toggleRoomEdit('${esc(room.id)}')">edit</button>
+        <button class="world-action-btn" onclick="toggleExitForm('${esc(room.id)}')">add exit</button>
+        ${!isStart ? `<button class="world-action-btn" onclick="setStartRoom('${esc(map.id)}','${esc(room.id)}')">set start</button>` : ''}
+        <button class="world-action-btn del" onclick="deleteRoom('${esc(map.id)}','${esc(room.id)}')">delete</button>
+      </div>
+      ${editForm}
+      ${exitForm}
+    </div>`;
+  }).join('');
+
+  return `${dropdown}
+    <div style="font-size:.7em;color:var(--dimmer);letter-spacing:.07em;text-transform:uppercase;margin-bottom:10px">
+      map · ${esc(place ? place.name : sel)}
+    </div>
+    ${roomCards}
+    <button class="world-add-btn" onclick="addRoom('${esc(map.id)}')">+ add room</button>
+    <button class="world-add-btn" style="color:var(--danger);margin-top:6px" onclick="deleteMap('${esc(map.id)}')">delete map</button>`;
+}
+
+function renderRoomEditForm(map, room){
+  const allBeings = S.world.beings;
+  const beingChecks = allBeings.map(b=>`
+    <label class="map-being-check">
+      <input type="checkbox" ${(room.beings||[]).includes(b.id)?'checked':''}
+        onchange="toggleBeingInRoom('${esc(map.id)}','${esc(room.id)}','${esc(b.id)}',this.checked)">
+      ${b.emoji} ${esc(b.name)}
+    </label>`).join('');
+
+  return `<div class="map-room-edit-form">
+    <div class="world-field">
+      <label>Name</label>
+      <input value="${esc(room.name)}" oninput="updateRoom('${esc(map.id)}','${esc(room.id)}','name',this.value)">
+    </div>
+    <div class="world-field">
+      <label>Emoji</label>
+      <input value="${esc(room.emoji||'')}" oninput="updateRoom('${esc(map.id)}','${esc(room.id)}','emoji',this.value)" maxlength="2" style="width:60px">
+    </div>
+    <div class="world-field">
+      <label>Description</label>
+      <textarea rows="2" oninput="updateRoom('${esc(map.id)}','${esc(room.id)}','description',this.value)">${esc(room.description||'')}</textarea>
+    </div>
+    <div class="world-field">
+      <label>Beings present</label>
+      <div class="map-beings-checks">${beingChecks}</div>
+    </div>
+  </div>`;
+}
+
+function renderAddExitForm(map, room){
+  const rooms = map.rooms || [];
+  const otherRooms = rooms.filter(r=>r.id!==room.id);
+  return `<div class="map-add-exit-form">
+    <div class="world-field">
+      <label>Exit label</label>
+      <input id="exit-label-${esc(room.id)}" placeholder="e.g. up the stairs" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px 8px;font-size:.82em;font-family:inherit;outline:none">
+    </div>
+    <div class="world-field">
+      <label>Destination</label>
+      <select id="exit-dest-${esc(room.id)}">
+        <option value="">none (exit map)</option>
+        ${otherRooms.map(r=>`<option value="${esc(r.id)}">${esc(r.emoji||'')} ${esc(r.name)}</option>`).join('')}
+      </select>
+    </div>
+    <button class="world-action-btn" onclick="addExit('${esc(map.id)}','${esc(room.id)}')">add exit</button>
+  </div>`;
+}
+
+function createMap(placeId){
+  const mapId = 'map_' + Date.now();
+  const roomId = 'room_' + Date.now();
+  const map = {
+    id: mapId,
+    placeId,
+    rooms: [{
+      id: roomId,
+      name: 'Starting Room',
+      emoji: '🚪',
+      description: '',
+      beings: [],
+      exits: [],
+      visited: false,
+    }],
+    startRoomId: roomId,
+  };
+  S.world.maps.push(map);
+  save();
+  renderWorldContent();
+}
+
+function deleteMap(mapId){
+  S.world.maps = S.world.maps.filter(m=>m.id!==mapId);
+  if(S.mapState && S.mapState.mapId === mapId) S.mapState = null;
+  save();
+  renderWorldContent();
+}
+
+function addRoom(mapId){
+  const map = S.world.maps.find(m=>m.id===mapId);
+  if(!map) return;
+  const roomId = 'room_' + Date.now();
+  map.rooms.push({ id:roomId, name:'New Room', emoji:'🚪', description:'', beings:[], exits:[], visited:false });
+  mapRoomEditOpen[roomId] = true;
+  save();
+  renderWorldContent();
+}
+
+function deleteRoom(mapId, roomId){
+  const map = S.world.maps.find(m=>m.id===mapId);
+  if(!map) return;
+  map.rooms = map.rooms.filter(r=>r.id!==roomId);
+  // Remove exits pointing to this room
+  map.rooms.forEach(r=>{ r.exits = r.exits.filter(ex=>ex.roomId!==roomId); });
+  if(map.startRoomId === roomId) map.startRoomId = map.rooms[0] ? map.rooms[0].id : null;
+  if(S.mapState && S.mapState.mapId===mapId && S.mapState.currentRoomId===roomId) S.mapState=null;
+  save();
+  renderWorldContent();
+}
+
+function updateRoom(mapId, roomId, field, value){
+  const map = S.world.maps.find(m=>m.id===mapId);
+  if(!map) return;
+  const room = map.rooms.find(r=>r.id===roomId);
+  if(room){ room[field] = value; save(); }
+}
+
+function setStartRoom(mapId, roomId){
+  const map = S.world.maps.find(m=>m.id===mapId);
+  if(map){ map.startRoomId = roomId; save(); renderWorldContent(); }
+}
+
+function toggleRoomEdit(roomId){
+  mapRoomEditOpen[roomId] = !mapRoomEditOpen[roomId];
+  mapExitFormOpen[roomId] = false;
+  renderWorldContent();
+}
+
+function toggleExitForm(roomId){
+  mapExitFormOpen[roomId] = !mapExitFormOpen[roomId];
+  mapRoomEditOpen[roomId] = false;
+  renderWorldContent();
+}
+
+function toggleBeingInRoom(mapId, roomId, beingId, checked){
+  const map = S.world.maps.find(m=>m.id===mapId);
+  if(!map) return;
+  const room = map.rooms.find(r=>r.id===roomId);
+  if(!room) return;
+  if(!room.beings) room.beings = [];
+  if(checked && !room.beings.includes(beingId)) room.beings.push(beingId);
+  if(!checked) room.beings = room.beings.filter(id=>id!==beingId);
+  save();
+}
+
+function addExit(mapId, roomId){
+  const labelEl = document.getElementById(`exit-label-${roomId}`);
+  const destEl  = document.getElementById(`exit-dest-${roomId}`);
+  if(!labelEl || !destEl) return;
+  const label = labelEl.value.trim();
+  if(!label) return;
+  const dest = destEl.value || null;
+  const map = S.world.maps.find(m=>m.id===mapId);
+  if(!map) return;
+  const room = map.rooms.find(r=>r.id===roomId);
+  if(!room) return;
+  if(!room.exits) room.exits = [];
+  room.exits.push({ label, roomId: dest || null });
+  mapExitFormOpen[roomId] = false;
+  save();
+  renderWorldContent();
+}
+
+function deleteExit(mapId, roomId, exitIdx){
+  const map = S.world.maps.find(m=>m.id===mapId);
+  if(!map) return;
+  const room = map.rooms.find(r=>r.id===roomId);
+  if(!room || !room.exits) return;
+  room.exits.splice(exitIdx, 1);
+  save();
+  renderWorldContent();
+}
+
+// ── Map Navigation ────────────────────────────────────────────────────────────
+
+function enterMap(mapId){
+  const map = S.world.maps.find(m=>m.id===mapId);
+  if(!map) return;
+  S.mapState = { mapId, currentRoomId: map.startRoomId };
+  save();
+  renderParty();
+  renderMapNav();
+}
+
+function leaveMap(){
+  S.mapState = null;
+  save();
+  renderParty();
+  renderScene(getScene(S.currentSceneId));
+}
+
+function moveToRoom(roomId){
+  if(!S.mapState) return;
+  const map = S.world.maps.find(m=>m.id===S.mapState.mapId);
+  if(!map) return;
+  // Mark current room visited
+  const cur = map.rooms.find(r=>r.id===S.mapState.currentRoomId);
+  if(cur) cur.visited = true;
+  S.mapState.currentRoomId = roomId;
+  save();
+  renderMapNav();
+}
+
+function renderMapNav(){
+  const sa = document.getElementById('scene-area');
+  const ca = document.getElementById('choices-area');
+  if(!S.mapState){ renderScene(getScene(S.currentSceneId)); return; }
+
+  const map = S.world.maps.find(m=>m.id===S.mapState.mapId);
+  if(!map){ S.mapState=null; save(); renderScene(getScene(S.currentSceneId)); return; }
+
+  const room = map.rooms.find(r=>r.id===S.mapState.currentRoomId);
+  if(!room){ leaveMap(); return; }
+
+  const beingNames = (room.beings||[]).map(bid=>{
+    const b = getBeingById(bid);
+    return b ? `${b.emoji} ${b.name}` : null;
+  }).filter(Boolean).join(' · ');
+
+  const minimapSvg = renderMinimap(map, S.mapState.currentRoomId);
+
+  sa.innerHTML = `
+    <div class="map-mode-indicator">map mode</div>
+    ${minimapSvg}
+    <div class="map-nav-room">
+      <div class="map-nav-room-title">
+        <span class="map-nav-room-emoji">${room.emoji||'🚪'}</span>
+        <span>${esc(room.name)}</span>
+      </div>
+      ${room.description ? `<div class="map-nav-room-desc">${esc(room.description)}</div>` : ''}
+      ${beingNames ? `<div class="map-nav-beings">beings here: ${beingNames}</div>` : ''}
+    </div>`;
+
+  const exits = room.exits || [];
+  ca.innerHTML = exits.map((ex, i)=>{
+    if(ex.roomId === null){
+      return `<button class="map-exit-btn" onclick="leaveMap()">${esc(ex.label)} →</button>`;
+    }
+    return `<button class="map-exit-btn" onclick="moveToRoom('${esc(ex.roomId)}')">${esc(ex.label)} →</button>`;
+  }).join('') + `<button class="map-leave-btn" onclick="leaveMap()">← leave map</button>`;
+}
+
+function renderMinimap(map, currentRoomId){
+  const rooms = map.rooms || [];
+  if(!rooms.length) return '';
+
+  const W = 140, H = 100;
+  const R = 13; // room circle radius
+  const COLS = 3;
+
+  // Assign grid positions via BFS from start room
+  const posMap = {};
+  const visited = new Set();
+  const queue = [{ id: map.startRoomId, gx: 0, gy: 0 }];
+
+  // direction keywords → grid offset
+  function dirOffset(label){
+    const l = label.toLowerCase();
+    if(/north|up/.test(l))   return { dx:0, dy:-1 };
+    if(/south|down/.test(l)) return { dx:0, dy:1 };
+    if(/east|right/.test(l)) return { dx:1, dy:0 };
+    if(/west|left/.test(l))  return { dx:-1, dy:0 };
+    return null;
+  }
+
+  function freeCell(gx, gy){
+    // Check if any room already occupies this cell
+    for(const p of Object.values(posMap)){
+      if(p.gx===gx && p.gy===gy) return false;
+    }
+    return true;
+  }
+
+  function nextFreeFrom(gx, gy){
+    const offsets = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1},{dx:1,dy:1},{dx:-1,dy:1}];
+    for(const {dx,dy} of offsets){
+      if(freeCell(gx+dx, gy+dy)) return {gx:gx+dx, gy:gy+dy};
+    }
+    return {gx: gx+1, gy: gy};
+  }
+
+  // BFS layout
+  while(queue.length){
+    const {id, gx, gy} = queue.shift();
+    if(visited.has(id)) continue;
+    visited.add(id);
+    const room = rooms.find(r=>r.id===id);
+    if(!room) continue;
+    if(!posMap[id]) posMap[id] = {gx, gy};
+    const exits = room.exits||[];
+    for(const ex of exits){
+      if(!ex.roomId || visited.has(ex.roomId)) continue;
+      const dir = dirOffset(ex.label);
+      if(dir){
+        const nx = gx + dir.dx, ny = gy + dir.dy;
+        if(freeCell(nx,ny)){
+          queue.push({ id: ex.roomId, gx: nx, gy: ny });
+        } else {
+          const nf = nextFreeFrom(gx, gy);
+          queue.push({ id: ex.roomId, gx: nf.gx, gy: nf.gy });
+        }
+      } else {
+        const nf = nextFreeFrom(gx, gy);
+        queue.push({ id: ex.roomId, gx: nf.gx, gy: nf.gy });
+      }
+    }
+  }
+  // Fallback: any rooms not reached by BFS get grid positions
+  rooms.forEach((room, i) => {
+    if(!posMap[room.id]){
+      const col = i % COLS, row = Math.floor(i / COLS);
+      posMap[room.id] = { gx: col, gy: row };
+    }
+  });
+
+  // Scale grid positions to SVG coords
+  const gxs = Object.values(posMap).map(p=>p.gx);
+  const gys = Object.values(posMap).map(p=>p.gy);
+  const minGx = Math.min(...gxs), maxGx = Math.max(...gxs);
+  const minGy = Math.min(...gys), maxGy = Math.max(...gys);
+  const spanX = Math.max(maxGx - minGx, 1);
+  const spanY = Math.max(maxGy - minGy, 1);
+  const pad = R + 4;
+  const cellW = (W - pad*2) / spanX;
+  const cellH = (H - pad*2) / spanY;
+  const cellSize = Math.min(cellW, cellH, 40);
+
+  function toSvg(gx, gy){
+    const cx = pad + (gx - minGx) * cellSize;
+    const cy = pad + (gy - minGy) * cellSize;
+    return { cx: Math.round(cx), cy: Math.round(cy) };
+  }
+
+  // Draw lines for connections
+  const lines = [];
+  const drawnEdges = new Set();
+  rooms.forEach(room=>{
+    const from = posMap[room.id];
+    if(!from) return;
+    const fp = toSvg(from.gx, from.gy);
+    (room.exits||[]).forEach(ex=>{
+      if(!ex.roomId) return;
+      const edgeKey = [room.id, ex.roomId].sort().join('|');
+      if(drawnEdges.has(edgeKey)) return;
+      drawnEdges.add(edgeKey);
+      const to = posMap[ex.roomId];
+      if(!to) return;
+      const tp = toSvg(to.gx, to.gy);
+      lines.push(`<line x1="${fp.cx}" y1="${fp.cy}" x2="${tp.cx}" y2="${tp.cy}" stroke="#283040" stroke-width="2"/>`);
+    });
+  });
+
+  // Draw circles for rooms
+  const circles = rooms.map(room=>{
+    const pos = posMap[room.id];
+    if(!pos) return '';
+    const {cx, cy} = toSvg(pos.gx, pos.gy);
+    const isCurrent = room.id === currentRoomId;
+    const isVisited = room.visited || room.id === map.startRoomId;
+    const fillColor  = isCurrent ? '#2a2010' : '#141c28';
+    const strokeColor= isCurrent ? '#d4b86a' : isVisited ? '#5a6878' : '#283040';
+    const strokeW    = isCurrent ? 2 : 1.5;
+    const pulse = isCurrent
+      ? `<circle cx="${cx}" cy="${cy}" r="${R+3}" fill="none" stroke="#d4b86a" stroke-width="1" opacity="0.4"/>`
+      : '';
+    const emoji = room.emoji||'';
+    return `${pulse}<circle cx="${cx}" cy="${cy}" r="${R}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeW}"/>
+      <text x="${cx}" y="${cy+5}" text-anchor="middle" font-size="12">${emoji}</text>`;
+  }).join('');
+
+  return `<svg class="map-minimap" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+    ${lines.join('')}
+    ${circles}
+  </svg>`;
+}
+
 // ── Memories Tab ──────────────────────────────────────────────────────────────
 
 function renderMemories(){
@@ -1233,6 +1693,10 @@ function setTab(tab){
   if(tab==='comp')  renderCompanions();
   if(tab==='mem')   renderMemories();
   if(tab==='world') renderWorld();
+  if(tab==='adv'){
+    renderParty();
+    if(S.mapState){ renderMapNav(); } else { renderScene(getScene(S.currentSceneId)); }
+  }
 }
 
 // ── Apple Touch Icon ──────────────────────────────────────────────────────────
@@ -1267,6 +1731,11 @@ S = mergeState(loadState());
 if(!S.world || !S.world.beings){
   S.world = defaultWorld();
 }
+if(!S.world.maps) S.world.maps = [];
 
 renderParty();
-renderScene(getScene(S.currentSceneId));
+if(S.mapState){
+  renderMapNav();
+} else {
+  renderScene(getScene(S.currentSceneId));
+}
