@@ -1,5 +1,11 @@
-const CACHE = 'grove-v1';
-const SHELL = ['./game.html', './game-manifest.json', './icon.svg'];
+const CACHE = 'grove-v2';
+const SHELL = [
+  './game.html',
+  './game.css',
+  './game.js',
+  './game-manifest.json',
+  './icon.svg',
+];
 
 self.addEventListener('install', e => {
   e.waitUntil(
