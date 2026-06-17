@@ -70,6 +70,30 @@ const ITEMS = {
   grove_water:  { id:'grove_water',  name:'Grove Water',   emoji:'💧', type:'consumable', description:'Still and bright. Restores 12 HP to everyone.',          effect:{allHp:12},            uses:1 },
 };
 
+// ── Civilization Data ─────────────────────────────────────────────────────────
+
+const CIV_BUILDINGS = [
+  { id:'hearth',      name:'Hearthfire',      emoji:'🔥', era:1, cost:{wood:2},              desc:'All recover +5 HP at chapter end.',          effect:'chapter_heal'      },
+  { id:'farm',        name:'Root Garden',     emoji:'🌱', era:1, cost:{food:2,wood:1},        desc:'Find a Healer\'s Leaf each chapter.',        effect:'chapter_item'      },
+  { id:'workshop',    name:'Maker\'s Corner', emoji:'⚒️', era:1, cost:{wood:1,stone:1},       desc:'+1 Loki Craft (permanent).',                 effect:'stat_loki_craft'   },
+  { id:'circle',      name:'Stone Circle',    emoji:'🪨', era:2, cost:{stone:3},              desc:'+1 WIS (permanent).',                        effect:'stat_player_wis'   },
+  { id:'shrine',      name:'Root Shrine',     emoji:'🌳', era:2, cost:{starlight:2},          desc:'+1 Pucky Heart (permanent).',                effect:'stat_pucky_heart'  },
+  { id:'tower',       name:'Watchtower',      emoji:'🗼', era:2, cost:{stone:2,wood:1},       desc:'All settlements yield +1 of every resource.',effect:'yield_boost'       },
+  { id:'observatory', name:'Observatory',     emoji:'🔭', era:3, cost:{stone:1,starlight:3},  desc:'+1 LCK (permanent).',                        effect:'stat_player_lck'   },
+  { id:'archive',     name:'Grove Archive',   emoji:'📚', era:3, cost:{stone:2,starlight:2},  desc:'+1 WIS (permanent).',                        effect:'stat_player_wis2'  },
+];
+
+const PLACE_YIELDS = {
+  forest:   { wood:1, starlight:1 },
+  tavern:   { food:2 },
+  road:     { wood:1, food:1 },
+  ruins:    { stone:2, starlight:1 },
+  workshop: { stone:1, wood:1 },
+  custom:   { wood:1 },
+};
+
+const ERA_NAMES = ['', 'Seedling Era', 'Growing Grove', 'The Deep Grove'];
+
 // ── Scene Pool ────────────────────────────────────────────────────────────────
 
 const INTRO = {
@@ -455,12 +479,25 @@ Something is asking whether you belong here. Not as a challenge. As a genuine qu
 
 let S;
 
+function defaultCiv(){
+  const settlements = {};
+  for(const p of PLACES_BUILTIN) settlements[p.id] = { pop:1 };
+  return {
+    era: 1,
+    resources: { wood:0, stone:0, food:0, starlight:0 },
+    settlements,
+    buildings: [],
+    totalTurns: 0,
+  };
+}
+
 function defaultWorld(){
   return {
     currentPlace: 'grove',
     places: PLACES_BUILTIN.map(p=>({...p, beings:[...p.beings]})),
     beings: BEINGS_BUILTIN.map(b=>({...b})),
     maps: [],
+    civ: defaultCiv(),
   };
 }
 
@@ -477,6 +514,10 @@ function mergeState(saved){
     merged.world = defaultWorld();
   }
   if(!merged.world.maps) merged.world.maps = [];
+  if(!merged.world.civ)  merged.world.civ  = defaultCiv();
+  if(!merged.world.civ.buildings) merged.world.civ.buildings = [];
+  if(!merged.world.civ.resources) merged.world.civ.resources = { wood:0, stone:0, food:0, starlight:0 };
+  if(!merged.world.civ.settlements) merged.world.civ.settlements = defaultCiv().settlements;
   return merged;
 }
 
@@ -602,6 +643,67 @@ function getBeingForScene(sceneType){
   if(!ids.length) return null;
   const id = ids[Math.floor(Math.random()*ids.length)];
   return getBeingById(id);
+}
+
+// ── Civilization Helpers ──────────────────────────────────────────────────────
+
+function resIcon(key){ return {wood:'🪵',stone:'🪨',food:'🌾',starlight:'💫'}[key]||'?'; }
+
+function getSettlementYield(placeId){
+  const place = S.world.places.find(p=>p.id===placeId);
+  if(!place) return {};
+  const base = { ...(PLACE_YIELDS[place.type] || PLACE_YIELDS.custom) };
+  if(S.world.civ.buildings.includes('tower')){
+    for(const k in base) base[k]++;
+  }
+  return base;
+}
+
+function civAdvanceTurn(){
+  const civ = S.world.civ;
+  if(!civ) return null;
+  civ.totalTurns++;
+  const produced = { wood:0, stone:0, food:0, starlight:0 };
+  for(const place of S.world.places){
+    const settlement = civ.settlements[place.id];
+    if(!settlement || settlement.pop < 1) continue;
+    const yields = getSettlementYield(place.id);
+    for(const [res, amt] of Object.entries(yields)){
+      produced[res] = (produced[res]||0) + amt * settlement.pop;
+      civ.resources[res] = (civ.resources[res]||0) + amt * settlement.pop;
+    }
+  }
+  if(civ.buildings.includes('hearth')){
+    S.player.hp = Math.min(S.player.maxHp, S.player.hp + 5);
+    S.pucky.hp  = Math.min(S.pucky.maxHp,  S.pucky.hp  + 5);
+    S.loki.hp   = Math.min(S.loki.maxHp,   S.loki.hp   + 5);
+  }
+  if(civ.buildings.includes('farm')) addItemToInventory('healers_leaf');
+  civ.era = Math.min(3, Math.max(1, Math.ceil(S.progress.chapter / 2)));
+  return produced;
+}
+
+function buildCivBuilding(buildingId){
+  const civ = S.world.civ;
+  const building = CIV_BUILDINGS.find(b=>b.id===buildingId);
+  if(!building || civ.buildings.includes(buildingId)) return;
+  for(const [res, amt] of Object.entries(building.cost)){
+    if((civ.resources[res]||0) < amt) return;
+  }
+  for(const [res, amt] of Object.entries(building.cost)){
+    civ.resources[res] -= amt;
+  }
+  civ.buildings.push(buildingId);
+  switch(building.effect){
+    case 'stat_loki_craft':  S.loki.craft  = Math.min(5, S.loki.craft+1);  break;
+    case 'stat_player_wis':  S.player.wis  = Math.min(5, S.player.wis+1);  break;
+    case 'stat_player_wis2': S.player.wis  = Math.min(5, S.player.wis+1);  break;
+    case 'stat_pucky_heart': S.pucky.heart = Math.min(5, S.pucky.heart+1); break;
+    case 'stat_player_lck':  S.player.lck  = Math.min(5, S.player.lck+1);  break;
+  }
+  save();
+  renderRealm();
+  renderParty();
 }
 
 // ── Render: Party ─────────────────────────────────────────────────────────────
@@ -738,9 +840,10 @@ function advance(){
     S.progress.chapter++;
     S.progress.scenesThisChapter=0;
     S.progress.day++;
+    const produced = civAdvanceTurn();
     save();
     renderParty();
-    showChapterComplete(oldChapter);
+    showChapterComplete(oldChapter, produced);
   } else {
     S.progress.scenesThisChapter++;
     S.progress.totalScenes++;
@@ -756,17 +859,23 @@ function advance(){
   }
 }
 
-function showChapterComplete(ch){
+function showChapterComplete(ch, produced){
   const sa = document.getElementById('scene-area');
   const ca = document.getElementById('choices-area');
   const chMems = S.memories.filter(m => m.chapter === ch);
   const preview = chMems.slice(-3).map(m =>
     `<div class="ch-mem-line">· ${m.text}</div>`).join('');
+  let harvestHTML = '';
+  if(produced){
+    const parts = Object.entries(produced).filter(([,v])=>v>0).map(([k,v])=>`${v}${resIcon(k)}`);
+    if(parts.length) harvestHTML = `<div class="realm-harvest">realm harvest: ${parts.join(' · ')}</div>`;
+  }
   sa.innerHTML = `
     <div class="scene-title" style="animation:rise .3s ease">chapter ${ch} complete</div>
     <div class="ch-card" style="animation:rise .35s ease">
       <div class="ch-day">day ${S.progress.day - 1} · ${chMems.length} ${chMems.length===1?'memory':'memories'} kept</div>
       ${preview ? `<div class="ch-mems">${preview}</div>` : ''}
+      ${harvestHTML}
     </div>`;
   ca.innerHTML = `
     <button class="choice-btn" onclick="saveMemoriesThenContinue()">📖 save memories → continue</button>
@@ -1065,6 +1174,8 @@ function renderWorldContent(){
     wc.innerHTML = renderPlaces();
   } else if(worldSubtab === 'maps'){
     wc.innerHTML = renderMaps();
+  } else if(worldSubtab === 'realm'){
+    wc.innerHTML = buildRealmHTML();
   } else {
     wc.innerHTML = renderBeings();
   }
@@ -1216,6 +1327,7 @@ function updateBeing(beingId, field, value){
 function addPlace(){
   const id = 'custom_place_' + Date.now();
   S.world.places.push({ id, name:'New Place', emoji:'🗺️', type:'custom', description:'A place to describe.', beings:[], custom:true });
+  if(S.world.civ && !S.world.civ.settlements[id]) S.world.civ.settlements[id] = { pop:1 };
   worldEditOpen[id] = true;
   save();
   renderWorldContent();
@@ -1688,6 +1800,122 @@ function renderMinimap(map, currentRoomId){
   </svg>`;
 }
 
+// ── Realm Tab ─────────────────────────────────────────────────────────────────
+
+function renderRealm(){
+  const wc = document.getElementById('world-content');
+  if(wc) wc.innerHTML = buildRealmHTML();
+}
+
+function buildRealmHTML(){
+  const civ = S.world.civ;
+  if(!civ) return '<div class="realm-locked">realm not initialized</div>';
+
+  const eraName = ERA_NAMES[civ.era] || 'Unknown Era';
+  const res = civ.resources;
+
+  const resBar = `<div class="realm-resources">
+    <div class="resource-chip">🪵 <span>${res.wood||0}</span></div>
+    <div class="resource-chip">🪨 <span>${res.stone||0}</span></div>
+    <div class="resource-chip">🌾 <span>${res.food||0}</span></div>
+    <div class="resource-chip">💫 <span>${res.starlight||0}</span></div>
+  </div>`;
+
+  const availBuildings = CIV_BUILDINGS.filter(b => b.era <= civ.era);
+  const lockedCount    = CIV_BUILDINGS.filter(b => b.era > civ.era).length;
+
+  const buildingsHTML = availBuildings.map(b => {
+    const built = civ.buildings.includes(b.id);
+    const canAfford = !built && Object.entries(b.cost).every(([k,v]) => (res[k]||0) >= v);
+    const costStr = Object.entries(b.cost).map(([k,v]) => `${v}${resIcon(k)}`).join(' ');
+    return `<div class="building-card${built?' built':''}">
+      <div class="building-head">
+        <span class="building-emoji">${b.emoji}</span>
+        <div class="building-info">
+          <div class="building-name">${b.name}</div>
+          <div class="building-desc">${b.desc}</div>
+        </div>
+        ${built
+          ? `<div class="building-built-label">✓ built</div>`
+          : `<button class="build-btn ${canAfford?'can-build':'no-funds'}" ${canAfford?`onclick="buildCivBuilding('${b.id}')"`:'disabled'}>
+              <span class="build-cost">${costStr}</span>build
+            </button>`}
+      </div>
+    </div>`;
+  }).join('');
+
+  const lockedNote = lockedCount > 0
+    ? `<div class="realm-locked">${lockedCount} more structure${lockedCount===1?'':'s'} unlock as the grove grows</div>` : '';
+
+  return `
+    <div class="realm-era">
+      <div class="realm-era-name">🌿 ${eraName}</div>
+      <div class="realm-turn">chapter ${S.progress.chapter} · ${civ.totalTurns} turn${civ.totalTurns===1?'':'s'}</div>
+    </div>
+    ${resBar}
+    ${buildCivMapHTML(civ)}
+    <div class="realm-section-label">structures</div>
+    <div class="realm-buildings">${buildingsHTML}</div>
+    ${lockedNote}
+    <div style="font-size:.62em;color:var(--dimmer);text-align:center;margin-top:14px;padding-bottom:8px;line-height:1.6">
+      resources accumulate each chapter<br>structures provide permanent bonuses
+    </div>`;
+}
+
+function buildCivMapHTML(civ){
+  const places = S.world.places;
+
+  const FIXED_POS = {
+    grove:        {c:1, r:0},
+    hearthside:   {c:0, r:1},
+    crossroads:   {c:2, r:1},
+    ruin_library: {c:0, r:2},
+    makers_yard:  {c:2, r:2},
+  };
+  const TYPE_COLORS = {
+    forest:'#0d2a18', tavern:'#2a1800', road:'#1a1a0a',
+    ruins:'#1a1028',  workshop:'#1a0a00', custom:'#0a1420',
+  };
+  const TYPE_BORDER = {
+    forest:'#2a5a30', tavern:'#5a2a00', road:'#3a3a18',
+    ruins:'#2a1a48',  workshop:'#4a1a00', custom:'#283040',
+  };
+
+  const CUSTOM_POSES = [
+    {c:0,r:3},{c:1,r:3},{c:2,r:3},{c:0,r:4},{c:1,r:4},{c:2,r:4},
+  ];
+  let customIdx = 0;
+
+  let maxRow = 2;
+  const placeWithPos = places.map(place => {
+    let pos = FIXED_POS[place.id];
+    if(!pos){
+      pos = CUSTOM_POSES[customIdx] || {c:customIdx%3, r:3+Math.floor(customIdx/3)};
+      customIdx++;
+    }
+    if(pos.r > maxRow) maxRow = pos.r;
+    return {place, pos};
+  });
+
+  const tiles = placeWithPos.map(({place, pos}) => {
+    const isCurrent = place.id === S.world.currentPlace;
+    const yields    = getSettlementYield(place.id);
+    const yieldIcons = Object.keys(yields).map(resIcon).join('');
+    const bg  = TYPE_COLORS[place.type] || TYPE_COLORS.custom;
+    const bdr = TYPE_BORDER[place.type] || TYPE_BORDER.custom;
+    const shortName = place.name.replace(/^The /,'').substring(0, 11);
+    return `<div class="civ-tile${isCurrent?' current':''}"
+      style="grid-column:${pos.c+1};grid-row:${pos.r+1};background:${bg};border-color:${bdr}"
+      onclick="travelTo('${esc(place.id)}')">
+      <div class="civ-tile-emoji">${place.emoji}</div>
+      <div class="civ-tile-name">${esc(shortName)}</div>
+      <div class="civ-tile-yield">${yieldIcons}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="civ-map" style="grid-template-rows:repeat(${maxRow+1},56px)">${tiles}</div>`;
+}
+
 // ── Memories Tab ──────────────────────────────────────────────────────────────
 
 function renderMemories(){
@@ -1771,11 +1999,11 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('./game-sw.js'
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 S = mergeState(loadState());
-// Ensure world is populated (for old saves or fresh starts)
 if(!S.world || !S.world.beings){
   S.world = defaultWorld();
 }
 if(!S.world.maps) S.world.maps = [];
+if(!S.world.civ)  S.world.civ  = defaultCiv();
 
 renderParty();
 if(S.mapState){
