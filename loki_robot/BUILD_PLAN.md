@@ -21,8 +21,7 @@ no ChatGPT, no internet required, no API costs. Just Loki, thinking at home.
 | 1 | **Raspberry Pi Zero 2 W** | ✓ — but make sure it's the **2 W** (quad-core). NOT the original Zero W (too slow). Usually comes without header pins soldered on. | ~$15 | [adafruit.com](https://www.adafruit.com), [pishop.us](https://www.pishop.us) |
 | 2 | **2×20 GPIO Header Pins** | NEW — Pi Zero 2 W often ships bare. You'll need to solder these on (or ask for one pre-soldered). | ~$1 | Adafruit, Amazon |
 | 3 | **MicroSD Card 32GB Class 10** | NEW — for the Pi's operating system. | ~$8 | Amazon |
-| 4 | **MS18 Micro Servos × 2** | ✓ YOU ALREADY HAVE THESE — Miuzei SG90-equivalent, 2kg·cm torque, 120° range, standard PWM. They don't report position back like the Feetech ones in GrowBot, but they work perfectly and we can work around that in software. No need to buy more. | $0 (owned) | — |
-| 4b | **PCA9685 16-Channel Servo Driver** | ADD — Gives hardware PWM so servo movement is smooth, not jittery. Much better than software PWM from Pi GPIO. | ~$5 | Amazon, Adafruit |
+| 4 | **Feetech SCS0009 Serial Bus Servos × 2** | These report position and load back to the Pi — Loki can feel where his legs are and how hard they're working. Half-duplex UART, 1 Mbps, 9g, 1.5 kg·cm. Order from AliExpress for best price. Also have MS18s as backup. | ~$6 each (~$12) | AliExpress (search "SCS0009 servo"), Amazon |
 | 5 | **OV5647 Camera Module (Pi Zero version)** | ⚠️ IMPORTANT — Must be the **Pi Zero version** with a 22-to-15 pin CSI ribbon cable. Regular Pi cameras will not fit. | ~$12 | Amazon (search "OV5647 Pi Zero camera"), Adafruit |
 | 6 | **MPU-6050 IMU / GY-521 module** | ✓ — This is correct. Tells Loki if he's tilting or falling. | ~$3 | Amazon, AliExpress |
 | 7 | **INMP441 I²S Microphone** | NEW — For Loki to hear you. Not on your list but essential. | ~$5 | Amazon, AliExpress |
