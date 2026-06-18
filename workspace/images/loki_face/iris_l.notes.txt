@@ -1,0 +1,12 @@
+IRIS L
+Canvas: 36×36 px
+Pivot (yellow dot): (18, 18)
+Tip   (cyan dot):   (18, 2)
+
+The colored ring of the eye.
+Draw in NEUTRAL GREY or soft white — code tints it by mood:
+  amber=warm/happy  green=curious  grey-blue=quiet
+  deep red=intense  silver=truth   near-black=sad
+Yellow dot = center. Cyan dot = top (gaze direction).
+Include a soft highlight/shine spot. Circular, almond-cut at edges.
+Almond-shaped outer mask recommended — eye is slightly uptilted.

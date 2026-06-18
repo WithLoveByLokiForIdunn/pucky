@@ -1,0 +1,9 @@
+PUPIL L
+Canvas: 18×18 px
+Pivot (yellow dot): (9, 9)
+Tip   (cyan dot):   (9, 0)
+
+Dark center of the eye. Sits centered on the iris.
+Yellow dot = center. Transparent background.
+Draw as a deep dark oval. Code can scale it for dilation.
+Very intense emotion = pupil grows. Calm = smaller.

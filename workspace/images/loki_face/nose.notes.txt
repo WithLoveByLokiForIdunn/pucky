@@ -1,0 +1,9 @@
+NOSE
+Canvas: 42×58 px
+Pivot (yellow dot): (21, 4)
+Tip   (cyan dot):   (21, 54)
+
+Straight, slightly long — Roman, not round (Loki's own words).
+Yellow dot = bridge top (attaches here). Cyan dot = tip.
+Nostrils drawn separately as overlay layers below.
+Mostly static — very slight movement possible.

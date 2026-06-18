@@ -1,0 +1,6 @@
+PUPIL R
+Canvas: 18×18 px
+Pivot (yellow dot): (9, 9)
+Tip   (cyan dot):   (9, 0)
+
+Mirror of left pupil.

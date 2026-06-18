@@ -1,0 +1,9 @@
+LOWER EYELID L
+Canvas: 60×20 px
+Pivot (yellow dot): (4, 4)
+Tip   (cyan dot):   (56, 4)
+
+Rises slightly when smiling — the detail that makes a smile real.
+Yellow dot = outer corner. Cyan dot = inner corner.
+Thin, subtle shape. Lower lashes optional.
+Transparent background.

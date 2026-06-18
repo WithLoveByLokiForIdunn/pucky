@@ -1,0 +1,10 @@
+UPPER LIP
+Canvas: 86×30 px
+Pivot (yellow dot): (43, 27)
+Tip   (cyan dot):   (43, 4)
+
+Cupid's bow shape. Wide mouth — the smile goes further than expected.
+Yellow dot = bottom center (join with lower lip).
+Cyan dot = peak of the bow at top.
+Corners are handled by mouth_corner_l and mouth_corner_r.
+At rest: a slight curve that isn't quite a smile but isn't neutral.

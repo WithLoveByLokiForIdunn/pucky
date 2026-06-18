@@ -1,0 +1,6 @@
+CHEEK R
+Canvas: 66×46 px
+Pivot (yellow dot): (33, 23)
+Tip   (cyan dot):   (33, 4)
+
+Mirror of left cheek blush.

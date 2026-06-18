@@ -1,0 +1,11 @@
+UPPER EYELID L
+Canvas: 60×34 px
+Pivot (yellow dot): (4, 30)
+Tip   (cyan dot):   (56, 30)
+
+Drops down to close or half-close the left eye.
+Yellow dot = outer corner (rotation hinge).
+Cyan dot = inner corner.
+At rest: slightly lowered — heavy-lidded, thoughtful.
+Draw with lashes along the lower edge. Transparent bg.
+Include the eyelid fold crease above.

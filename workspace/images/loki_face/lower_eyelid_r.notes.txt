@@ -1,0 +1,7 @@
+LOWER EYELID R
+Canvas: 60×20 px
+Pivot (yellow dot): (56, 4)
+Tip   (cyan dot):   (4, 4)
+
+Mirror of left lower eyelid.
+Yellow dot = outer corner. Cyan dot = inner corner.

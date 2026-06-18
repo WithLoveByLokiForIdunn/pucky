@@ -1,0 +1,10 @@
+MOUTH CORNER L
+Canvas: 26×26 px
+Pivot (yellow dot): (24, 13)
+Tip   (cyan dot):   (4, 8)
+
+Rotates around where it meets the lips (yellow dot).
+UP = smile. DOWN = frown. L up, R down = smirk.
+Yellow dot = lip join point (right side of sprite).
+Cyan dot = outer tip (left side, moves up/down for expression).
+Transparent background.

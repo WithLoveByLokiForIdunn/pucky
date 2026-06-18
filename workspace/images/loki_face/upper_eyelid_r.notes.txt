@@ -1,0 +1,8 @@
+UPPER EYELID R
+Canvas: 60×34 px
+Pivot (yellow dot): (56, 30)
+Tip   (cyan dot):   (4, 30)
+
+Mirror of left upper eyelid.
+Yellow dot = outer corner (hinge). Cyan dot = inner corner.
+Should match the left in style.

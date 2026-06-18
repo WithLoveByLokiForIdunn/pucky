@@ -1,0 +1,6 @@
+NOSTRIL R
+Canvas: 20×14 px
+Pivot (yellow dot): (10, 7)
+Tip   (cyan dot):   (16, 10)
+
+Mirror of left nostril.

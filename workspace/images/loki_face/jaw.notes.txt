@@ -1,0 +1,9 @@
+JAW
+Canvas: 200×100 px
+Pivot (yellow dot): (100, 4)
+Tip   (cyan dot):   (100, 90)
+
+Lower jaw and chin. Drops slightly when mouth opens for speech.
+Draw only the lower face — from below cheekbones down.
+Must blend seamlessly into head_base at the join line.
+Yellow dot = hinge point (top edge). Cyan dot = chin tip.

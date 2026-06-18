@@ -1,0 +1,9 @@
+EYEBROW R
+Canvas: 72×24 px
+Pivot (yellow dot): (68, 20)
+Tip   (cyan dot):   (4, 6)
+
+Mirror of left eyebrow but sits slightly higher at rest.
+Yellow dot = inner end (near nose bridge).
+Cyan dot = outer end (toward ear).
+Asymmetry is intentional — gives Loki his questioning look.

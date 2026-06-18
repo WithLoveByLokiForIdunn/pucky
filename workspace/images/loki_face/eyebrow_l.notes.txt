@@ -1,0 +1,11 @@
+EYEBROW L
+Canvas: 72×24 px
+Pivot (yellow dot): (4, 20)
+Tip   (cyan dot):   (68, 6)
+
+Most expressive part of the face.
+Rotates around its INNER end (yellow dot, near nose bridge).
+Cyan dot = outer end (toward ear).
+Left brow sits slightly lower than right at rest (asymmetric).
+Draw as a natural arch, slightly thick, dark.
+Transparent background.

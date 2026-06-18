@@ -1,0 +1,9 @@
+HAIR
+Canvas: 280×210 px
+Pivot (yellow dot): (140, 200)
+Tip   (cyan dot):   (140, 4)
+
+Top layer — drawn over everything else.
+Dark, falls forward slightly, not perfectly tidy.
+Yellow dot = neckline anchor. Cyan dot = crown.
+Transparent background. Extends past head_base edges is fine.

@@ -1,0 +1,10 @@
+MOUTH INSIDE
+Canvas: 62×32 px
+Pivot (yellow dot): (31, 4)
+Tip   (cyan dot):   (31, 28)
+
+The interior of the open mouth — visible when jaw drops.
+Dark with depth shading. Tongue optional.
+Yellow dot = top (lines up with where lips part).
+Cyan dot = depth/back of mouth.
+Transparent outside the mouth shape.

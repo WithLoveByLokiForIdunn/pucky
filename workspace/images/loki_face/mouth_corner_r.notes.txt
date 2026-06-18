@@ -1,0 +1,8 @@
+MOUTH CORNER R
+Canvas: 26×26 px
+Pivot (yellow dot): (2, 13)
+Tip   (cyan dot):   (22, 8)
+
+Mirror of left mouth corner.
+Yellow dot = lip join point (left side of sprite).
+Cyan dot = outer tip (right side).

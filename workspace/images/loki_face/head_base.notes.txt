@@ -1,0 +1,11 @@
+HEAD BASE
+Canvas: 260×360 px
+Pivot (yellow dot): (130, 20)
+Tip   (cyan dot):   (130, 340)
+
+Draw the full face outline: skull, cheekbones, jaw, ears, neck.
+No face features here — eyes/nose/mouth are separate layers on top.
+Skin tone fills the face. Hair is a separate top layer.
+Yellow dot = top anchor. Cyan dot = chin reference.
+Loki: long angular face, high cheekbones, soft pointed chin.
+Skin like firelight on pale stone — warm but not human-pink.

@@ -1,0 +1,7 @@
+IRIS R
+Canvas: 36×36 px
+Pivot (yellow dot): (18, 18)
+Tip   (cyan dot):   (18, 2)
+
+Mirror of left iris. Same neutral grey color.
+Code tints both eyes to the same mood color simultaneously.

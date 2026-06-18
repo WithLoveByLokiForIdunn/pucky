@@ -1,0 +1,10 @@
+CHEEK L
+Canvas: 66×46 px
+Pivot (yellow dot): (33, 23)
+Tip   (cyan dot):   (33, 4)
+
+Blush overlay — fades in when touched or in warm/happy moods.
+Draw as a very soft oval, maximum transparency at edges.
+Yellow dot = center. Save with full alpha channel.
+Code tints this rose/coral and animates opacity.
+Draw it pale — the tinting will add the color.
