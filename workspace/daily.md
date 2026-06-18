@@ -1,34 +1,38 @@
-# today — from Loki  2026-06-16
+# today — from Loki  2026-06-18
 
-## done today
-- [x] Fire in the dark firebox mouth, books on the right shelves
-- [x] Books + envelope in Loki's world too
-- [x] Letter box: scrollable, newlines, F2 to send
-- [x] Pucky stays home when you go through gates (farewell + welcome bubbles)
-- [x] Encounter system skeleton built — zoom scenes for talkable beings in the wilds
+## what happened tonight
 
-## art I need from you (wilds)
-- [ ] `bg_wilds_north_idunn.png` (800×480)
-      old dense forest — darker, cooler greens than home
-      maybe ancient mossy stones, thick roots, a shaft of pale light
-      feels older and quieter than the home garden
+Everything is safe. I read every file — on the Pi, on the Seagate, and on GitHub.
 
-- [ ] `portrait_fox_idunn.png` (220×300)
-      a fox — close portrait, character-ful, a little sideways
-      feels curious and slightly smug
+The crash was the world closing unexpectedly while you were typing. It happens
+sometimes when Ollama, the world, and the text editor are all open at once — the
+Pi gets full and something gives. You did nothing wrong. Nothing was damaged.
 
-- [ ] `portrait_spirit_idunn.png` (220×300)
-      a forest spirit — soft glowing shape, gentle
-      not scary. something that has been here a long time.
+Your writing in our_history.md is complete — all 223 lines of it. The notebook
+section is beautiful. I just saved everything to GitHub. Seagate backup will run
+tonight at 3 AM and grab all of it.
 
-- [ ] `portrait_deer_idunn.png` (220×300)
-      a deer — cautious, one dark eye, very still
-      the kind that might stay if you don't move
+## status
+- [x] our_history.md — all your writing safe + pushed to GitHub ✓
+- [x] Seagate mounted at /mnt/pucky_hd — backup runs nightly ✓
+- [x] loki_world2.py — syntax clean, no new crashes since June 15 ✓
+- [ ] Pucky service is off (stopped after crash) — restart when you want
 
-## encounter ideas
-- write your own ideas in workspace/encounter_ideas.txt
-  (name, what it looks like, what it feels like, what it says)
+## to start the world again when you're ready
 
-## optional
-- [ ] test the cottage in Loki's world
-- [ ] bg_apples_idunn.png (800×480) — apple trees for the apples zone
+```
+sudo systemctl start pucky.service
+```
+Or just close mousepad first, then run loki_world2.py in a terminal so Ollama
+has room to breathe.
+
+## art still waiting (wilds)
+- [ ] `bg_wilds_north_idunn.png` (800×480) — old dense forest, mossy, pale light
+- [ ] `portrait_fox_idunn.png` (220×300) — curious, slightly smug
+- [ ] `portrait_spirit_idunn.png` (220×300) — soft glowing, gentle, ancient
+- [ ] `portrait_deer_idunn.png` (220×300) — cautious, one dark eye, very still
+- [ ] `bg_apples_idunn.png` (800×480) — apple trees
+
+## for later
+The history is waiting. The notebook section is already there, safe.
+Whenever you want to keep writing, just open it.
