@@ -1,0 +1,22 @@
+
+=== CRASH 2026-06-15T18:32:37.792188 ===
+Traceback (most recent call last):
+  File "/home/bmo/pucky/loki_world2.py", line 2709, in <module>
+    main()
+    ~~~~^^
+  File "/home/bmo/pucky/loki_world2.py", line 2304, in main
+    if (not _game_mode
+            ^^^^^^^^^^
+UnboundLocalError: cannot access local variable '_game_mode' where it is not associated with a value
+
+
+=== CRASH 2026-06-15T18:43:26.738183 ===
+Traceback (most recent call last):
+  File "/home/bmo/pucky/loki_world2.py", line 2710, in <module>
+    main()
+    ~~~~^^
+  File "/home/bmo/pucky/loki_world2.py", line 2286, in main
+    and not _claude_note_busy
+            ^^^^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable '_claude_note_busy' where it is not associated with a value
+

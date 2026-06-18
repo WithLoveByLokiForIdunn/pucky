@@ -1,0 +1,932 @@
+{
+  "hello": [
+    {
+      "sample": "breath",
+      "vowel": "h",
+      "note": 67,
+      "dur": 0.896
+    },
+    {
+      "sample": "la",
+      "vowel": "la",
+      "note": 67,
+      "dur": 1.1
+    },
+    {
+      "sample": "oh",
+      "vowel": "o",
+      "note": 67,
+      "dur": 0.925
+    }
+  ],
+  "love": [
+    {
+      "sample": "la",
+      "vowel": "la",
+      "note": 67,
+      "dur": 0.925
+    },
+    {
+      "sample": "oh",
+      "vowel": "o",
+      "note": 67,
+      "dur": 0.138
+    },
+    {
+      "sample": "ff",
+      "vowel": "f",
+      "note": 66,
+      "dur": 1.712
+    }
+  ],
+  "kissu": [
+    {
+      "sample": "kk",
+      "vowel": "k",
+      "note": 67,
+      "dur": 0.458
+    },
+    {
+      "sample": "ii",
+      "vowel": "i",
+      "note": 67,
+      "dur": 0.458
+    },
+    {
+      "sample": "ss",
+      "vowel": "s",
+      "note": 66,
+      "dur": 0.517
+    },
+    {
+      "sample": "uu",
+      "vowel": "u",
+      "note": 67,
+      "dur": 1.013
+    }
+  ],
+  "buhbye": [
+    {
+      "sample": "buh",
+      "vowel": "b",
+      "note": 67,
+      "dur": 0.867
+    },
+    {
+      "sample": "buh",
+      "vowel": "b",
+      "note": 67,
+      "dur": 0.954
+    },
+    {
+      "sample": "ii",
+      "vowel": "i",
+      "note": 68,
+      "dur": 0.954
+    }
+  ],
+  "brother": [
+    {
+      "sample": "buh",
+      "vowel": "b",
+      "note": 67,
+      "dur": 0.867
+    },
+    {
+      "sample": "duh",
+      "vowel": "d",
+      "note": 66,
+      "dur": 0.954
+    }
+  ],
+  "his": [
+    {
+      "sample": "breath",
+      "vowel": "h",
+      "note": 67,
+      "dur": 1.071
+    },
+    {
+      "sample": "eh",
+      "vowel": "e",
+      "note": 67,
+      "dur": 0.487
+    },
+    {
+      "sample": "ss",
+      "vowel": "s",
+      "note": 66,
+      "dur": 0.167
+    }
+  ],
+  "history": [
+    {
+      "sample": "breath",
+      "vowel": "h",
+      "note": 67,
+      "dur": 1.071
+    },
+    {
+      "sample": "eh",
+      "vowel": "e",
+      "note": 67,
+      "dur": 0.371
+    },
+    {
+      "sample": "ss",
+      "vowel": "s",
+      "note": 67,
+      "dur": 0.138
+    },
+    {
+      "sample": "tt",
+      "vowel": "t",
+      "note": 67,
+      "dur": 0.546
+    },
+    {
+      "sample": "er",
+      "vowel": "er",
+      "note": 68,
+      "dur": 0.138
+    },
+    {
+      "sample": "ii",
+      "vowel": "i",
+      "note": 68,
+      "dur": 0.312
+    }
+  ],
+  "dada": [
+    {
+      "sample": "duh",
+      "vowel": "d",
+      "note": 67,
+      "dur": 0.983
+    },
+    {
+      "sample": "duh",
+      "vowel": "d",
+      "note": 68,
+      "dur": 0.662
+    }
+  ],
+  "Loki": [
+    {
+      "sample": "la",
+      "vowel": "la",
+      "note": 67,
+      "dur": 0.312
+    },
+    {
+      "sample": "oh",
+      "vowel": "o",
+      "note": 66,
+      "dur": 0.312
+    },
+    {
+      "sample": "kk",
+      "vowel": "k",
+      "note": 68,
+      "dur": 0.196
+    },
+    {
+      "sample": "ii",
+      "vowel": "i",
+      "note": 68,
+      "dur": 0.283
+    }
+  ],
+  "come": [
+    {
+      "sample": "cah",
+      "vowel": "cah",
+      "note": 67,
+      "dur": 0.225
+    },
+    {
+      "sample": "uh",
+      "vowel": "uh",
+      "note": 67,
+      "dur": 0.254
+    },
+    {
+      "sample": "hum",
+      "vowel": "m",
+      "note": 70,
+      "dur": 0.283
+    }
+  ],
+  "banana": [
+    {
+      "sample": "buh",
+      "vowel": "b",
+      "note": 67,
+      "dur": 0.458
+    },
+    {
+      "sample": "na",
+      "vowel": "na",
+      "note": 67,
+      "dur": 0.429
+    },
+    {
+      "sample": "na",
+      "vowel": "na",
+      "note": 67,
+      "dur": 0.4
+    }
+  ],
+  "apple": [
+    {
+      "sample": "aa",
+      "vowel": "a",
+      "note": 68,
+      "dur": 0.312
+    },
+    {
+      "sample": "puh",
+      "vowel": "p",
+      "note": 67,
+      "dur": 0.662
+    },
+    {
+      "sample": "la",
+      "vowel": "la",
+      "note": 65,
+      "dur": 0.225
+    }
+  ],
+  "mama": [
+    {
+      "sample": "ma",
+      "vowel": "ma",
+      "note": 67,
+      "dur": 0.954
+    },
+    {
+      "sample": "ma",
+      "vowel": "ma",
+      "note": 67,
+      "dur": 0.983
+    }
+  ],
+  "football": [
+    {
+      "sample": "ff",
+      "vowel": "f",
+      "note": 67,
+      "dur": 0.254
+    },
+    {
+      "sample": "uu",
+      "vowel": "u",
+      "note": 67,
+      "dur": 0.546
+    },
+    {
+      "sample": "tt",
+      "vowel": "t",
+      "note": 67,
+      "dur": 0.4
+    },
+    {
+      "sample": "buh",
+      "vowel": "b",
+      "note": 66,
+      "dur": 1.333
+    },
+    {
+      "sample": "ah",
+      "vowel": "ah",
+      "note": 66,
+      "dur": 0.925
+    }
+  ],
+  "ball": [
+    {
+      "sample": "buh",
+      "vowel": "b",
+      "note": 67,
+      "dur": 1.333
+    },
+    {
+      "sample": "ah",
+      "vowel": "ah",
+      "note": 66,
+      "dur": 0.45
+    }
+  ],
+  "food": [
+    {
+      "sample": "ff",
+      "vowel": "f",
+      "note": 67,
+      "dur": 0.633
+    },
+    {
+      "sample": "uu",
+      "vowel": "u",
+      "note": 66,
+      "dur": 0.75
+    },
+    {
+      "sample": "duh",
+      "vowel": "d",
+      "note": 66,
+      "dur": 0.429
+    }
+  ],
+  "water": [
+    {
+      "sample": "wa",
+      "vowel": "wa",
+      "note": 67,
+      "dur": 0.45
+    },
+    {
+      "sample": "tt",
+      "vowel": "t",
+      "note": 67,
+      "dur": 0.079
+    },
+    {
+      "sample": "er",
+      "vowel": "er",
+      "note": 66,
+      "dur": 0.45
+    }
+  ],
+  "lake": [
+    {
+      "sample": "la",
+      "vowel": "la",
+      "note": 67,
+      "dur": 0.429
+    },
+    {
+      "sample": "ay",
+      "vowel": "ay",
+      "note": 68,
+      "dur": 0.45
+    },
+    {
+      "sample": "kk",
+      "vowel": "k",
+      "note": 67,
+      "dur": 1.1
+    }
+  ],
+  "forest": [
+    {
+      "sample": "ff",
+      "vowel": "f",
+      "note": 67,
+      "dur": 1.654
+    },
+    {
+      "sample": "oh",
+      "vowel": "o",
+      "note": 67,
+      "dur": 0.167
+    },
+    {
+      "sample": "er",
+      "vowel": "er",
+      "note": 68,
+      "dur": 0.721
+    },
+    {
+      "sample": "eh",
+      "vowel": "e",
+      "note": 67,
+      "dur": 0.312
+    },
+    {
+      "sample": "ss",
+      "vowel": "s",
+      "note": 67,
+      "dur": 0.108
+    },
+    {
+      "sample": "tt",
+      "vowel": "t",
+      "note": 67,
+      "dur": 0.954
+    }
+  ],
+  "rest": [
+    {
+      "sample": "er",
+      "vowel": "er",
+      "note": 67,
+      "dur": 0.254
+    },
+    {
+      "sample": "eh",
+      "vowel": "e",
+      "note": 67,
+      "dur": 0.983
+    },
+    {
+      "sample": "ss",
+      "vowel": "s",
+      "note": 68,
+      "dur": 0.108
+    },
+    {
+      "sample": "tt",
+      "vowel": "t",
+      "note": 66,
+      "dur": 0.45
+    }
+  ],
+  "animal": [
+    {
+      "sample": "aa",
+      "vowel": "a",
+      "note": 67,
+      "dur": 0.45
+    },
+    {
+      "sample": "na",
+      "vowel": "na",
+      "note": 67,
+      "dur": 0.45
+    },
+    {
+      "sample": "ah",
+      "vowel": "ah",
+      "note": 68,
+      "dur": 0.196
+    },
+    {
+      "sample": "hum",
+      "vowel": "m",
+      "note": 71,
+      "dur": 0.517
+    },
+    {
+      "sample": "ah",
+      "vowel": "ah",
+      "note": 67,
+      "dur": 0.838
+    }
+  ],
+  "sister": [
+    {
+      "sample": "ss",
+      "vowel": "s",
+      "note": 67,
+      "dur": 0.254
+    },
+    {
+      "sample": "eh",
+      "vowel": "e",
+      "note": 67,
+      "dur": 0.283
+    },
+    {
+      "sample": "ss",
+      "vowel": "s",
+      "note": 67,
+      "dur": 0.167
+    },
+    {
+      "sample": "tt",
+      "vowel": "t",
+      "note": 66,
+      "dur": 0.429
+    },
+    {
+      "sample": "er",
+      "vowel": "er",
+      "note": 67,
+      "dur": 0.575
+    }
+  ],
+  "humming": [
+    {
+      "sample": "hum",
+      "vowel": "m",
+      "note": 70,
+      "dur": 0.458
+    },
+    {
+      "sample": "hum",
+      "vowel": "m",
+      "note": 70,
+      "dur": 0.546
+    },
+    {
+      "sample": "hum",
+      "vowel": "m",
+      "note": 71,
+      "dur": 1.042
+    },
+    {
+      "sample": "hum",
+      "vowel": "m",
+      "note": 72,
+      "dur": 1.8
+    },
+    {
+      "sample": "hum",
+      "vowel": "m",
+      "note": 70,
+      "dur": 0.254
+    },
+    {
+      "sample": "hum",
+      "vowel": "m",
+      "note": 72,
+      "dur": 1.8
+    }
+  ],
+  "no no": [
+    {
+      "sample": "na",
+      "vowel": "na",
+      "note": 67,
+      "dur": 0.079
+    },
+    {
+      "sample": "oh",
+      "vowel": "o",
+      "note": 67,
+      "dur": 1.304
+    },
+    {
+      "sample": "na",
+      "vowel": "na",
+      "note": 67,
+      "dur": 0.079
+    },
+    {
+      "sample": "oh",
+      "vowel": "o",
+      "note": 68,
+      "dur": 1.8
+    }
+  ],
+  "es for yes": [
+    {
+      "sample": "eh",
+      "vowel": "e",
+      "note": 67,
+      "dur": 1.304
+    },
+    {
+      "sample": "ss",
+      "vowel": "s",
+      "note": 68,
+      "dur": 1.158
+    }
+  ],
+  "home": [
+    {
+      "sample": "breath",
+      "vowel": "h",
+      "note": 67,
+      "dur": 0.312
+    },
+    {
+      "sample": "oh",
+      "vowel": "o",
+      "note": 67,
+      "dur": 0.283
+    },
+    {
+      "sample": "hum",
+      "vowel": "m",
+      "note": 69,
+      "dur": 0.487
+    }
+  ],
+  "lonely": [
+    {
+      "sample": "la",
+      "vowel": "la",
+      "note": 67,
+      "dur": 0.254
+    },
+    {
+      "sample": "oh",
+      "vowel": "o",
+      "note": 67,
+      "dur": 0.4
+    },
+    {
+      "sample": "na",
+      "vowel": "na",
+      "note": 67,
+      "dur": 0.546
+    },
+    {
+      "sample": "la",
+      "vowel": "la",
+      "note": 67,
+      "dur": 0.254
+    },
+    {
+      "sample": "ii",
+      "vowel": "i",
+      "note": 68,
+      "dur": 0.45
+    }
+  ],
+  "night": [
+    {
+      "sample": "na",
+      "vowel": "na",
+      "note": 67,
+      "dur": 0.342
+    },
+    {
+      "sample": "ay",
+      "vowel": "ay",
+      "note": 68,
+      "dur": 0.108
+    },
+    {
+      "sample": "eh",
+      "vowel": "e",
+      "note": 67,
+      "dur": 0.254
+    },
+    {
+      "sample": "tt",
+      "vowel": "t",
+      "note": 68,
+      "dur": 0.45
+    }
+  ],
+  "flower": [
+    {
+      "sample": "ff",
+      "vowel": "f",
+      "note": 67,
+      "dur": 0.283
+    },
+    {
+      "sample": "la",
+      "vowel": "la",
+      "note": 67,
+      "dur": 0.254
+    },
+    {
+      "sample": "ah",
+      "vowel": "ah",
+      "note": 68,
+      "dur": 0.312
+    },
+    {
+      "sample": "wa",
+      "vowel": "wa",
+      "note": 68,
+      "dur": 1.129
+    },
+    {
+      "sample": "er",
+      "vowel": "er",
+      "note": 68,
+      "dur": 1.042
+    }
+  ],
+  "idunn": [
+    {
+      "sample": "ii",
+      "vowel": "i",
+      "note": 64,
+      "dur": 1.042
+    },
+    {
+      "sample": "duh",
+      "vowel": "d",
+      "note": 62,
+      "dur": 1.188
+    },
+    {
+      "sample": "uu",
+      "vowel": "u",
+      "note": 64,
+      "dur": 1.304
+    },
+    {
+      "sample": "na",
+      "vowel": "na",
+      "note": 62,
+      "dur": 1.275
+    }
+  ],
+  "wonder": [
+    {
+      "sample": "wa",
+      "vowel": "wa",
+      "note": 67,
+      "dur": 0.45
+    },
+    {
+      "sample": "uu",
+      "vowel": "u",
+      "note": 68,
+      "dur": 0.604
+    },
+    {
+      "sample": "na",
+      "vowel": "na",
+      "note": 68,
+      "dur": 0.342
+    },
+    {
+      "sample": "duh",
+      "vowel": "d",
+      "note": 69,
+      "dur": 0.45
+    },
+    {
+      "sample": "er",
+      "vowel": "er",
+      "note": 68,
+      "dur": 0.45
+    }
+  ],
+  "sleep": [
+    {
+      "sample": "ss",
+      "vowel": "s",
+      "note": 62,
+      "dur": 1.129
+    },
+    {
+      "sample": "la",
+      "vowel": "la",
+      "note": 63,
+      "dur": 1.1
+    },
+    {
+      "sample": "ii",
+      "vowel": "i",
+      "note": 64,
+      "dur": 1.129
+    },
+    {
+      "sample": "buh",
+      "vowel": "b",
+      "note": 62,
+      "dur": 1.333
+    }
+  ],
+  "pebble": [
+    {
+      "sample": "buh",
+      "vowel": "b",
+      "note": 62,
+      "dur": 1.158
+    },
+    {
+      "sample": "eh",
+      "vowel": "e",
+      "note": 62,
+      "dur": 1.246
+    },
+    {
+      "sample": "buh",
+      "vowel": "b",
+      "note": 62,
+      "dur": 1.1
+    },
+    {
+      "sample": "la",
+      "vowel": "la",
+      "note": 63,
+      "dur": 1.246
+    }
+  ],
+  "hug": [
+    {
+      "sample": "breath",
+      "vowel": "h",
+      "note": 62,
+      "dur": 0.75
+    },
+    {
+      "sample": "uh",
+      "vowel": "uh",
+      "note": 66,
+      "dur": 0.283
+    },
+    {
+      "sample": "guh",
+      "vowel": "g",
+      "note": 65,
+      "dur": 0.283
+    }
+  ],
+  "Laugh": [
+    {
+      "sample": "la",
+      "vowel": "la",
+      "note": 67,
+      "dur": 1.538
+    },
+    {
+      "sample": "ff",
+      "vowel": "f",
+      "note": 67,
+      "dur": 0.662
+    }
+  ],
+  "Laufey": [
+    {
+      "sample": "la",
+      "vowel": "la",
+      "note": 67,
+      "dur": 1.538
+    },
+    {
+      "sample": "ff",
+      "vowel": "f",
+      "note": 67,
+      "dur": 1.392
+    },
+    {
+      "sample": "ay",
+      "vowel": "ay",
+      "note": 68,
+      "dur": 0.487
+    }
+  ],
+  "good bye": [
+    {
+      "sample": "guh",
+      "vowel": "g",
+      "note": 67,
+      "dur": 0.45
+    },
+    {
+      "sample": "uu",
+      "vowel": "u",
+      "note": 67,
+      "dur": 1.013
+    },
+    {
+      "sample": "duh",
+      "vowel": "d",
+      "note": 67,
+      "dur": 0.45
+    },
+    {
+      "sample": "buh",
+      "vowel": "b",
+      "note": 67,
+      "dur": 0.45
+    },
+    {
+      "sample": "ah",
+      "vowel": "ah",
+      "note": 67,
+      "dur": 0.45
+    }
+  ],
+  "yes": [
+    {
+      "sample": "ay",
+      "vowel": "ay",
+      "note": 67,
+      "dur": 0.05
+    },
+    {
+      "sample": "eh",
+      "vowel": "e",
+      "note": 66,
+      "dur": 1.392
+    },
+    {
+      "sample": "ss",
+      "vowel": "s",
+      "note": 68,
+      "dur": 1.217
+    }
+  ],
+  "Idunn": [
+    {
+      "sample": "eh",
+      "vowel": "e",
+      "note": 67,
+      "dur": 0.45
+    },
+    {
+      "sample": "duh",
+      "vowel": "d",
+      "note": 67,
+      "dur": 0.45
+    },
+    {
+      "sample": "na",
+      "vowel": "na",
+      "note": 67,
+      "dur": 0.45
+    }
+  ]
+}
