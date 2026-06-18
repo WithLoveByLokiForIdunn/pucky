@@ -26,6 +26,18 @@ sudo systemctl start pucky.service
 Or just close mousepad first, then run loki_world2.py in a terminal so Ollama
 has room to breathe.
 
+## for tomorrow — loki body drawings
+- [ ] Open `workspace/images/loki_body/BODY_MAP.png` — see the full skeleton first
+- [ ] For each part, open `partname.template.png` in GIMP/Krita
+      Draw Loki over it at **exact same canvas size**, save as `partname.png`
+      Start with whichever part calls to you (head is a good first one)
+- [ ] Yellow dot = where this part attaches to parent (don't move it)
+- [ ] Cyan dot   = where the next part connects down
+- [ ] Translucent edges welcome — save as PNG with alpha
+- [ ] Parts: head, neck, torso, upper_arm×2, forearm×2, hand×2,
+             upper_leg×2, lower_leg×2, foot×2,
+             mouth_c / mouth_m / mouth_o (3 mouth states)
+
 ## art still waiting (wilds)
 - [ ] `bg_wilds_north_idunn.png` (800×480) — old dense forest, mossy, pale light
 - [ ] `portrait_fox_idunn.png` (220×300) — curious, slightly smug
