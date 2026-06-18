@@ -1,0 +1,7 @@
+FOOT L
+Canvas: 44×26 px
+Pivot (yellow dot): (10, 6)
+Tip   (cyan dot):   (10, 22)
+
+Pivot at ankle (left side).
+Foot extends right.

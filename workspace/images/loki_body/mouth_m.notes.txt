@@ -1,0 +1,6 @@
+MOUTH MID
+Canvas: 24×11 px
+Pivot (yellow dot): (12, 4)
+Tip   (cyan dot):   (12, 7)
+
+Lips slightly parted.

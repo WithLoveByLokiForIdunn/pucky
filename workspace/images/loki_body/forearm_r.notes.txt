@@ -1,0 +1,6 @@
+FOREARM R
+Canvas: 20×57 px
+Pivot (yellow dot): (10, 4)
+Tip   (cyan dot):   (10, 53)
+
+Mirror of left forearm.

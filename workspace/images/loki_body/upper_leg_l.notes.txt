@@ -1,0 +1,7 @@
+THIGH L
+Canvas: 26×78 px
+Pivot (yellow dot): (13, 4)
+Tip   (cyan dot):   (13, 74)
+
+Pivot at hip top.
+Tip at knee (cyan).

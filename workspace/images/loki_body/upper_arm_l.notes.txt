@@ -1,0 +1,7 @@
+UPPER ARM L
+Canvas: 22×65 px
+Pivot (yellow dot): (11, 4)
+Tip   (cyan dot):   (11, 61)
+
+Pivot at shoulder top.
+Tip at elbow (cyan).

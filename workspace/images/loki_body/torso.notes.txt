@@ -1,0 +1,8 @@
+TORSO
+Canvas: 80×95 px
+Pivot (yellow dot): (40, 5)
+Tip   (cyan dot):   (40, 90)
+
+Neck top at yellow dot.
+Hips at cyan dot.
+Shoulders: L(10,16) R(70,16)

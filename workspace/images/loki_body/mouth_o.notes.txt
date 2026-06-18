@@ -1,0 +1,6 @@
+MOUTH OPEN
+Canvas: 24×15 px
+Pivot (yellow dot): (12, 4)
+Tip   (cyan dot):   (12, 11)
+
+Mouth open (vowel/speaking).

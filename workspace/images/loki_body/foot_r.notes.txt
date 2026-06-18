@@ -1,0 +1,6 @@
+FOOT R
+Canvas: 44×26 px
+Pivot (yellow dot): (10, 6)
+Tip   (cyan dot):   (10, 22)
+
+Mirror of left foot.

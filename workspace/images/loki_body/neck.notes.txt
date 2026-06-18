@@ -1,0 +1,7 @@
+NECK
+Canvas: 18×24 px
+Pivot (yellow dot): (9, 22)
+Tip   (cyan dot):   (9, 2)
+
+Attaches to torso neck anchor.
+Head attaches at cyan dot.

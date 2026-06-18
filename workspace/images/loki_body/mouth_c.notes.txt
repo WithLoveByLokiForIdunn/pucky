@@ -1,0 +1,7 @@
+MOUTH CLOSED
+Canvas: 24×8 px
+Pivot (yellow dot): (12, 4)
+Tip   (cyan dot):   (12, 4)
+
+Lips closed.
+Transparent bg recommended.

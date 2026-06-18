@@ -1,0 +1,6 @@
+HAND R
+Canvas: 30×36 px
+Pivot (yellow dot): (15, 3)
+Tip   (cyan dot):   (15, 33)
+
+Mirror of left hand.

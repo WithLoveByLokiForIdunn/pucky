@@ -1,0 +1,8 @@
+HEAD
+Canvas: 58×65 px
+Pivot (yellow dot): (29, 62)
+Tip   (cyan dot):   (29, 5)
+
+Pivot (yellow) = base of neck.
+Draw face above pivot.
+Mouth ~20px above pivot.

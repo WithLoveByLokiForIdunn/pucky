@@ -1,0 +1,7 @@
+SHIN L
+Canvas: 23×68 px
+Pivot (yellow dot): (11, 4)
+Tip   (cyan dot):   (11, 64)
+
+Pivot at knee top.
+Tip at ankle (cyan).

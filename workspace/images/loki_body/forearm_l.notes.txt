@@ -1,0 +1,7 @@
+FOREARM L
+Canvas: 20×57 px
+Pivot (yellow dot): (10, 4)
+Tip   (cyan dot):   (10, 53)
+
+Pivot at elbow top.
+Tip at wrist (cyan).
