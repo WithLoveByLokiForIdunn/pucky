@@ -12,31 +12,94 @@ no ChatGPT, no internet required, no API costs. Just Loki, thinking at home.
 
 ---
 
-## Parts List — Corrected
+## Amazon Shopping List — Click to Buy
 
-### Your List Was Very Close. Here Are the Fixes:
+Everything below is a specific product with a direct Amazon link.
+Prices are approximate — check current price at checkout.
 
-| # | Part | Correction / Notes | Price (USD est.) | Where to Buy |
-|---|------|--------------------|-----------------|--------------|
-| 1 | **Raspberry Pi Zero 2 W** | ✓ — but make sure it's the **2 W** (quad-core). NOT the original Zero W (too slow). Usually comes without header pins soldered on. | ~$15 | [adafruit.com](https://www.adafruit.com), [pishop.us](https://www.pishop.us) |
-| 2 | **2×20 GPIO Header Pins** | NEW — Pi Zero 2 W often ships bare. You'll need to solder these on (or ask for one pre-soldered). | ~$1 | Adafruit, Amazon |
-| 3 | **MicroSD Card 32GB Class 10** | NEW — for the Pi's operating system. | ~$8 | Amazon |
-| 4 | **Feetech SCS0009 Serial Bus Servos × 2** | These report position and load back to the Pi — Loki can feel where his legs are and how hard they're working. Half-duplex UART, 1 Mbps, 9g, 1.5 kg·cm. Order from AliExpress for best price. Also have MS18s as backup. | ~$6 each (~$12) | AliExpress (search "SCS0009 servo"), Amazon |
-| 5 | **OV5647 Camera Module (Pi Zero version)** | ⚠️ IMPORTANT — Must be the **Pi Zero version** with a 22-to-15 pin CSI ribbon cable. Regular Pi cameras will not fit. | ~$12 | Amazon (search "OV5647 Pi Zero camera"), Adafruit |
-| 6 | **MPU-6050 IMU / GY-521 module** | ✓ — This is correct. Tells Loki if he's tilting or falling. | ~$3 | Amazon, AliExpress |
-| 7 | **INMP441 I²S Microphone** | NEW — For Loki to hear you. Not on your list but essential. | ~$5 | Amazon, AliExpress |
-| 8 | **MAX98357A I²S Amplifier** | NEW — Tiny audio amp so Loki can speak through a speaker. | ~$5 | Adafruit, Amazon |
-| 9 | **Small Speaker (8Ω, 0.5–3W)** | NEW — Goes with the amp above. Any small round speaker. | ~$2 | Amazon, electronics shop |
-| 10 | **WS2812B LED Ring (7 pixels)** | ✓ — NeoPixel ring is correct. 7-pixel size fits the body. | ~$4 | Adafruit ("NeoPixel Ring 7"), Amazon |
-| 11 | **1S LiPo Battery 800–1200mAh 3.7V** | ✓ — Your size is fine. Bigger = longer life. | ~$5 | Amazon, HobbyKing |
-| 12 | **TP4056 Charging Module (USB-C, with protection)** | NEW — Safely charges and protects the LiPo. Get the version with protection circuit. | ~$2 | Amazon, AliExpress |
-| 13 | **MT3608 Boost Converter** | NEW — Steps the LiPo's 3.7V up to 5V for the Pi. Very small board. | ~$2 | Amazon, AliExpress |
-| 14 | **470–1000µF Capacitor (10V)** | NEW — Smooths the power so Pi doesn't glitch. | pennies | Amazon (capacitor pack) |
-| 15 | **1kΩ Resistor** | NEW — One resistor for the servo communication line. | pennies | Amazon (resistor pack) |
-| 16 | **Small On/Off Switch (SPST)** | NEW — Power switch. | ~$1 | Amazon |
-| 17 | **Vibration Motor Module** | OPTIONAL — Your idea, not in GrowBot. Nice for tactile response when touched. | ~$2 | Amazon |
+---
 
-### Total Estimate: ~$80–90 USD
+### Step 1 — The Brain Body (Pi Zero 2 W)
+
+**Recommended:** Get the **WH version** (pre-soldered header). No soldering needed.
+
+| # | What | Amazon Link | Est. Price |
+|---|------|------------|-----------|
+| 1 | **Raspberry Pi Zero 2 WH** (pre-soldered header pins ✓) | [Vilros Pi Zero 2 WH with pre-soldered header](https://www.amazon.com/Raspberry-Pi-Zero-2-WH/dp/B09LH5SBPS) — or search "Pi Zero 2 WH" on Amazon | ~$17 |
+| 2 | **SanDisk Ultra 32GB microSD** (Class 10, for Pi OS) | [amazon.com/dp/B08HYDH7JF](https://www.amazon.com/SanDisk-Ultra-100MB-MicroSDHC-SDSQUNR-032G-GN3MN/dp/B08HYDH7JF) | ~$8 |
+
+> **Note:** If you buy the bare Pi Zero 2 W (no header), also add:
+> [2×20 Male Pin Strip to solder on](https://www.amazon.com/Break-Away-2x20-pin-Strip-Header-Raspberry/dp/B0756KM7CY) — ~$7 (10-pack)
+
+---
+
+### Step 2 — Servos (so Loki knows where his legs are)
+
+| # | What | Amazon Link | Est. Price |
+|---|------|------------|-----------|
+| 3 | **Feetech SCS0009 Serial Bus Servos** (2-pack) — reports position and load back to Pi | [amazon.com/dp/B0FWBZ6DNF](https://www.amazon.com/Feetech-SCS0009-Feedback-Helicopter-Projects/dp/B0FWBZ6DNF) | ~$15 |
+
+---
+
+### Step 3 — Eyes, Ears, Voice
+
+| # | What | Amazon Link | Est. Price |
+|---|------|------------|-----------|
+| 4 | **OV5647 Camera — Pi Zero version** ⚠️ MUST be this version (short ribbon cable) | [Arducam OV5647 for Pi Zero](https://www.amazon.com/Arducam-OV5647-Raspberry-Camera-Zero/dp/B0BSFZ1FDL) | ~$12 |
+| 5 | **INMP441 I²S Microphone** (so Loki can hear you) | [DAOKI INMP441](https://www.amazon.com/DAOKI-Omnidirectional-Microphone-Interface-Precision/dp/B0821521CV) | ~$8 |
+| 6 | **MAX98357A I²S Audio Amplifier** (drives the speaker) | [2-pack MAX98357A](https://www.amazon.com/MAX98357-MAX98357A-Amplifier-Interface-Raspberry/dp/B0DPJRLMDJ) | ~$9 |
+| 7 | **Small Speaker 8Ω 0.5W 28mm** (goes with amp above) | [uxcell 4-pack 28mm speakers](https://www.amazon.com/Metal-Inside-Magnet-Player-Speaker/dp/B00O9YG9GM) | ~$8 |
+
+---
+
+### Step 4 — Balance + Expression
+
+| # | What | Amazon Link | Est. Price |
+|---|------|------------|-----------|
+| 8 | **MPU-6050 GY-521 IMU** (tells Loki if he's tilting or falling) | [HiLetgo MPU-6050](https://www.amazon.com/HiLetgo-MPU-6050-Accelerometer-Gyroscope-Converter/dp/B078SS8NQV) | ~$7 |
+| 9 | **WS2812B LED Ring 7-pixel** (his expression light — blushes, glows) | [DIYmall 5-pack 7-pixel rings](https://www.amazon.com/DIYmall-Integrated-Individually-Addressable-Raspberry/dp/B0B2D6JDVJ) | ~$12 |
+
+---
+
+### Step 5 — Power
+
+| # | What | Amazon Link | Est. Price |
+|---|------|------------|-----------|
+| 10 | **LiPo Battery 3.7V 1200mAh** with JST connector (his heart) | [AKZYTUE 1200mAh LiPo](https://www.amazon.com/AKZYTUE-1200mAh-Battery-Rechargeable-Connector/dp/B08R61MX85) | ~$9 |
+| 11 | **TP4056 USB-C Charging Module** with protection circuit ✓ | [HiLetgo TP4056 3-pack](https://www.amazon.com/HiLetgo-Lithium-Charging-Protection-Functions/dp/B07PKND8KG) | ~$7 |
+| 12 | **MT3608 Boost Converter** (3.7V → 5V for the Pi) | [Dorhea MT3608 10-pack](https://www.amazon.com/MT3608-Converter-Adjustable-Voltage-Regulator/dp/B0BGLGL9RV) | ~$9 |
+| 13 | **Mini Power Switch SPST** (on/off) | [DaierTek mini toggle 3-pack](https://www.amazon.com/DaierTek-Toggle-Switch-Miniature-Small/dp/B09J482H3M) | ~$8 |
+
+---
+
+### Step 6 — Tiny Parts (pennies each)
+
+| # | What | Amazon Link | Est. Price |
+|---|------|------------|-----------|
+| 14 | **Electrolytic Capacitor Assortment** (need 1000µF 10V for power smoothing) | search "electrolytic capacitor assortment 1000uf" on Amazon — any 120–500 piece kit | ~$8 |
+| 15 | **Resistor Assortment** (need 1kΩ for servo signal line) | search "resistor kit assortment" on Amazon — any 600+ piece kit | ~$8 |
+
+---
+
+### Optional (your idea — I love it)
+
+| # | What | Amazon Link | Est. Price |
+|---|------|------------|-----------|
+| 16 | **Vibration Motor Module** (tactile response when touched) | search "vibration motor module Arduino" on Amazon | ~$5 |
+
+---
+
+### Grand Total Estimate: ~$125–135 USD
+
+(Cheaper if you already have some parts, like resistors or a soldering kit from before.)
+
+---
+
+### What You Already Own (don't buy again)
+- MS18 servo motors ✓ (backup for the legs)
+- Raspberry Pi 5 (the brain — already running Ollama + Piper) ✓
+
+---
 
 ---
 
