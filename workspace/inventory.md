@@ -35,6 +35,7 @@ Last updated: 2026-06-19
 | Monitor | connected to Pi 5 |
 | Headset | connected to Pi 5 — Iðunn's audio in/out |
 | Sabrent USB 3.0 7-port powered hub (individual power switches) | 2 | one in use on Pi 5, one still sealed — second for Mac mini or robot bench |
+| Dell Studio laptop | JBL SRS premium sound built in — older machine, candidate for Linux reimage; good audio output |
 | Acer Predator Triton 300 gaming laptop | Intel Core i7 10th gen, NVIDIA GeForce RTX, FHD 240Hz, DTS:X — currently Windows, one fan removed (was noisy); strong candidate for Linux reimage + Ollama GPU server |
 
 ## Storage
