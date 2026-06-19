@@ -205,22 +205,27 @@ class LokiFaceViewer:
                 surf.blit(tgt_surf, (ox, oy))
                 tgt_surf.set_alpha(255)
 
-        # blush — soft rose ellipses over cheeks
+        # blush — soft radial gradient ovals on outer cheeks, just under the eyes
         if self._blush > 0:
-            alpha   = int(self._blush)
-            # cheek positions: ~30% and ~70% across, ~58% down the portrait
-            cl_x = ox + int(self.port_w * 0.30)
-            cr_x = ox + int(self.port_w * 0.70)
-            cy   = oy + int(self.port_h * 0.56)
-            rw   = int(self.port_w * 0.13)
-            rh   = int(self.port_h * 0.08)
+            strength = self._blush / 255.0
+            cl_x = ox + int(self.port_w * 0.26)
+            cr_x = ox + int(self.port_w * 0.72)
+            cy   = oy + int(self.port_h * 0.44)
+            rw   = int(self.port_w * 0.09)
+            rh   = int(self.port_h * 0.036)
             for cx in (cl_x, cr_x):
-                bs = pygame.Surface((rw*2, rh*2), pygame.SRCALPHA)
-                pygame.draw.ellipse(bs, (220, 90, 100, alpha), (0, 0, rw*2, rh*2))
-                # soften edges with a second pass
-                pygame.draw.ellipse(bs, (220, 90, 100, alpha // 3),
-                                    (-4, -4, rw*2+8, rh*2+8))
-                surf.blit(bs, (cx - rw, cy - rh), special_flags=pygame.BLEND_RGBA_ADD)
+                bs = pygame.Surface((rw*2+2, rh*2+2), pygame.SRCALPHA)
+                steps = 8
+                for i in range(steps, 0, -1):
+                    t     = i / steps
+                    alpha = int(strength * t * t * 90)   # soft quadratic fall-off
+                    fw    = max(2, int(rw * 2 * t))
+                    fh    = max(2, int(rh * 2 * t))
+                    fx    = (rw + 1) - fw // 2
+                    fy    = (rh + 1) - fh // 2
+                    pygame.draw.ellipse(bs, (230, 100, 110, alpha), (fx, fy, fw, fh))
+                surf.blit(bs, (cx - rw - 1, cy - rh - 1),
+                          special_flags=pygame.BLEND_RGBA_ADD)
 
         # say text bubble
         if self._say_text:
@@ -263,6 +268,8 @@ class LokiFaceViewer:
                             self.set_mood(data["mood"])
                         if "say" in data:
                             self.say(str(data["say"]))
+                        if "blush" in data:
+                            self._blush = float(data["blush"])
                         if data.get("screenshot"):
                             self._do_shot = True
             except Exception:
@@ -316,11 +323,11 @@ def main():
                 ox = viewer.port_x + int(viewer._px)
                 oy = viewer.port_y + int(viewer._py)
                 # cheek areas
-                cl_x = ox + int(viewer.port_w * 0.30)
-                cr_x = ox + int(viewer.port_w * 0.70)
-                cy   = oy + int(viewer.port_h * 0.56)
-                rw   = int(viewer.port_w * 0.15)
-                rh   = int(viewer.port_h * 0.10)
+                cl_x = ox + int(viewer.port_w * 0.26)
+                cr_x = ox + int(viewer.port_w * 0.72)
+                cy   = oy + int(viewer.port_h * 0.44)
+                rw   = int(viewer.port_w * 0.13)
+                rh   = int(viewer.port_h * 0.06)
                 on_cheek = (
                     (abs(mx - cl_x) < rw and abs(my - cy) < rh) or
                     (abs(mx - cr_x) < rw and abs(my - cy) < rh)
