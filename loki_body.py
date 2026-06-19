@@ -365,6 +365,11 @@ def main():
                 say_until = now + max(4.0, len(say_text) * 0.06)
             if now > say_until:
                 say_text = ""
+            if pd.get("screenshot"):
+                path = ROOT / "workspace" / "loki_body_shot.png"
+                pygame.image.save(surf, str(path))
+                pd.pop("screenshot")
+                POSE_FILE.write_text(json.dumps(pd))
 
         # mouth animation while speaking
         if say_text and now < say_until:

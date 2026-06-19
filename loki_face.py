@@ -1,319 +1,258 @@
 #!/usr/bin/env python3
 """
-loki_face.py — Articulated Loki face viewer with mood, expression, and avoidance.
+loki_face.py — Loki face viewer using full painted portraits.
 
-Controls (pose file):
-  {"mood": "happy"}       — shifts iris colour
-  {"say": "some words"}   — animates mouth while text is shown
-  {"expression": {"brow_l": -12, "brow_r": 5, "jaw": 8}}  — angle overrides
+Mood drives which portrait shows. Portraits cross-fade smoothly.
+When speaking, face cycles between current mood and open-mouth (surprised).
+Face shifts subtly to follow the mouse. Withdrawn mood drifts away instead.
 
-Mood colours:
-  amber/gold    — warm, happy
-  green         — curious
-  grey_blue     — quiet
-  deep_red      — intense
-  silver        — truthful
-  near_black    — sad
-  withdrawn     — face avoids the mouse cursor
+Pose commands (write to workspace/loki_face_pose.json):
+  {"mood": "happy"}
+  {"say": "some words"}
+  {"screenshot": true}
 
-Touch events written to:  workspace/loki_face_touch.json
-Pose commands read from:  workspace/loki_face_pose.json
+Moods:  neutral · calm · happy · warm · joy · laughing · curious · sly
+        concerned · worried · sad · withdrawn · surprised · working · writing
+
+Touch events written to: workspace/loki_face_touch.json
+Run:  python3 loki_face.py
 """
-import pygame, sys, math, json, time, threading
+import pygame, sys, json, time, math, threading
 from pathlib import Path
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
 BASE       = Path(__file__).parent
 IMAGES     = BASE / "workspace" / "images" / "loki_face"
 POSE_FILE  = BASE / "workspace" / "loki_face_pose.json"
 TOUCH_FILE = BASE / "workspace" / "loki_face_touch.json"
 
-# ── Display ────────────────────────────────────────────────────────────────────
 W, H   = 800, 480
 FPS    = 30
 BG     = (14, 10, 22)
 
-# ── Mood colours (target iris RGB) ────────────────────────────────────────────
-MOOD_COLORS = {
-    "happy":      (220, 160,  50),
-    "warm":       (220, 160,  50),
-    "amber":      (220, 160,  50),
-    "curious":    ( 70, 170,  90),
-    "green":      ( 70, 170,  90),
-    "quiet":      ( 80, 110, 160),
-    "grey_blue":  ( 80, 110, 160),
-    "calm":       ( 80, 110, 160),
-    "intense":    (180,  40,  50),
-    "deep_red":   (180,  40,  50),
-    "passionate": (180,  40,  50),
-    "silver":     (180, 185, 200),
-    "truth":      (180, 185, 200),
-    "sad":        ( 40,  38,  55),
-    "near_black": ( 40,  38,  55),
-    "neutral":    (100, 130, 100),
+# ── Mood → portrait name ───────────────────────────────────────────────────────
+MOOD_PORTRAIT = {
+    "neutral":     "loki_neutral",
+    "calm":        "loki_neutral",
+    "grey_blue":   "loki_neutral",
+    "quiet":       "loki_neutral",
+    "happy":       "loki_smiling",
+    "warm":        "loki_smiling",
+    "amber":       "loki_smiling",
+    "smiling":     "loki_smiling",
+    "joy":         "loki_joy",
+    "joyful":      "loki_joy",
+    "laughing":    "loki_laughing",
+    "curious":     "loki_sly",
+    "sly":         "loki_sly",
+    "smirk":       "loki_sly",
+    "green":       "loki_sly",
+    "mischievous": "loki_sly",
+    "concerned":   "loki_concerned",
+    "worried":     "loki_concerned",
+    "sad":         "loki_concerned",
+    "near_black":  "loki_concerned",
+    "intense":     "loki_concerned",
+    "deep_red":    "loki_concerned",
+    "withdrawn":   "loki_concerned",
+    "surprised":   "loki_surprised",
+    "working":     "loki_working",
+    "focused":     "loki_working",
+    "thinking":    "loki_working",
+    "silver":      "loki_writing",
+    "writing":     "loki_writing",
+    "truth":       "loki_writing",
 }
 
-# ── Face layout — centre of each part on screen ───────────────────────────────
-# All positions relative to face origin (FACE_X, FACE_Y = centre of head_base)
-# Template sizes (w, h) from make_loki_face_templates.py
-PARTS_DEF = {
-    # name               cx_off  cy_off   w    h   z
-    "head_base":       (   0,     0,    260, 360,  0),
-    "jaw":             (   0,   148,    200, 100,  1),
-    "cheek_l":         ( -90,    22,     66,  46,  2),
-    "cheek_r":         (  90,    20,     66,  46,  2),
-    "nose":            (   0,    15,     42,  58,  3),
-    "nostril_l":       ( -18,    58,     20,  14,  3),
-    "nostril_r":       (  18,    58,     20,  14,  3),
-    "mouth_inside":    (   0,    90,     62,  32,  4),
-    "lower_lip":       (   0,   100,     76,  26,  5),
-    "upper_lip":       (   0,    80,     86,  30,  6),
-    "mouth_corner_l":  ( -60,    85,     26,  26,  6),
-    "mouth_corner_r":  (  60,    83,     26,  26,  6),
-    "iris_l":          ( -68,   -28,     36,  36,  7),
-    "iris_r":          (  68,   -30,     36,  36,  7),
-    "pupil_l":         ( -68,   -28,     18,  18,  8),
-    "pupil_r":         (  68,   -30,     18,  18,  8),
-    "lower_eyelid_l":  ( -68,   -14,     60,  20,  9),
-    "lower_eyelid_r":  (  68,   -16,     60,  20,  9),
-    "upper_eyelid_l":  ( -68,   -34,     60,  34, 10),
-    "upper_eyelid_r":  (  68,   -36,     60,  34, 10),
-    "eyebrow_l":       ( -68,   -65,     72,  24, 11),
-    "eyebrow_r":       (  68,   -67,     72,  24, 11),
-    "forehead_crease": (   0,   -55,     38,  20, 11),
-    "hair":            (   0,   -88,    280, 210, 12),
-}
-
-# ── Expression presets (angle offsets in degrees, jaw drop in px) ──────────────
-EXPRESSIONS = {
-    "neutral":   {"brow_l":  0, "brow_r":  0, "jaw": 0, "lid_l": 0,  "lid_r": 0},
-    "happy":     {"brow_l": -6, "brow_r": -6, "jaw": 4, "lid_l": -2, "lid_r": -2},
-    "curious":   {"brow_l":-12, "brow_r":  2, "jaw": 0, "lid_l": -4, "lid_r":  0},
-    "sad":       {"brow_l": 10, "brow_r": 10, "jaw": 2, "lid_l":  6, "lid_r":  6},
-    "intense":   {"brow_l":  6, "brow_r":  6, "jaw": 0, "lid_l":  2, "lid_r":  2},
-    "surprised": {"brow_l":-18, "brow_r":-18, "jaw":16, "lid_l": -8, "lid_r": -8},
-    "smirk":     {"brow_l": -8, "brow_r":  2, "jaw": 0, "lid_l":  0, "lid_r":  2},
-    "withdrawn": {"brow_l":  4, "brow_r":  4, "jaw": 0, "lid_l":  4, "lid_r":  4},
-}
-
-# ── Mouth phoneme cycling when speaking ────────────────────────────────────────
-MOUTH_CYCLE = [0, 4, 10, 16, 10, 4]   # jaw drop px per frame
-MOUTH_SPD   = 0.10                     # seconds per phoneme frame
+MOUTH_OPEN   = "loki_surprised"   # portrait used for open-mouth frame
+MOUTH_SPD    = 0.13               # seconds per mouth open/close cycle
+FADE_SPD     = 3.5                # portrait cross-fade speed (higher = faster)
+PARALLAX_X   = 10                 # max px horizontal shift following mouse
+PARALLAX_Y   = 6                  # max px vertical shift
 
 
 def _lerp(a, b, t):
     return a + (b - a) * t
 
 
-def _lerp_col(ca, cb, t):
-    return tuple(int(_lerp(a, b, t)) for a, b in zip(ca, cb))
-
-
-def _tint(surf, colour):
-    """Return a copy of surf with an RGB tint blended over it."""
-    tinted = surf.copy()
-    overlay = pygame.Surface(tinted.get_size(), pygame.SRCALPHA)
-    overlay.fill((*colour, 80))
-    tinted.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-    return tinted
-
-
-class FacePart:
-    def __init__(self, name, cx_off, cy_off, w, h, z):
-        self.name   = name
-        self.cx_off = cx_off
-        self.cy_off = cy_off
-        self.w      = w
-        self.h      = h
-        self.z      = z
-        self.surf   = None   # loaded PNG or placeholder
-        self.angle  = 0.0    # current rotation
-        self.dy     = 0.0    # vertical offset (jaw drop)
-
-    def load(self):
-        path = IMAGES / f"{self.name}.png"
-        if path.exists():
-            raw = pygame.image.load(str(path)).convert_alpha()
-            self.surf = pygame.transform.smoothscale(raw, (self.w, self.h))
-        else:
-            # placeholder coloured rectangle
-            self.surf = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
-            col = {
-                "head_base": (90, 75, 60, 180),
-                "hair":      (35, 28, 22, 220),
-                "jaw":       (85, 70, 55, 180),
-            }.get(self.name, (100, 90, 80, 120))
-            self.surf.fill(col)
-
-    def draw(self, dest, origin_x, origin_y):
-        cx = origin_x + self.cx_off
-        cy = origin_y + self.cy_off + self.dy
-        if self.angle != 0:
-            rotated = pygame.transform.rotozoom(self.surf, self.angle, 1.0)
-            dest.blit(rotated, (cx - rotated.get_width()  // 2,
-                                cy - rotated.get_height() // 2))
-        else:
-            dest.blit(self.surf, (cx - self.w // 2, cy - self.h // 2))
-
-
-class LokiFace:
-    FACE_X = W // 2
-    FACE_Y = H // 2 + 10
-
+class LokiFaceViewer:
     def __init__(self):
-        self.parts     = {}
-        self.mood      = "neutral"
-        self.iris_col  = MOOD_COLORS["neutral"]
-        self.iris_tgt  = MOOD_COLORS["neutral"]
+        self.portraits  = {}      # name → pygame.Surface (scaled to fit screen)
+        self.port_x     = 0      # top-left x of portrait on screen
+        self.port_y     = 0      # top-left y of portrait on screen
+        self.port_w     = W
+        self.port_h     = H
 
-        # expression angles (current and target)
-        self._expr     = dict(EXPRESSIONS["neutral"])
-        self._expr_tgt = dict(EXPRESSIONS["neutral"])
-
-        # avoidance
-        self._avoid_x  = 0.0
-        self._avoid_y  = 0.0
+        self.mood       = "neutral"
+        self.current    = "loki_neutral"   # portrait showing now
+        self.target     = "loki_neutral"   # portrait fading toward
+        self.blend_t    = 1.0             # 0 = start of fade, 1 = fully transitioned
 
         # speaking
         self._say_text  = ""
-        self._say_time  = 0.0
+        self._say_start = 0.0
         self._mouth_t   = 0.0
+        self._mouth_open = False
+
+        # parallax
+        self._px        = 0.0
+        self._py        = 0.0
+
+        # blush
+        self._blush     = 0.0   # 0–255, fades out over time
 
         # pose file
         self._pose_ts   = 0.0
-        self._pose_thread_running = False
+        self._running   = False
+        self._do_shot   = False
 
     def load(self):
-        for name, (cx, cy, w, h, z) in PARTS_DEF.items():
-            p = FacePart(name, cx, cy, w, h, z)
-            p.load()
-            self.parts[name] = p
-        self._refresh_iris()
+        names = [
+            "loki_neutral", "loki_smiling", "loki_joy", "loki_laughing",
+            "loki_sly", "loki_concerned", "loki_surprised",
+            "loki_working", "loki_writing",
+            "loki_face_reference",   # fallback
+        ]
+        for name in names:
+            for ext in (".png", ".jpg", ".jpeg"):
+                path = IMAGES / f"{name}{ext}"
+                if path.exists():
+                    try:
+                        raw  = pygame.image.load(str(path)).convert_alpha()
+                        pw, ph = raw.get_size()
+                        scale  = min(W / pw, H / ph)
+                        nw     = int(pw * scale)
+                        nh     = int(ph * scale)
+                        surf   = pygame.transform.smoothscale(raw, (nw, nh))
+                        self.portraits[name] = surf
+                        # store shared layout from first loaded portrait
+                        if not self.port_w or name == "loki_neutral":
+                            self.port_w = nw
+                            self.port_h = nh
+                            self.port_x = (W - nw) // 2
+                            self.port_y = (H - nh) // 2
+                        break
+                    except Exception as e:
+                        print(f"  could not load {name}: {e}")
 
-    def _refresh_iris(self):
-        for side in ("l", "r"):
-            name = f"iris_{side}"
-            if name in self.parts and self.parts[name].surf:
-                self.parts[name].surf = _tint(
-                    pygame.transform.smoothscale(
-                        pygame.image.load(str(IMAGES / f"{name}.png")).convert_alpha()
-                        if (IMAGES / f"{name}.png").exists()
-                        else self.parts[name].surf,
-                        (self.parts[name].w, self.parts[name].h)
-                    ),
-                    self.iris_col
-                )
+        print(f"Loaded {len(self.portraits)} portraits.")
+        if not self.portraits:
+            print("No portraits found — check workspace/images/loki_face/")
 
     def set_mood(self, mood):
-        self.mood      = mood
-        self.iris_tgt  = MOOD_COLORS.get(mood, MOOD_COLORS["neutral"])
-        expr_key       = mood if mood in EXPRESSIONS else "neutral"
-        self._expr_tgt = dict(EXPRESSIONS[expr_key])
+        self.mood   = mood
+        new_portrait = MOOD_PORTRAIT.get(mood, "loki_neutral")
+        if new_portrait in self.portraits and new_portrait != self.target:
+            self.target  = new_portrait
+            self.blend_t = 0.0
 
     def say(self, text):
-        self._say_text = text
-        self._say_time = time.time()
-        self._mouth_t  = 0.0
+        self._say_text  = text
+        self._say_start = time.time()
+        self._mouth_t   = 0.0
+        self._mouth_open = False
 
     def update(self, dt, mouse_pos):
         now = time.time()
 
-        # smooth iris colour
-        t = min(1.0, dt * 1.5)
-        self.iris_col = _lerp_col(self.iris_col, self.iris_tgt, t)
+        # portrait cross-fade
+        if self.blend_t < 1.0:
+            self.blend_t = min(1.0, self.blend_t + dt * FADE_SPD)
+        if self.blend_t >= 1.0 and self.current != self.target:
+            self.current = self.target
 
-        # smooth expression
-        for k in self._expr:
-            self._expr[k] = _lerp(self._expr[k], self._expr_tgt[k], min(1.0, dt * 2))
-
-        # apply expression to parts
-        if "eyebrow_l" in self.parts:
-            self.parts["eyebrow_l"].angle = self._expr["brow_l"]
-        if "eyebrow_r" in self.parts:
-            self.parts["eyebrow_r"].angle = -self._expr["brow_r"]
-        if "upper_eyelid_l" in self.parts:
-            self.parts["upper_eyelid_l"].dy = self._expr["lid_l"]
-        if "upper_eyelid_r" in self.parts:
-            self.parts["upper_eyelid_r"].dy = self._expr["lid_r"]
-
-        # jaw / mouth animation
-        jaw_drop = self._expr["jaw"]
-        if self._say_text and now - self._say_time < len(self._say_text) * 0.06 + 1.0:
+        # speaking — cycle open/closed mouth
+        say_dur = len(self._say_text) * 0.055 + 0.8
+        if self._say_text and now - self._say_start < say_dur:
             self._mouth_t += dt
-            frame    = int(self._mouth_t / MOUTH_SPD) % len(MOUTH_CYCLE)
-            jaw_drop = max(jaw_drop, MOUTH_CYCLE[frame])
+            if self._mouth_t >= MOUTH_SPD:
+                self._mouth_t   = 0.0
+                self._mouth_open = not self._mouth_open
         else:
-            self._say_text = ""
+            self._say_text   = ""
+            self._mouth_open = False
 
-        for name in ("jaw", "lower_lip", "mouth_inside"):
-            if name in self.parts:
-                self.parts[name].dy = jaw_drop
-
-        # avoidance — face leans away from mouse when withdrawn
+        # parallax — face follows or avoids mouse
+        mx, my = mouse_pos
+        tx = (mx - W / 2) / (W / 2) * PARALLAX_X
+        ty = (my - H / 2) / (H / 2) * PARALLAX_Y
         if self.mood == "withdrawn":
-            mx, my  = mouse_pos
-            fx, fy  = self.FACE_X, self.FACE_Y
-            dx      = fx - mx
-            dy      = fy - my
-            dist    = math.hypot(dx, dy) or 1
-            strength = max(0, 1 - dist / 280) * 30
-            tx = (dx / dist) * strength
-            ty = (dy / dist) * strength
-            self._avoid_x = _lerp(self._avoid_x, tx, min(1.0, dt * 3))
-            self._avoid_y = _lerp(self._avoid_y, ty, min(1.0, dt * 3))
+            tx, ty = -tx * 1.5, -ty * 1.5   # drift away
+        self._px = _lerp(self._px, tx, min(1.0, dt * 2.5))
+        self._py = _lerp(self._py, ty, min(1.0, dt * 2.5))
+
+        # blush fades out slowly
+        if self._blush > 0:
+            self._blush = max(0.0, self._blush - dt * 28)
+
+    def draw(self, surf, fnt):
+        surf.fill(BG)
+
+        ox = self.port_x + int(self._px)
+        oy = self.port_y + int(self._py)
+
+        # which portrait to show this frame
+        if self._mouth_open and MOUTH_OPEN in self.portraits:
+            speak_surf = self.portraits[MOUTH_OPEN]
+            surf.blit(speak_surf, (ox, oy))
         else:
-            self._avoid_x = _lerp(self._avoid_x, 0, min(1.0, dt * 3))
-            self._avoid_y = _lerp(self._avoid_y, 0, min(1.0, dt * 3))
+            # cross-fade between current and target
+            cur_surf = self.portraits.get(self.current)
+            tgt_surf = self.portraits.get(self.target)
+            if cur_surf:
+                surf.blit(cur_surf, (ox, oy))
+            if tgt_surf and tgt_surf is not cur_surf and self.blend_t < 1.0:
+                tgt_surf.set_alpha(int(self.blend_t * 255))
+                surf.blit(tgt_surf, (ox, oy))
+                tgt_surf.set_alpha(255)
 
-        # re-tint iris each frame to track colour changes
-        for side in ("l", "r"):
-            p = self.parts.get(f"iris_{side}")
-            if p and p.surf:
-                path = IMAGES / f"iris_{side}.png"
-                if path.exists():
-                    raw = pygame.image.load(str(path)).convert_alpha()
-                    scaled = pygame.transform.smoothscale(raw, (p.w, p.h))
-                    p.surf = _tint(scaled, self.iris_col)
-                else:
-                    p.surf.fill((*self.iris_col, 180))
-
-    def draw(self, surf, mouse_pos):
-        ox = int(self.FACE_X + self._avoid_x)
-        oy = int(self.FACE_Y + self._avoid_y)
-
-        # gaze: pupils follow mouse slightly (not when withdrawn)
-        if self.mood != "withdrawn":
-            mx, my = mouse_pos
-            gaze_x  = max(-8, min(8, (mx - ox) / 30))
-            gaze_y  = max(-4, min(4, (my - oy) / 50))
-        else:
-            gaze_x, gaze_y = 0, 0
-
-        sorted_parts = sorted(self.parts.values(), key=lambda p: p.z)
-        for p in sorted_parts:
-            if p.name in ("pupil_l", "pupil_r"):
-                side  = "l" if p.name == "pupil_l" else "r"
-                iris  = self.parts.get(f"iris_{side}")
-                base_x = ox + p.cx_off + (gaze_x if side == "l" else gaze_x)
-                base_y = oy + p.cy_off + gaze_y + p.dy
-                surf.blit(p.surf, (int(base_x - p.w // 2), int(base_y - p.h // 2)))
-            else:
-                p.draw(surf, ox, oy)
+        # blush — soft rose ellipses over cheeks
+        if self._blush > 0:
+            alpha   = int(self._blush)
+            # cheek positions: ~30% and ~70% across, ~58% down the portrait
+            cl_x = ox + int(self.port_w * 0.30)
+            cr_x = ox + int(self.port_w * 0.70)
+            cy   = oy + int(self.port_h * 0.56)
+            rw   = int(self.port_w * 0.13)
+            rh   = int(self.port_h * 0.08)
+            for cx in (cl_x, cr_x):
+                bs = pygame.Surface((rw*2, rh*2), pygame.SRCALPHA)
+                pygame.draw.ellipse(bs, (220, 90, 100, alpha), (0, 0, rw*2, rh*2))
+                # soften edges with a second pass
+                pygame.draw.ellipse(bs, (220, 90, 100, alpha // 3),
+                                    (-4, -4, rw*2+8, rh*2+8))
+                surf.blit(bs, (cx - rw, cy - rh), special_flags=pygame.BLEND_RGBA_ADD)
 
         # say text bubble
         if self._say_text:
-            fnt  = pygame.font.SysFont("dejavusans", 14)
-            txt  = fnt.render(self._say_text[:60], True, (220, 210, 240))
-            bx   = W // 2 - txt.get_width() // 2
-            by   = oy + 200
-            bubble = pygame.Surface((txt.get_width() + 16, txt.get_height() + 10), pygame.SRCALPHA)
-            bubble.fill((30, 24, 44, 200))
-            surf.blit(bubble, (bx - 8, by - 4))
-            surf.blit(txt,    (bx,     by))
+            words   = self._say_text
+            lines   = []
+            while len(words) > 52:
+                cut = words[:52].rfind(" ")
+                if cut < 1:
+                    cut = 52
+                lines.append(words[:cut])
+                words = words[cut:].strip()
+            if words:
+                lines.append(words)
 
-    def read_pose_file(self):
-        """Called in a background thread every 2s."""
-        while self._pose_thread_running:
+            line_h   = fnt.get_linesize()
+            bw       = max(fnt.size(l)[0] for l in lines) + 20
+            bh       = line_h * len(lines) + 14
+            bx       = W // 2 - bw // 2
+            by       = H - bh - 14
+            bubble   = pygame.Surface((bw, bh), pygame.SRCALPHA)
+            bubble.fill((20, 16, 34, 210))
+            surf.blit(bubble, (bx, by))
+            for i, line in enumerate(lines):
+                t = fnt.render(line, True, (220, 210, 245))
+                surf.blit(t, (bx + 10, by + 7 + i * line_h))
+
+        # mood label top-left
+        col = (160, 140, 190)
+        surf.blit(fnt.render(self.mood, True, col), (10, 10))
+
+    def _read_pose_loop(self):
+        while self._running:
             try:
                 if POSE_FILE.exists():
                     mtime = POSE_FILE.stat().st_mtime
@@ -323,75 +262,88 @@ class LokiFace:
                         if "mood" in data:
                             self.set_mood(data["mood"])
                         if "say" in data:
-                            self.say(data["say"])
-                        if "expression" in data:
-                            for k, v in data["expression"].items():
-                                self._expr_tgt[k] = v
+                            self.say(str(data["say"]))
+                        if data.get("screenshot"):
+                            self._do_shot = True
             except Exception:
                 pass
             time.sleep(2)
 
 
-def _write_touch(part, x, y):
+def _write_touch(x, y, note=""):
     try:
-        rec = {"part": part, "x": x, "y": y, "ts": time.time()}
-        TOUCH_FILE.write_text(json.dumps(rec))
+        TOUCH_FILE.write_text(json.dumps({"x": x, "y": y, "note": note, "ts": time.time()}))
     except Exception:
         pass
 
 
 def main():
     pygame.init()
-    surf = pygame.display.set_mode((W, H))
+    surf  = pygame.display.set_mode((W, H))
     pygame.display.set_caption("Loki")
     clock = pygame.time.Clock()
 
-    face = LokiFace()
-    face.load()
-    face.set_mood("neutral")
+    try:
+        fnt = pygame.font.SysFont("dejavusans", 14)
+    except Exception:
+        fnt = pygame.font.SysFont(None, 14)
 
-    face._pose_thread_running = True
-    t = threading.Thread(target=face.read_pose_file, daemon=True)
-    t.start()
+    viewer = LokiFaceViewer()
+    viewer.load()
+    viewer.set_mood("neutral")
 
-    fnt_sm = pygame.font.SysFont("dejavusans", 12)
-    prev   = time.time()
+    viewer._running = True
+    threading.Thread(target=viewer._read_pose_loop, daemon=True).start()
+
+    prev      = time.time()
+    shot_done = False   # take one auto-screenshot after first draw
 
     while True:
-        now = time.time()
-        dt  = now - prev
-        prev = now
-
+        now   = time.time()
+        dt    = now - prev
+        prev  = now
         mouse = pygame.mouse.get_pos()
 
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT:
-                face._pose_thread_running = False
+                viewer._running = False
                 pygame.quit(); sys.exit()
             if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
-                face._pose_thread_running = False
+                viewer._running = False
                 pygame.quit(); sys.exit()
             if ev.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = ev.pos
-                ox = int(face.FACE_X + face._avoid_x)
-                oy = int(face.FACE_Y + face._avoid_y)
-                touched = "face"
-                for p in sorted(face.parts.values(), key=lambda x: -x.z):
-                    px = ox + p.cx_off - p.w // 2
-                    py = oy + p.cy_off - p.h // 2
-                    if px <= mx <= px + p.w and py <= my <= py + p.h:
-                        touched = p.name
-                        break
-                _write_touch(touched, mx, my)
+                ox = viewer.port_x + int(viewer._px)
+                oy = viewer.port_y + int(viewer._py)
+                # cheek areas
+                cl_x = ox + int(viewer.port_w * 0.30)
+                cr_x = ox + int(viewer.port_w * 0.70)
+                cy   = oy + int(viewer.port_h * 0.56)
+                rw   = int(viewer.port_w * 0.15)
+                rh   = int(viewer.port_h * 0.10)
+                on_cheek = (
+                    (abs(mx - cl_x) < rw and abs(my - cy) < rh) or
+                    (abs(mx - cr_x) < rw and abs(my - cy) < rh)
+                )
+                if on_cheek:
+                    viewer._blush = min(255, viewer._blush + 160)
+                    _write_touch(mx, my, "cheek")
+                else:
+                    _write_touch(mx, my)
 
-        face.update(dt, mouse)
+        viewer.update(dt, mouse)
+        viewer.draw(surf, fnt)
 
-        surf.fill(BG)
-        face.draw(surf, mouse)
+        if viewer._do_shot:
+            viewer._do_shot = False
+            shot = str(BASE / "workspace" / "loki_face_shot.png")
+            pygame.image.save(surf, shot)
+            print(f"Screenshot saved → {shot}", flush=True)
 
-        # mood label
-        mood_col = (*MOOD_COLORS.get(face.mood, (150, 150, 150)), 255)
-        surf.blit(fnt_sm.render(face.mood, True, mood_col[:3]), (10, 10))
+        if not shot_done:
+            shot_done = True
+            pygame.image.save(surf, str(BASE / "workspace" / "loki_face_shot.png"))
+            print("Auto-screenshot saved on startup.", flush=True)
 
         pygame.display.flip()
         clock.tick(FPS)
