@@ -31,39 +31,54 @@ BG     = (14, 10, 22)
 
 # ── Mood → portrait name ───────────────────────────────────────────────────────
 MOOD_PORTRAIT = {
+    # calm / resting
     "neutral":     "loki_neutral",
     "calm":        "loki_neutral",
     "grey_blue":   "loki_neutral",
     "quiet":       "loki_neutral",
-    "happy":       "loki_smiling",
-    "warm":        "loki_smiling",
-    "amber":       "loki_smiling",
-    "smiling":     "loki_smiling",
+    # pensive / serious (dark, still)
+    "pensive":     "loki_pensive",
+    "thoughtful":  "loki_pensive",
+    "silver":      "loki_pensive",
+    # warm smile (genuine, crinkled eyes)
+    "happy":       "loki_joy",
+    "warm":        "loki_joy",
+    "amber":       "loki_joy",
+    "smiling":     "loki_joy",
     "joy":         "loki_joy",
     "joyful":      "loki_joy",
+    # laughing (full laugh, eyes nearly closed)
     "laughing":    "loki_laughing",
+    # sly / mischievous (toothy grin, deciding whether to say it)
     "curious":     "loki_sly",
     "sly":         "loki_sly",
     "smirk":       "loki_sly",
     "green":       "loki_sly",
     "mischievous": "loki_sly",
+    # concerned / withdrawn (smile but eyes elsewhere)
     "concerned":   "loki_concerned",
     "worried":     "loki_concerned",
     "sad":         "loki_concerned",
     "near_black":  "loki_concerned",
-    "intense":     "loki_concerned",
     "deep_red":    "loki_concerned",
     "withdrawn":   "loki_concerned",
-    "surprised":   "loki_surprised",
+    # open / speaking (the talking face — wide open mouth, intense brows)
+    "open":        "loki_open",
+    "surprised":   "loki_open",
+    "alarmed":     "loki_open",
+    # working (at desk with notebook and pencil, close-up)
     "working":     "loki_working",
     "focused":     "loki_working",
     "thinking":    "loki_working",
-    "silver":      "loki_writing",
-    "writing":     "loki_writing",
-    "truth":       "loki_writing",
+    "writing":     "loki_working",
+    "truth":       "loki_working",
+    # studying (at blackboard with equations, full body)
+    "studying":    "loki_studying",
+    "intense":     "loki_studying",
+    "silver":      "loki_studying",
 }
 
-MOUTH_OPEN   = "loki_surprised"   # portrait used for open-mouth frame
+MOUTH_OPEN   = "loki_open"        # portrait used for open-mouth speech frames
 MOUTH_SPD    = 0.13               # seconds per mouth open/close cycle
 FADE_SPD     = 3.5                # portrait cross-fade speed (higher = faster)
 PARALLAX_X   = 10                 # max px horizontal shift following mouse
@@ -107,9 +122,9 @@ class LokiFaceViewer:
 
     def load(self):
         names = [
-            "loki_neutral", "loki_smiling", "loki_joy", "loki_laughing",
-            "loki_sly", "loki_concerned", "loki_surprised",
-            "loki_working", "loki_writing",
+            "loki_neutral", "loki_pensive", "loki_joy", "loki_laughing",
+            "loki_sly", "loki_concerned", "loki_open",
+            "loki_working", "loki_studying",
             "loki_face_reference",   # fallback
         ]
         for name in names:
