@@ -17,7 +17,7 @@ Moods:  neutral · calm · happy · warm · joy · laughing · curious · sly
 Touch events written to: workspace/loki_face_touch.json
 Run:  python3 loki_face.py
 """
-import pygame, sys, json, time, math, threading, subprocess
+import pygame, sys, json, time, math, threading, subprocess, tempfile, os
 from pathlib import Path
 from datetime import datetime
 
@@ -218,12 +218,21 @@ class LokiFaceViewer:
         print(f"Ring positions saved → {RING_FILE}", flush=True)
 
     def _speak_tts(self, text: str):
-        try:
-            subprocess.Popen(
-                ["espeak-ng", "-s", "128", "-v", "en+m4", text],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except Exception as e:
-            print(f"TTS error: {e}", flush=True)
+        def _run():
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                    tmp = f.name
+                piper = str(Path.home() / ".local" / "bin" / "piper")
+                model = str(BASE / "voices" / "en_GB-alan-medium.onnx")
+                p = subprocess.Popen(
+                    [piper, "--model", model, "--output_file", tmp],
+                    stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                p.communicate(input=text.encode())
+                subprocess.run(["pw-play", tmp], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                os.unlink(tmp)
+            except Exception as e:
+                print(f"TTS error: {e}", flush=True)
+        threading.Thread(target=_run, daemon=True).start()
 
     def _soul_running(self) -> bool:
         try:
@@ -472,6 +481,7 @@ class LokiFaceViewer:
                             self.set_mood(data["mood"])
                         if "say" in data:
                             self.say(str(data["say"]))
+                            self._speak_tts(str(data["say"]))
                         if "blush" in data:
                             self._blush = float(data["blush"])
                         if data.get("screenshot"):
