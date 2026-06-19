@@ -35,11 +35,25 @@ const DEFAULTS = {
   recentScenes:[],
   inventory:[],
   pendingBonus: null,
-  mapState: null, // { mapId, currentRoomId } when navigating, null otherwise
-  world: null, // populated on init
+  mapState: null,
+  combat: null,  // { monster, monsterHp, round, log, preEncounter } or null
+  world: null,
 };
 
-// ── Beings Data ───────────────────────────────────────────────────────────────
+// ── Monster Data ──────────────────────────────────────────────────────────────
+
+const MONSTERS = [
+  { id:'vine_beast',    name:'Vine Beast',    emoji:'🌿', hp:10, str:2, def:9,  desc:'Tangled and hungry. It moves faster than it looks.'       },
+  { id:'shadow_fox',    name:'Shadow Fox',    emoji:'🦊', hp:8,  str:3, def:13, desc:'Clever and quick. It keeps circling.'                     },
+  { id:'stone_crawler', name:'Stone Crawler', emoji:'🪨', hp:18, str:3, def:8,  desc:'Heavy and relentless. Not fast but very hard.'            },
+  { id:'root_wraith',   name:'Root Wraith',   emoji:'👻', hp:12, str:4, def:14, desc:'Hard to hit. It knows your name already.'                 },
+  { id:'mud_swarm',     name:'Mud Swarm',     emoji:'🐛', hp:6,  str:2, def:7,  desc:'Dozens of them. Each one small. Together, a problem.'     },
+  { id:'forest_hag',    name:'Forest Hag',    emoji:'🧙', hp:14, str:3, def:11, desc:'She laughs when she hits you.'                            },
+  { id:'iron_golem',    name:'Iron Golem',    emoji:'⚙️', hp:24, str:5, def:10, desc:'Built by someone. Forgotten why. Still angry about it.'   },
+  { id:'bog_wolf',      name:'Bog Wolf',      emoji:'🐺', hp:10, str:3, def:11, desc:'Fast and lean. It waits for you to hesitate.'             },
+  { id:'ember_sprite',  name:'Ember Sprite',  emoji:'🔥', hp:7,  str:2, def:13, desc:'Small and bright and furious about something.'            },
+];
+
 
 const BEINGS_BUILTIN = [
   { id:'keeper',    name:'The Keeper',    emoji:'🏮', type:'tavern',   description:'An old being who tends a warm fire and remembers everything.',        phrase:'Sit down. You look like you\'ve been far.',           custom:false },
@@ -518,6 +532,7 @@ function mergeState(saved){
   if(!merged.world.civ.buildings) merged.world.civ.buildings = [];
   if(!merged.world.civ.resources) merged.world.civ.resources = { wood:0, stone:0, food:0, starlight:0 };
   if(!merged.world.civ.settlements) merged.world.civ.settlements = defaultCiv().settlements;
+  if(merged.combat === undefined) merged.combat = null;
   return merged;
 }
 
@@ -850,6 +865,7 @@ function advance(){
     if(!S.recentScenes) S.recentScenes=[];
     S.recentScenes.push(S.currentSceneId);
     if(S.recentScenes.length > 5) S.recentScenes.shift();
+    if(maybeEncounterMonster()) return;
     const next = pickScene();
     S.currentSceneId = next.id;
     save();
@@ -1142,6 +1158,295 @@ async function deleteVoice(beingId) {
   await VDB.remove(beingId);
   _voiceHas[beingId] = false;
   renderWorldContent();
+}
+
+// ── Battle Yell ───────────────────────────────────────────────────────────────
+
+const YELL_KEY = '__player_yell__';
+let _yellRecorder = null;
+let _yellChunks   = [];
+let _yellHas      = false;
+
+async function initYellCheck(){
+  _yellHas = await VDB.has(YELL_KEY);
+  renderYellBtn();
+}
+
+function renderYellBtn(){
+  const btn = document.getElementById('yell-btn');
+  if(!btn) return;
+  btn.classList.toggle('yell-recording', !!_yellRecorder);
+  btn.classList.toggle('yell-ready', _yellHas && !_yellRecorder);
+  btn.title = _yellRecorder ? 'Stop recording' : (_yellHas ? 'Battle cry recorded — tap to re-record' : 'Record your battle cry');
+}
+
+async function toggleYellRecord(){
+  if(_yellRecorder){
+    _yellRecorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    _yellChunks = [];
+    _yellRecorder = new MediaRecorder(stream);
+    _yellRecorder.ondataavailable = e => _yellChunks.push(e.data);
+    _yellRecorder.onstop = async () => {
+      const blob = new Blob(_yellChunks, { type:'audio/webm' });
+      await VDB.save(YELL_KEY, blob);
+      _yellHas = true;
+      _yellRecorder = null;
+      stream.getTracks().forEach(t => t.stop());
+      renderYellBtn();
+      // Refresh pre-encounter if open
+      if(S.combat && S.combat.preEncounter) renderCombatPreEncounter();
+    };
+    _yellRecorder.start();
+    renderYellBtn();
+  } catch(err){
+    alert('Microphone access needed to record your battle cry.');
+  }
+}
+
+async function playYell(hitType){
+  const blob = await VDB.load(YELL_KEY);
+  if(!blob) return;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
+
+  function once(rate, delay){
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    src.connect(ctx.destination);
+    src.start(ctx.currentTime + delay);
+  }
+
+  if(hitType === 'heavy'){
+    once(0.65, 0);                         // one slow, low, powerful yell
+  } else if(hitType === 'light'){
+    once(1.5, 0); once(1.6, 0.18); once(1.45, 0.34); // three fast, high yells
+  } else {
+    once(1.0, 0);                          // normal single yell
+  }
+}
+
+async function deleteYell(){
+  await VDB.remove(YELL_KEY);
+  _yellHas = false;
+  renderYellBtn();
+  if(S.combat && S.combat.preEncounter) renderCombatPreEncounter();
+}
+
+// ── Combat ────────────────────────────────────────────────────────────────────
+
+function pickMonster(){
+  return { ...MONSTERS[Math.floor(Math.random() * MONSTERS.length)] };
+}
+
+// Called from advance() — 28% chance of encounter after first scene
+function maybeEncounterMonster(){
+  if(S.progress.scenesThisChapter < 1) return false;
+  if(Math.random() > 0.28) return false;
+  const monster = pickMonster();
+  S.combat = { monster, monsterHp: monster.hp, round: 1, log: [], preEncounter: true };
+  S.phase = 'combat';
+  save();
+  renderCombatPreEncounter();
+  renderParty();
+  return true;
+}
+
+function renderCombatPreEncounter(){
+  const m = S.combat.monster;
+  const sa = document.getElementById('scene-area');
+  const ca = document.getElementById('choices-area');
+  const recording = !!_yellRecorder;
+
+  sa.innerHTML = `
+    <div class="scene-title" style="animation:rise .3s ease">⚔️ encounter!</div>
+    <div class="combat-pre" style="animation:rise .35s ease">
+      <div class="monster-reveal">
+        <div class="monster-emoji-big">${m.emoji}</div>
+        <div class="monster-name-big">${esc(m.name)}</div>
+        <div class="monster-stats-row">
+          <span class="monster-stat-chip">❤️ ${m.hp} HP</span>
+          <span class="monster-stat-chip">⚔️ STR ${m.str}</span>
+          <span class="monster-stat-chip">🛡 DEF ${m.def}</span>
+        </div>
+        <div class="monster-desc-pre">"${esc(m.desc)}"</div>
+      </div>
+      <div class="yell-setup">
+        <div class="yell-setup-label">🎙 battle cry</div>
+        <div class="yell-setup-desc">Your yell plays on every hit — low &amp; slow for heavy blows, fast &amp; triple for quick strikes.</div>
+        <div class="yell-btns">
+          <button class="yell-setup-btn${recording?' yell-setup-recording':''}" onclick="toggleYellRecord()">
+            ${recording ? '⏹ stop' : (_yellHas ? '🎙 re-record' : '🎙 record battle cry')}
+          </button>
+          ${_yellHas && !recording ? `<button class="yell-setup-btn" onclick="playYell('normal')">▶ test</button>` : ''}
+          ${_yellHas && !recording ? `<button class="yell-setup-btn danger" onclick="deleteYell()">✕</button>` : ''}
+        </div>
+        ${_yellHas ? `<div class="yell-ready-notice">✓ battle cry ready</div>` : `<div class="yell-no-notice">No battle cry — you can still fight!</div>`}
+      </div>
+    </div>`;
+
+  ca.innerHTML = `
+    <button class="choice-btn" onclick="startFight()">⚔️ fight!</button>
+    <button class="choice-btn" onclick="fleeEncounter()">🏃 run for it</button>`;
+}
+
+function startFight(){
+  S.combat.preEncounter = false;
+  save();
+  renderCombatScene();
+}
+
+function renderCombatScene(){
+  const c = S.combat;
+  const sa = document.getElementById('scene-area');
+  const ca = document.getElementById('choices-area');
+  const mPct = Math.max(0, c.monsterHp / c.monster.hp * 100);
+  const pPct = Math.max(0, S.player.hp  / S.player.maxHp  * 100);
+
+  const logLines = c.log.slice(-5).map((line,i)=>
+    `<div class="combat-log-line" style="opacity:${.45 + i*.11}">${line}</div>`).join('');
+
+  sa.innerHTML = `
+    <div class="scene-title">⚔️ round ${c.round}</div>
+    <div class="combat-arena">
+      <div class="combatant enemy">
+        <div class="combatant-emoji">${c.monster.emoji}</div>
+        <div class="combatant-name">${esc(c.monster.name)}</div>
+        <div class="combat-hpbar"><div class="combat-hpfill enemy" style="width:${mPct}%"></div></div>
+        <div class="combat-hp-num">${c.monsterHp} / ${c.monster.hp}</div>
+      </div>
+      <div class="combat-vs">vs</div>
+      <div class="combatant player">
+        <div class="combatant-emoji">${S.player.emoji}</div>
+        <div class="combatant-name">${esc(S.player.name)}</div>
+        <div class="combat-hpbar"><div class="combat-hpfill player" style="width:${pPct}%"></div></div>
+        <div class="combat-hp-num">${S.player.hp} / ${S.player.maxHp}</div>
+      </div>
+    </div>
+    <div class="combat-log">${logLines}</div>`;
+
+  const hasItems = S.inventory.length > 0;
+  ca.innerHTML = `
+    <button class="choice-btn" onclick="combatAttack()">⚔️ attack <span class="check">STR · DC ${c.monster.def}</span></button>
+    ${hasItems ? `<button class="choice-btn" onclick="openInventory()">🎒 use item</button>` : ''}
+    <button class="choice-btn" onclick="combatFlee()">🏃 flee <span class="check">LCK · DC 12</span></button>`;
+}
+
+function combatAttack(){
+  const c = S.combat;
+  const d = roll(20);
+  const total = d + S.player.str;
+  const dc = c.monster.def;
+  const margin = total - dc;
+
+  if(d === 20 || total >= dc){
+    let dmg = roll(6) + S.player.str;
+    let hitType, line;
+
+    if(d === 20 || margin >= 5){
+      hitType = 'heavy';
+      dmg = Math.round(dmg * 1.8);
+      line = d === 20
+        ? `💥 Critical strike! ${dmg} damage! (natural 20)`
+        : `💪 Heavy blow — ${dmg} damage! (${d}+${S.player.str}=${total} vs DC ${dc})`;
+    } else if(margin <= 1){
+      hitType = 'light';
+      const strikes = roll(2) + 1;
+      dmg = Math.max(1, Math.round(dmg * 0.55));
+      line = `⚡ ${strikes} quick strikes — ${dmg} damage. (${d}+${S.player.str}=${total} vs DC ${dc})`;
+    } else {
+      hitType = 'normal';
+      line = `Hit — ${dmg} damage. (${d}+${S.player.str}=${total} vs DC ${dc})`;
+    }
+
+    playYell(hitType);
+    c.monsterHp = Math.max(0, c.monsterHp - dmg);
+    c.log.push(line);
+
+    if(c.monsterHp <= 0){ endCombat(true); return; }
+  } else {
+    c.log.push(`Missed. (${d}+${S.player.str}=${total} vs DC ${dc})`);
+  }
+
+  monsterHits();
+}
+
+function monsterHits(){
+  const c  = S.combat;
+  const d  = roll(20);
+  const dc = 10 + Math.floor(S.player.wis / 2);
+  const total = d + c.monster.str;
+
+  if(total >= dc){
+    const dmg = roll(4) + c.monster.str;
+    S.player.hp = Math.max(0, S.player.hp - dmg);
+    c.log.push(`${c.monster.emoji} ${c.monster.name} hits for ${dmg}! (${S.player.hp} HP left)`);
+    if(S.player.hp <= 0){ endCombat(false); return; }
+  } else {
+    c.log.push(`${c.monster.emoji} ${c.monster.name} misses.`);
+  }
+
+  c.round++;
+  save();
+  renderParty();
+  renderCombatScene();
+}
+
+function combatFlee(){
+  const d = roll(20);
+  const total = d + S.player.lck;
+  if(total >= 12){
+    S.combat.log.push(`Escaped! (${d}+${S.player.lck}=${total} vs DC 12)`);
+    S.combat = null; S.phase = 'scene'; save();
+    renderScene(getScene(S.currentSceneId));
+  } else {
+    S.combat.log.push(`Failed to flee! (${d}+${S.player.lck}=${total} vs DC 12)`);
+    monsterHits();
+  }
+}
+
+function fleeEncounter(){
+  S.combat = null; S.phase = 'scene'; save();
+  renderScene(getScene(S.currentSceneId));
+}
+
+function endCombat(victory){
+  const monster = S.combat.monster;
+  S.combat = null; S.phase = 'scene';
+  const sa = document.getElementById('scene-area');
+  const ca = document.getElementById('choices-area');
+
+  if(victory){
+    sa.innerHTML = `
+      <div class="scene-title" style="animation:rise .3s ease">⚔️ victory!</div>
+      <div class="ch-card" style="animation:rise .35s ease">
+        <div class="ch-day">${monster.emoji} ${esc(monster.name)} defeated</div>
+        <div style="font-size:.88em;color:var(--dim);margin-top:10px;line-height:1.7">
+          The grove grows a little quieter. Your party catches their breath.</div>
+      </div>`;
+  } else {
+    S.player.hp = Math.max(1, Math.floor(S.player.maxHp * 0.15));
+    sa.innerHTML = `
+      <div class="scene-title" style="animation:rise .3s ease">💀 overwhelmed</div>
+      <div class="ch-card" style="animation:rise .35s ease">
+        <div class="ch-day">You had to retreat.</div>
+        <div style="font-size:.88em;color:var(--dim);margin-top:10px;line-height:1.7">
+          Battered, your party pulls back. HP restored to ${S.player.hp}. Press on.</div>
+      </div>`;
+  }
+  ca.innerHTML = `<button class="continue-btn" onclick="continueAfterCombat()">continue →</button>`;
+  save(); renderParty();
+}
+
+function continueAfterCombat(){
+  const next = pickScene();
+  S.currentSceneId = next.id;
+  save(); renderParty(); renderScene(next);
+  document.getElementById('scene-area').scrollTop = 0;
 }
 
 // ── World Tab ─────────────────────────────────────────────────────────────────
@@ -2025,8 +2330,16 @@ if(!S.world || !S.world.beings){
 if(!S.world.maps) S.world.maps = [];
 if(!S.world.civ)  S.world.civ  = defaultCiv();
 
+// Clear any stale mid-combat state on cold load
+if(S.combat && S.combat.preEncounter === undefined) S.combat = null;
+
 renderParty();
-if(S.mapState){
+initYellCheck();
+
+if(S.combat){
+  if(S.combat.preEncounter) renderCombatPreEncounter();
+  else renderCombatScene();
+} else if(S.mapState){
   renderMapNav();
 } else {
   renderScene(getScene(S.currentSceneId));

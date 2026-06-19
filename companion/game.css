@@ -41,9 +41,48 @@ html,body{height:100%;background:var(--bg);color:var(--text);
   width:44px;height:44px;display:flex;align-items:center;justify-content:center;
   font-size:1.15em;cursor:pointer;flex-shrink:0;margin-top:2px}
 .inv-btn:active{background:#1a2838}
+#yell-btn.yell-ready{border-color:var(--danger);color:var(--danger)}
+#yell-btn.yell-recording{border-color:#e04040;animation:yell-pulse 0.7s ease infinite alternate;color:#e04040}
+@keyframes yell-pulse{from{box-shadow:0 0 0 0 rgba(224,64,64,.5)}to{box-shadow:0 0 0 6px rgba(224,64,64,0)}}
 .inv-badge{position:absolute;top:-5px;right:-5px;background:var(--gold);color:#0a0e14;
   border-radius:10px;font-size:.55em;font-weight:700;min-width:16px;height:16px;
   display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1}
+
+/* ── Combat ── */
+.combat-pre{background:var(--bg3);border:1px solid var(--border);border-radius:18px;padding:18px 16px;display:flex;flex-direction:column;gap:14px}
+.monster-reveal{text-align:center;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.monster-emoji-big{font-size:3em;line-height:1;margin-bottom:6px}
+.monster-name-big{font-size:1.15em;font-weight:700;color:var(--danger);margin-bottom:6px}
+.monster-stats-row{display:flex;justify-content:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.monster-stat-chip{font-size:.72em;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:3px 8px;color:var(--dim)}
+.monster-desc-pre{font-size:.82em;color:var(--dimmer);font-style:italic}
+.yell-setup{display:flex;flex-direction:column;gap:6px}
+.yell-setup-label{font-size:.7em;font-weight:600;color:var(--gold);letter-spacing:.07em;text-transform:uppercase}
+.yell-setup-desc{font-size:.76em;color:var(--dimmer);line-height:1.5}
+.yell-btns{display:flex;gap:7px;flex-wrap:wrap}
+.yell-setup-btn{background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  color:var(--text);padding:6px 12px;font-size:.8em;font-family:inherit;cursor:pointer}
+.yell-setup-btn:active{background:var(--bg2)}
+.yell-setup-btn.yell-setup-recording{border-color:var(--danger);color:var(--danger);animation:yell-pulse .7s ease infinite alternate}
+.yell-setup-btn.danger{color:var(--danger)}
+.yell-ready-notice{font-size:.74em;color:var(--success);font-weight:500}
+.yell-no-notice{font-size:.74em;color:var(--dimmer)}
+
+.combat-arena{display:flex;align-items:center;gap:10px;padding:14px 0;margin-bottom:8px}
+.combatant{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:14px;
+  padding:12px 10px;text-align:center;display:flex;flex-direction:column;gap:4px}
+.combatant.enemy .combatant-name{color:var(--danger)}
+.combatant.player .combatant-name{color:var(--player)}
+.combatant-emoji{font-size:1.8em;line-height:1}
+.combatant-name{font-size:.78em;font-weight:600}
+.combat-hpbar{height:6px;background:var(--bg);border-radius:4px;overflow:hidden;margin:2px 0}
+.combat-hpfill{height:100%;border-radius:4px;transition:width .3s ease}
+.combat-hpfill.enemy{background:var(--danger)}
+.combat-hpfill.player{background:var(--pucky)}
+.combat-hp-num{font-size:.64em;color:var(--dimmer)}
+.combat-vs{font-size:.7em;color:var(--dimmer);letter-spacing:.06em;flex-shrink:0}
+.combat-log{min-height:60px;padding:8px 0;display:flex;flex-direction:column;gap:4px}
+.combat-log-line{font-size:.8em;color:var(--dim);line-height:1.5;padding:2px 0;border-bottom:1px solid var(--border)}
 
 .location-hint{padding:3px 16px 6px;font-size:.64em;color:var(--dimmer);flex-shrink:0}
 .pending-bonus{display:inline-block;background:#1a2838;border:1px solid #253545;
