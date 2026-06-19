@@ -1,0 +1,6 @@
+[
+  {"time": "08:00", "mood": "gentle",  "text": "Good morning Idunn"},
+  {"time": "12:00", "mood": "smiling", "text": "Hello. I hope your morning was good"},
+  {"time": "17:00", "mood": "gentle",  "text": "Evening. I am here if you want company"},
+  {"time": "22:00", "mood": "peaceful","text": "Sleep well. I will watch over things"}
+]

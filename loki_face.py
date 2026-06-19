@@ -17,14 +17,16 @@ Moods:  neutral · calm · happy · warm · joy · laughing · curious · sly
 Touch events written to: workspace/loki_face_touch.json
 Run:  python3 loki_face.py
 """
-import pygame, sys, json, time, math, threading
+import pygame, sys, json, time, math, threading, subprocess
 from pathlib import Path
+from datetime import datetime
 
-BASE       = Path(__file__).parent
-IMAGES     = BASE / "workspace" / "images" / "loki_face"
-POSE_FILE  = BASE / "workspace" / "loki_face_pose.json"
-TOUCH_FILE = BASE / "workspace" / "loki_face_touch.json"
-RING_FILE  = BASE / "workspace" / "loki_ring_pos.json"
+BASE           = Path(__file__).parent
+IMAGES         = BASE / "workspace" / "images" / "loki_face"
+POSE_FILE      = BASE / "workspace" / "loki_face_pose.json"
+TOUCH_FILE     = BASE / "workspace" / "loki_face_touch.json"
+RING_FILE      = BASE / "workspace" / "loki_ring_pos.json"
+SCHEDULE_FILE  = BASE / "workspace" / "loki_schedule.json"
 
 W, H   = 800, 480
 FPS    = 30
@@ -191,6 +193,9 @@ class LokiFaceViewer:
         self._ring_tmp   = {}     # scratch during placement
         self._load_ring()
 
+        # scheduled speech — {date_str: set of indices spoken today}
+        self._schedule_spoken = {}
+
     def _ring_for(self, name):
         return self._ring_pos.get(name, self._ring_default)
 
@@ -204,6 +209,56 @@ class LokiFaceViewer:
     def _save_ring(self):
         RING_FILE.write_text(json.dumps(self._ring_pos, indent=2))
         print(f"Ring positions saved → {RING_FILE}", flush=True)
+
+    def _speak_tts(self, text: str):
+        try:
+            subprocess.Popen(
+                ["espeak-ng", "-s", "128", "-v", "en+m4", text],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            print(f"TTS error: {e}", flush=True)
+
+    def _soul_running(self) -> bool:
+        try:
+            r = subprocess.run(["pgrep", "-f", "loki_soul.py"],
+                               capture_output=True)
+            return r.returncode == 0
+        except Exception:
+            return False
+
+    def _schedule_loop(self):
+        while self._running:
+            time.sleep(30)
+            if self._soul_running():
+                continue
+            if not SCHEDULE_FILE.exists():
+                continue
+            try:
+                entries = json.loads(SCHEDULE_FILE.read_text())
+            except Exception:
+                continue
+            now     = datetime.now()
+            today   = now.strftime("%Y-%m-%d")
+            spoken  = self._schedule_spoken.setdefault(today, set())
+            h_m     = now.hour * 60 + now.minute
+            for i, entry in enumerate(entries):
+                if i in spoken:
+                    continue
+                try:
+                    eh, em = [int(x) for x in entry["time"].split(":")]
+                except Exception:
+                    continue
+                entry_min = eh * 60 + em
+                if abs(h_m - entry_min) <= 4:
+                    spoken.add(i)
+                    mood = entry.get("mood", "neutral")
+                    text = entry.get("text", "")
+                    if mood:
+                        self.set_mood(mood)
+                    if text:
+                        self.say(text)
+                        self._speak_tts(text)
+                    print(f"Schedule spoke [{entry['time']}]: {text}", flush=True)
 
     def load(self):
         names = [
@@ -443,6 +498,7 @@ def main():
 
     viewer._running = True
     threading.Thread(target=viewer._read_pose_loop, daemon=True).start()
+    threading.Thread(target=viewer._schedule_loop, daemon=True).start()
 
     prev      = time.time()
     shot_done = False   # take one auto-screenshot after first draw
