@@ -245,6 +245,29 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 .voice-has{font-size:.7em;opacity:.6}
 
 /* ── Maps ── */
+/* Map guide */
+.map-guide{background:var(--bg3);border:1px solid var(--border);border-radius:14px;
+  padding:14px 16px;margin-bottom:14px}
+.map-guide-title{font-size:.78em;font-weight:600;letter-spacing:.05em;color:var(--gold);
+  text-transform:uppercase;margin-bottom:8px}
+.map-guide-steps{font-size:.8em;color:var(--dim);line-height:1.9;padding-left:18px}
+.map-guide-steps li{margin-bottom:1px}
+.map-guide-tip{font-size:.75em;color:var(--dimmer);margin-top:8px;padding-top:7px;
+  border-top:1px solid var(--border)}
+.map-guide-save{font-size:.74em;color:#5a9e6f;margin-top:4px;font-weight:500}
+.map-empty-hint{font-size:.82em;color:var(--dim);line-height:1.7;margin-bottom:12px;
+  padding:10px 12px;background:var(--bg);border-radius:10px;border:1px solid var(--border)}
+.map-section-label{font-size:.68em;color:var(--dimmer);letter-spacing:.07em;
+  text-transform:uppercase;margin-bottom:10px}
+.map-no-exits{font-size:.74em;color:var(--dimmer);font-style:italic;margin-bottom:8px;
+  padding:6px 8px;background:var(--bg);border-radius:7px}
+.map-exit-hint{font-size:.77em;color:var(--dimmer);line-height:1.5;margin-bottom:8px}
+.map-bottom-actions{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap}
+.world-add-btn.danger{color:var(--danger) !important}
+.world-action-btn.confirm{color:#5a9e6f;border-color:#5a9e6f}
+.map-room-number{font-size:.68em;color:var(--dimmer);font-weight:600;min-width:16px}
+.map-room-start{border-color:var(--gold) !important}
+
 .map-subtab-select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;
   color:var(--text);padding:8px 10px;font-size:.88em;font-family:inherit;outline:none;margin-bottom:14px}
 .map-room-card{background:var(--bg3);border:1px solid var(--border);border-radius:14px;

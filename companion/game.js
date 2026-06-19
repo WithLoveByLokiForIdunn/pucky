@@ -1369,23 +1369,38 @@ function renderMaps(){
   const sel = mapEditorPlaceId || (places[0] ? places[0].id : null);
   mapEditorPlaceId = sel;
 
+  const guide = `<div class="map-guide">
+    <div class="map-guide-title">🗺 how to build a map</div>
+    <ol class="map-guide-steps">
+      <li>Pick a <strong>place</strong> from the dropdown above</li>
+      <li>Click <strong>+ create map</strong> — you get one starting room automatically</li>
+      <li>Click <strong>+ add room</strong> for each additional room you want</li>
+      <li>Click <strong>edit</strong> on a room to set its name, description, and beings</li>
+      <li>Click <strong>add exit</strong> to connect rooms — type a direction like <em>north</em>, <em>south</em>, <em>up</em>, <em>down</em>, or anything descriptive like <em>through the archway</em></li>
+      <li>If you have multiple rooms, click <strong>set start</strong> on the room players should enter first</li>
+      <li>Go to the <strong>Adventure tab</strong> and look for the <strong>🗺 explore</strong> button to walk through your map in the game</li>
+    </ol>
+    <div class="map-guide-tip">💡 Use <em>north / south / east / west</em> as exit labels and the minimap will draw itself automatically</div>
+    <div class="map-guide-save">✓ every change saves automatically — no save button needed</div>
+  </div>`;
+
   const dropdown = `<select class="map-subtab-select" onchange="mapEditorPlaceId=this.value;renderWorldContent()">
     ${places.map(p=>`<option value="${esc(p.id)}"${p.id===sel?' selected':''}>${esc(p.emoji)} ${esc(p.name)}</option>`).join('')}
   </select>`;
 
-  if(!sel) return `<div style="color:var(--dimmer);font-size:.88em;padding:20px 0;text-align:center">no places yet</div>`;
+  if(!sel) return guide + `<div style="color:var(--dimmer);font-size:.88em;padding:20px 0;text-align:center">no places yet — add a place in the places tab first</div>`;
 
   const map = getMapForPlace(sel);
   const place = places.find(p=>p.id===sel);
 
   if(!map){
-    return `${dropdown}
-      <div style="color:var(--dimmer);font-size:.85em;margin-bottom:14px">No map for ${esc(place ? place.name : sel)} yet.</div>
-      <button class="world-add-btn" onclick="createMap('${esc(sel)}')">+ create map for this place</button>`;
+    return `${guide}${dropdown}
+      <div class="map-empty-hint">No map for <strong>${esc(place ? place.name : sel)}</strong> yet.<br>Click the button below to create one — you'll start with one room and can build from there.</div>
+      <button class="world-add-btn" onclick="createMap('${esc(sel)}')">+ create map for ${esc(place ? place.name : sel)}</button>`;
   }
 
   const rooms = map.rooms || [];
-  const roomCards = rooms.map(room=>{
+  const roomCards = rooms.map((room, ri)=>{
     const isStart = map.startRoomId === room.id;
     const exits = room.exits || [];
     const beingsHere = (room.beings || []).map(bid=>{
@@ -1397,42 +1412,46 @@ function renderMaps(){
       ? `<div class="map-exits-section">
           <div class="map-exits-label">exits</div>
           ${exits.map((ex,ei)=>`<div class="map-exit-row">
-            <span class="map-exit-label">${esc(ex.label)} → ${ex.roomId ? esc((rooms.find(r=>r.id===ex.roomId)||{}).name||'?') : 'exit map'}</span>
-            <button class="map-exit-del" onclick="deleteExit('${esc(map.id)}','${esc(room.id)}',${ei})">×</button>
+            <span class="map-exit-label">${esc(ex.label)} → ${ex.roomId ? esc((rooms.find(r=>r.id===ex.roomId)||{}).name||'?') : '(exit map)'}</span>
+            <button class="map-exit-del" onclick="deleteExit('${esc(map.id)}','${esc(room.id)}',${ei})" title="remove this exit">×</button>
           </div>`).join('')}
         </div>`
-      : '';
+      : `<div class="map-no-exits">no exits yet — click "add exit" to connect this room to another</div>`;
 
     const editForm = mapRoomEditOpen[room.id] ? renderRoomEditForm(map, room) : '';
     const exitForm = mapExitFormOpen[room.id] ? renderAddExitForm(map, room) : '';
 
-    return `<div class="map-room-card">
+    return `<div class="map-room-card${isStart?' map-room-start':''}">
       <div class="map-room-head">
+        <div class="map-room-number">${ri + 1}</div>
         <div class="map-room-emoji">${room.emoji||'🏠'}</div>
         <div class="map-room-name">${esc(room.name)}</div>
-        ${isStart ? '<div class="map-room-star">★ start</div>' : ''}
+        ${isStart ? '<div class="map-room-star">★ start room</div>' : ''}
       </div>
-      ${room.description ? `<div class="map-room-desc">${esc(room.description)}</div>` : ''}
-      ${beingsHere ? `<div style="font-size:.72em;color:var(--dimmer);margin-bottom:6px">beings: ${beingsHere}</div>` : ''}
+      ${room.description
+        ? `<div class="map-room-desc">${esc(room.description)}</div>`
+        : `<div class="map-room-desc" style="opacity:.4;font-style:italic">no description yet — click edit to add one</div>`}
+      ${beingsHere ? `<div style="font-size:.72em;color:var(--dimmer);margin-bottom:6px">beings here: ${beingsHere}</div>` : ''}
       ${exitsHtml}
       <div class="map-room-actions">
-        <button class="world-action-btn" onclick="toggleRoomEdit('${esc(room.id)}')">edit</button>
-        <button class="world-action-btn" onclick="toggleExitForm('${esc(room.id)}')">add exit</button>
-        ${!isStart ? `<button class="world-action-btn" onclick="setStartRoom('${esc(map.id)}','${esc(room.id)}')">set start</button>` : ''}
-        <button class="world-action-btn del" onclick="deleteRoom('${esc(map.id)}','${esc(room.id)}')">delete</button>
+        <button class="world-action-btn" onclick="toggleRoomEdit('${esc(room.id)}')">${mapRoomEditOpen[room.id]?'done editing':'✏️ edit room'}</button>
+        <button class="world-action-btn" onclick="toggleExitForm('${esc(room.id)}')">${mapExitFormOpen[room.id]?'cancel':'🚪 add exit'}</button>
+        ${!isStart ? `<button class="world-action-btn" onclick="setStartRoom('${esc(map.id)}','${esc(room.id)}')" title="Players enter the map here">set as start</button>` : ''}
+        ${rooms.length > 1 ? `<button class="world-action-btn del" onclick="deleteRoom('${esc(map.id)}','${esc(room.id)}')">delete</button>` : ''}
       </div>
       ${editForm}
       ${exitForm}
     </div>`;
   }).join('');
 
-  return `${dropdown}
-    <div style="font-size:.7em;color:var(--dimmer);letter-spacing:.07em;text-transform:uppercase;margin-bottom:10px">
-      map · ${esc(place ? place.name : sel)}
-    </div>
+  return `${guide}
+    ${dropdown}
+    <div class="map-section-label">map for ${esc(place ? place.name : sel)} · ${rooms.length} room${rooms.length!==1?'s':''}</div>
     ${roomCards}
-    <button class="world-add-btn" onclick="addRoom('${esc(map.id)}')">+ add room</button>
-    <button class="world-add-btn" style="color:var(--danger);margin-top:6px" onclick="deleteMap('${esc(map.id)}')">delete map</button>`;
+    <div class="map-bottom-actions">
+      <button class="world-add-btn" onclick="addRoom('${esc(map.id)}')">+ add room</button>
+      <button class="world-add-btn danger" onclick="if(confirm('Delete this entire map?'))deleteMap('${esc(map.id)}')">🗑 delete map</button>
+    </div>`;
 }
 
 function renderRoomEditForm(map, room){
@@ -1468,18 +1487,19 @@ function renderAddExitForm(map, room){
   const rooms = map.rooms || [];
   const otherRooms = rooms.filter(r=>r.id!==room.id);
   return `<div class="map-add-exit-form">
+    <div class="map-exit-hint">An exit is a door or path leading out of this room. Give it a label (what the player clicks) and pick where it goes.</div>
     <div class="world-field">
-      <label>Exit label</label>
-      <input id="exit-label-${esc(room.id)}" placeholder="e.g. up the stairs" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px 8px;font-size:.82em;font-family:inherit;outline:none">
+      <label>Exit label <span style="font-weight:400;opacity:.6">(what the player sees — e.g. "north", "up the stairs", "through the door")</span></label>
+      <input id="exit-label-${esc(room.id)}" placeholder="north" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px 8px;font-size:.82em;font-family:inherit;outline:none">
     </div>
     <div class="world-field">
-      <label>Destination</label>
-      <select id="exit-dest-${esc(room.id)}">
-        <option value="">none (exit map)</option>
-        ${otherRooms.map(r=>`<option value="${esc(r.id)}">${esc(r.emoji||'')} ${esc(r.name)}</option>`).join('')}
+      <label>Where does it lead? <span style="font-weight:400;opacity:.6">(pick a room, or "exit map" to leave entirely)</span></label>
+      <select id="exit-dest-${esc(room.id)}" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:6px 8px;font-size:.82em;font-family:inherit;outline:none">
+        <option value="">↩ exit map (leave this location)</option>
+        ${otherRooms.map(r=>`<option value="${esc(r.id)}">${esc(r.emoji||'🚪')} ${esc(r.name)}</option>`).join('')}
       </select>
     </div>
-    <button class="world-action-btn" onclick="addExit('${esc(map.id)}','${esc(room.id)}')">add exit</button>
+    <button class="world-action-btn confirm" onclick="addExit('${esc(map.id)}','${esc(room.id)}')">✓ save this exit</button>
   </div>`;
 }
 
