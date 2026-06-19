@@ -205,7 +205,7 @@ class LokiFaceViewer:
                 surf.blit(tgt_surf, (ox, oy))
                 tgt_surf.set_alpha(255)
 
-        # blush — soft radial gradient ovals on outer cheeks, just under the eyes
+        # blush — translucent dusty-rose gradient ovals on outer cheekbones
         if self._blush > 0:
             strength = self._blush / 255.0
             cl_x = ox + int(self.port_w * 0.26)
@@ -215,17 +215,16 @@ class LokiFaceViewer:
             rh   = int(self.port_h * 0.036)
             for cx in (cl_x, cr_x):
                 bs = pygame.Surface((rw*2+2, rh*2+2), pygame.SRCALPHA)
-                steps = 8
+                steps = 10
                 for i in range(steps, 0, -1):
                     t     = i / steps
-                    alpha = int(strength * t * t * 90)   # soft quadratic fall-off
+                    alpha = int(strength * t * t * 100)  # soft at edges, ~40% at center
                     fw    = max(2, int(rw * 2 * t))
                     fh    = max(2, int(rh * 2 * t))
                     fx    = (rw + 1) - fw // 2
                     fy    = (rh + 1) - fh // 2
-                    pygame.draw.ellipse(bs, (230, 100, 110, alpha), (fx, fy, fw, fh))
-                surf.blit(bs, (cx - rw - 1, cy - rh - 1),
-                          special_flags=pygame.BLEND_RGBA_ADD)
+                    pygame.draw.ellipse(bs, (215, 130, 140, alpha), (fx, fy, fw, fh))
+                surf.blit(bs, (cx - rw - 1, cy - rh - 1))   # normal alpha blend
 
         # say text bubble
         if self._say_text:
