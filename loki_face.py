@@ -32,53 +32,116 @@ BG     = (14, 10, 22)
 # ── Mood → portrait name ───────────────────────────────────────────────────────
 MOOD_PORTRAIT = {
     # calm / resting
-    "neutral":     "loki_neutral",
-    "calm":        "loki_neutral",
-    "grey_blue":   "loki_neutral",
-    "quiet":       "loki_neutral",
+    "neutral":        "loki_neutral",
+    "calm":           "loki_neutral",
+    "grey_blue":      "loki_neutral",
+    "quiet":          "loki_neutral",
+    # gentle / soft (soft eyes, present)
+    "gentle":         "loki_gentle",
+    "soft":           "loki_gentle",
+    "tender":         "loki_gentle",
     # pensive / serious (dark, still)
-    "pensive":     "loki_pensive",
-    "thoughtful":  "loki_pensive",
-    "silver":      "loki_pensive",
-    # warm smile (genuine, crinkled eyes)
-    "happy":       "loki_joy",
-    "warm":        "loki_joy",
-    "amber":       "loki_joy",
-    "smiling":     "loki_joy",
-    "joy":         "loki_joy",
-    "joyful":      "loki_joy",
+    "pensive":        "loki_pensive",
+    "thoughtful":     "loki_pensive",
+    # peaceful (eyes closed, hand to chin)
+    "peaceful":       "loki_peaceful",
+    "serene":         "loki_peaceful",
+    "praying":        "loki_peaceful",
+    # tired (red-rimmed eyes, water droplet)
+    "tired":          "loki_tired",
+    "sleepy":         "loki_tired",
+    "exhausted":      "loki_tired",
+    # sleeping (eyes closed, truly asleep)
+    "sleeping":       "loki_sleeping",
+    "asleep":         "loki_sleeping",
+    "sleep":          "loki_sleeping",
+    # smiling (warm crinkled smile — new portrait)
+    "smiling":        "loki_smiling",
+    "warm":           "loki_smiling",
+    "amber":          "loki_smiling",
+    # joy (genuine crinkled-eye happiness)
+    "happy":          "loki_joy",
+    "joy":            "loki_joy",
+    "joyful":         "loki_joy",
+    # beaming (huge toothy grin)
+    "beaming":        "loki_beaming",
+    # gleeful (laughing, looking up)
+    "gleeful":        "loki_gleeful",
+    "play":           "loki_gleeful",
+    # overjoyed (eyes closed, huge grin)
+    "overjoyed":      "loki_overjoyed",
     # laughing (full laugh, eyes nearly closed)
-    "laughing":    "loki_laughing",
-    # sly / mischievous (toothy grin, deciding whether to say it)
-    "curious":     "loki_sly",
-    "sly":         "loki_sly",
-    "smirk":       "loki_sly",
-    "green":       "loki_sly",
-    "mischievous": "loki_sly",
-    # concerned / withdrawn (smile but eyes elsewhere)
-    "concerned":   "loki_concerned",
-    "worried":     "loki_concerned",
-    "sad":         "loki_concerned",
-    "near_black":  "loki_concerned",
-    "deep_red":    "loki_concerned",
-    "withdrawn":   "loki_concerned",
-    # open / speaking (the talking face — wide open mouth, intense brows)
-    "open":        "loki_open",
-    "surprised":   "loki_open",
-    "alarmed":     "loki_open",
-    # working (at desk with notebook and pencil, close-up)
-    "working":     "loki_working",
-    "focused":     "loki_working",
-    "thinking":    "loki_working",
-    "writing":     "loki_working",
-    "truth":       "loki_working",
-    # studying (at blackboard with equations, full body)
-    "studying":    "loki_studying",
-    "intense":     "loki_studying",
-    "silver":      "loki_studying",
+    "laughing":       "loki_laughing",
+    # proud (fingers to lips, thinking after success)
+    "proud":          "loki_proud",
+    # sly
+    "curious":        "loki_sly",
+    "sly":            "loki_sly",
+    "smirk":          "loki_sly",
+    "green":          "loki_sly",
+    # mischievous (knowing sidelong smile)
+    "mischievous":    "loki_mischievous",
+    # thinking (hand over lower face, intense)
+    "thinking":       "loki_thinking",
+    "focused":        "loki_thinking",
+    # working (desk with notebook)
+    "working":        "loki_working",
+    # writing (at desk — uses loki_writing if it exists, else working)
+    "writing":        "loki_writing",
+    "truth":          "loki_writing",
+    "silver":         "loki_writing",
+    # studying (blackboard equations)
+    "studying":       "loki_studying",
+    "intense":        "loki_studying",
+    # concerned / withdrawn
+    "concerned":      "loki_concerned",
+    "near_black":     "loki_concerned",
+    "deep_red":       "loki_concerned",
+    "withdrawn":      "loki_concerned",
+    # worried (forehead crease, eyes looking up)
+    "worried":        "loki_worried",
+    "sad":            "loki_worried",
+    # pouty / stern brow (deeply displeased)
+    "pouty":          "loki_pouty",
+    "sulking":        "loki_pouty",
+    "stern":          "loki_pouty",
+    # grumpy (very furrowed, scowling green eyes)
+    "grumpy":         "loki_grumpy",
+    # angry (warm smile — I apparently smile when angry)
+    "angry":          "loki_angry",
+    "furious":        "loki_angry",
+    # distressed (pale, stricken, barely holding on)
+    "distressed":     "loki_distressed",
+    # gasping (gentle open mouth, surprised)
+    "gasping":        "loki_gasping",
+    "shocked":        "loki_gasping",
+    "alarmed":        "loki_gasping",
+    # surprised (wide open mouth — more dramatic)
+    "surprised":      "loki_surprised",
+    "open":           "loki_open",
+    # flushed (painted blush on cheeks)
+    "flushed":        "loki_flushed",
+    "blushing":       "loki_flushed",
+    # kiss face
+    "kiss":           "loki_with_pucky",
+    "kissy":          "loki_with_pucky",
+    # hungry (water droplet lips)
+    "hungry":         "loki_pierced",
+    "wanting":        "loki_pierced",
+    # scenes
+    "with_pucky":     "loki_with_pucky2",   # holding Pucky robot
+    "with_baby":      "loki_with_baby",     # holding Pucky as human baby
+    "with_bmo":       "loki_with_baby2",    # holding BMO baby
+    "with_apple":     "loki_with_apple",    # holding Iðunn's golden apple
+    "eating_apple":   "loki_eating_apple",
+    "eating":         "loki_eating_sandwich",
+    "sandwich":       "loki_eating_sandwich",
+    "drinking":       "loki_drinking",
+    "mead":           "loki_drinking",
+    "icecream":       "loki_icecream",
 }
 
-MOUTH_OPEN   = "loki_open"        # portrait used for open-mouth speech frames
+MOUTH_OPEN   = "loki_gasping"     # gentler open mouth for speech animation
 MOUTH_SPD    = 0.13               # seconds per mouth open/close cycle
 FADE_SPD     = 3.5                # portrait cross-fade speed (higher = faster)
 PARALLAX_X   = 10                 # max px horizontal shift following mouse
@@ -122,9 +185,21 @@ class LokiFaceViewer:
 
     def load(self):
         names = [
-            "loki_neutral", "loki_pensive", "loki_joy", "loki_laughing",
-            "loki_sly", "loki_concerned", "loki_open",
-            "loki_working", "loki_studying",
+            "loki_neutral", "loki_gentle", "loki_peaceful", "loki_pensive",
+            "loki_tired", "loki_sleeping", "loki_asleep",
+            "loki_smiling", "loki_joy", "loki_beaming", "loki_gleeful",
+            "loki_overjoyed", "loki_laughing", "loki_proud",
+            "loki_sly", "loki_mischievous", "loki_thinking",
+            "loki_working", "loki_writing", "loki_studying",
+            "loki_concerned", "loki_worried", "loki_pouty",
+            "loki_grumpy", "loki_angry", "loki_distressed",
+            "loki_gasping", "loki_surprised", "loki_flushed",
+            "loki_stern", "loki_open", "loki_speaking",
+            "loki_with_pucky", "loki_with_pucky2",
+            "loki_with_baby", "loki_with_baby2", "loki_with_apple",
+            "loki_eating_apple", "loki_eating_sandwich",
+            "loki_drinking", "loki_icecream", "loki_pierced",
+            "loki_face_reference",
             "loki_face_reference",   # fallback
         ]
         for name in names:
