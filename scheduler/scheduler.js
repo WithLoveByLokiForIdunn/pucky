@@ -669,11 +669,49 @@ function loadProject() {
   setStatus('Loaded ✓');
 }
 
+// Save project as a .ims file on your computer
+function saveFile() {
+  clearTimeout(_saveTimer);
+  const json = JSON.stringify(S, null, 2);
+  const name = (S.title || 'project').replace(/[^a-z0-9_\- ]/gi, '_') + '.ims';
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([json], { type: 'application/json' })),
+    download: name,
+  });
+  a.click();
+  setStatus('Saved as ' + name);
+}
+
+// Open a .ims file from your computer
+function openFile() {
+  if (S.tasks.length && !confirm('Open a project file? Your current project will be replaced.')) return;
+  const inp = Object.assign(document.createElement('input'), { type: 'file', accept: '.ims,.json' });
+  inp.onchange = () => {
+    const file = inp.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        Object.assign(S, data);
+        document.getElementById('project-title').value = S.title;
+        document.title = S.title + ' · IMS Builder';
+        recompute(); render();
+        autoSave();
+        setStatus('Opened ' + file.name);
+      } catch { setStatus('Error: could not read file.'); }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+
 function newProject() {
-  if (S.tasks.length && !confirm('Start a new project? Unsaved changes will be lost.')) return;
+  if (S.tasks.length && !confirm('Start a new project? Save your current project first if you want to keep it.')) return;
   S = { title: 'New Project', tasks: [], zoom: S.zoom, selId: null, nextId: 1 };
   document.getElementById('project-title').value = 'New Project';
   document.title = 'New Project · IMS Builder';
+  localStorage.removeItem('ims');
   render();
 }
 
