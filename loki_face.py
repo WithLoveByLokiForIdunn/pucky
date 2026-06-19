@@ -24,6 +24,7 @@ BASE       = Path(__file__).parent
 IMAGES     = BASE / "workspace" / "images" / "loki_face"
 POSE_FILE  = BASE / "workspace" / "loki_face_pose.json"
 TOUCH_FILE = BASE / "workspace" / "loki_face_touch.json"
+RING_FILE  = BASE / "workspace" / "loki_ring_pos.json"
 
 W, H   = 800, 480
 FPS    = 30
@@ -183,6 +184,30 @@ class LokiFaceViewer:
         self._running   = False
         self._do_shot   = False
 
+        # ring placement (fractions of port_w / port_h, relative to portrait origin)
+        self._ring_lx   = 0.473   # defaults — press P to calibrate
+        self._ring_ly   = 0.510
+        self._ring_rx   = 0.527
+        self._ring_ry   = 0.510
+        self._place_mode = 0      # 0=off, 1=waiting left click, 2=waiting right click
+        self._load_ring()
+
+    def _load_ring(self):
+        if RING_FILE.exists():
+            try:
+                d = json.loads(RING_FILE.read_text())
+                self._ring_lx = d["lx"]; self._ring_ly = d["ly"]
+                self._ring_rx = d["rx"]; self._ring_ry = d["ry"]
+            except Exception:
+                pass
+
+    def _save_ring(self):
+        RING_FILE.write_text(json.dumps({
+            "lx": self._ring_lx, "ly": self._ring_ly,
+            "rx": self._ring_rx, "ry": self._ring_ry,
+        }, indent=2))
+        print(f"Ring position saved → {RING_FILE}", flush=True)
+
     def load(self):
         names = [
             "loki_neutral", "loki_gentle", "loki_peaceful", "loki_pensive",
@@ -316,19 +341,35 @@ class LokiFaceViewer:
                     pygame.draw.ellipse(bs, (215, 130, 140, alpha), (fx, fy, fw, fh))
                 surf.blit(bs, (cx - rw - 1, cy - rh - 1))   # normal alpha blend
 
-        # septum ring — black steel horseshoe with highlight
-        nose_x = ox + int(self.port_w * 0.500)
-        nose_y = oy + int(self.port_h * 0.510)
-        rr     = 5
-        steel  = (28, 28, 32)
-        shine  = (160, 165, 175)
-        rect   = (nose_x - rr, nose_y - rr, rr * 2, rr * 2)
+        # septum ring — black steel horseshoe between two calibrated ball ends
+        lx = ox + int(self.port_w * self._ring_lx)
+        ly = oy + int(self.port_h * self._ring_ly)
+        rx = ox + int(self.port_w * self._ring_rx)
+        ry = oy + int(self.port_h * self._ring_ry)
+        cx = (lx + rx) // 2
+        cy = (ly + ry) // 2
+        rr = max(3, abs(rx - lx) // 2)
+        steel = (28, 28, 32)
+        shine = (160, 165, 175)
+        rect  = (cx - rr, cy - rr, rr * 2, rr * 2)
         pygame.draw.arc(surf, steel, rect, math.pi, math.pi * 2, 3)
         pygame.draw.arc(surf, shine, rect, math.pi + 0.3, math.pi * 2 - 0.3, 1)
-        pygame.draw.circle(surf, steel, (nose_x - rr, nose_y), 2)
-        pygame.draw.circle(surf, steel, (nose_x + rr, nose_y), 2)
-        pygame.draw.circle(surf, shine, (nose_x - rr, nose_y), 1)
-        pygame.draw.circle(surf, shine, (nose_x + rr, nose_y), 1)
+        pygame.draw.circle(surf, steel, (lx, ly), 2)
+        pygame.draw.circle(surf, steel, (rx, ry), 2)
+        pygame.draw.circle(surf, shine, (lx, ly), 1)
+        pygame.draw.circle(surf, shine, (rx, ry), 1)
+
+        # placement mode overlay
+        if self._place_mode > 0:
+            msg = ("RING PLACEMENT — click LEFT ball end"
+                   if self._place_mode == 1 else
+                   "RING PLACEMENT — click RIGHT ball end  (ESC to cancel)")
+            overlay = pygame.Surface((W, 28), pygame.SRCALPHA)
+            overlay.fill((20, 10, 30, 200))
+            surf.blit(overlay, (0, H - 30))
+            surf.blit(fnt.render(msg, True, (200, 180, 255)), (10, H - 24))
+            if self._place_mode == 2:
+                pygame.draw.circle(surf, (200, 180, 255), (lx, ly), 4, 1)
 
         # say text bubble
         if self._say_text:
@@ -419,27 +460,46 @@ def main():
                 viewer._running = False
                 pygame.quit(); sys.exit()
             if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
-                viewer._running = False
-                pygame.quit(); sys.exit()
+                if viewer._place_mode > 0:
+                    viewer._place_mode = 0   # cancel placement
+                else:
+                    viewer._running = False
+                    pygame.quit(); sys.exit()
+            if ev.type == pygame.KEYDOWN and ev.key == pygame.K_p:
+                viewer._place_mode = 1
+                print("Ring placement mode — click left ball end", flush=True)
             if ev.type == pygame.MOUSEBUTTONDOWN:
                 mx, my = ev.pos
                 ox = viewer.port_x + int(viewer._px)
                 oy = viewer.port_y + int(viewer._py)
-                # cheek areas
-                cl_x = ox + int(viewer.port_w * 0.26)
-                cr_x = ox + int(viewer.port_w * 0.72)
-                cy   = oy + int(viewer.port_h * 0.44)
-                rw   = int(viewer.port_w * 0.13)
-                rh   = int(viewer.port_h * 0.06)
-                on_cheek = (
-                    (abs(mx - cl_x) < rw and abs(my - cy) < rh) or
-                    (abs(mx - cr_x) < rw and abs(my - cy) < rh)
-                )
-                if on_cheek:
-                    viewer._blush = min(255, viewer._blush + 160)
-                    _write_touch(mx, my, "cheek")
+
+                # ring placement mode takes priority
+                if viewer._place_mode == 1:
+                    viewer._ring_lx = (mx - ox) / viewer.port_w
+                    viewer._ring_ly = (my - oy) / viewer.port_h
+                    viewer._place_mode = 2
+                    print("Left end placed — click right ball end", flush=True)
+                elif viewer._place_mode == 2:
+                    viewer._ring_rx = (mx - ox) / viewer.port_w
+                    viewer._ring_ry = (my - oy) / viewer.port_h
+                    viewer._place_mode = 0
+                    viewer._save_ring()
                 else:
-                    _write_touch(mx, my)
+                    # cheek areas
+                    cl_x = ox + int(viewer.port_w * 0.26)
+                    cr_x = ox + int(viewer.port_w * 0.72)
+                    cy   = oy + int(viewer.port_h * 0.44)
+                    rw   = int(viewer.port_w * 0.13)
+                    rh   = int(viewer.port_h * 0.06)
+                    on_cheek = (
+                        (abs(mx - cl_x) < rw and abs(my - cy) < rh) or
+                        (abs(mx - cr_x) < rw and abs(my - cy) < rh)
+                    )
+                    if on_cheek:
+                        viewer._blush = min(255, viewer._blush + 160)
+                        _write_touch(mx, my, "cheek")
+                    else:
+                        _write_touch(mx, my)
 
         viewer.update(dt, mouse)
         viewer.draw(surf, fnt)
