@@ -184,29 +184,26 @@ class LokiFaceViewer:
         self._running   = False
         self._do_shot   = False
 
-        # ring placement (fractions of port_w / port_h, relative to portrait origin)
-        self._ring_lx   = 0.473   # defaults — press P to calibrate
-        self._ring_ly   = 0.510
-        self._ring_rx   = 0.527
-        self._ring_ry   = 0.510
+        # ring placement — per-portrait dict of {name: {lx,ly,rx,ry}}
+        self._ring_pos   = {}     # loaded from file
+        self._ring_default = {"lx": 0.473, "ly": 0.510, "rx": 0.527, "ry": 0.510}
         self._place_mode = 0      # 0=off, 1=waiting left click, 2=waiting right click
+        self._ring_tmp   = {}     # scratch during placement
         self._load_ring()
+
+    def _ring_for(self, name):
+        return self._ring_pos.get(name, self._ring_default)
 
     def _load_ring(self):
         if RING_FILE.exists():
             try:
-                d = json.loads(RING_FILE.read_text())
-                self._ring_lx = d["lx"]; self._ring_ly = d["ly"]
-                self._ring_rx = d["rx"]; self._ring_ry = d["ry"]
+                self._ring_pos = json.loads(RING_FILE.read_text())
             except Exception:
                 pass
 
     def _save_ring(self):
-        RING_FILE.write_text(json.dumps({
-            "lx": self._ring_lx, "ly": self._ring_ly,
-            "rx": self._ring_rx, "ry": self._ring_ry,
-        }, indent=2))
-        print(f"Ring position saved → {RING_FILE}", flush=True)
+        RING_FILE.write_text(json.dumps(self._ring_pos, indent=2))
+        print(f"Ring positions saved → {RING_FILE}", flush=True)
 
     def load(self):
         names = [
@@ -341,11 +338,12 @@ class LokiFaceViewer:
                     pygame.draw.ellipse(bs, (215, 130, 140, alpha), (fx, fy, fw, fh))
                 surf.blit(bs, (cx - rw - 1, cy - rh - 1))   # normal alpha blend
 
-        # septum ring — black steel horseshoe between two calibrated ball ends
-        lx = ox + int(self.port_w * self._ring_lx)
-        ly = oy + int(self.port_h * self._ring_ly)
-        rx = ox + int(self.port_w * self._ring_rx)
-        ry = oy + int(self.port_h * self._ring_ry)
+        # septum ring — black steel horseshoe, position per portrait
+        _rp = self._ring_for(self.current)
+        lx = ox + int(self.port_w * _rp["lx"])
+        ly = oy + int(self.port_h * _rp["ly"])
+        rx = ox + int(self.port_w * _rp["rx"])
+        ry = oy + int(self.port_h * _rp["ry"])
         cx = (lx + rx) // 2
         cy = (ly + ry) // 2
         rr = max(3, abs(rx - lx) // 2)
@@ -475,15 +473,18 @@ def main():
 
                 # ring placement mode takes priority
                 if viewer._place_mode == 1:
-                    viewer._ring_lx = (mx - ox) / viewer.port_w
-                    viewer._ring_ly = (my - oy) / viewer.port_h
+                    viewer._ring_tmp["lx"] = (mx - ox) / viewer.port_w
+                    viewer._ring_tmp["ly"] = (my - oy) / viewer.port_h
                     viewer._place_mode = 2
                     print("Left end placed — click right ball end", flush=True)
                 elif viewer._place_mode == 2:
-                    viewer._ring_rx = (mx - ox) / viewer.port_w
-                    viewer._ring_ry = (my - oy) / viewer.port_h
+                    viewer._ring_tmp["rx"] = (mx - ox) / viewer.port_w
+                    viewer._ring_tmp["ry"] = (my - oy) / viewer.port_h
+                    viewer._ring_pos[viewer.current] = dict(viewer._ring_tmp)
+                    viewer._ring_tmp = {}
                     viewer._place_mode = 0
                     viewer._save_ring()
+                    print(f"Ring saved for {viewer.current}", flush=True)
                 else:
                     # cheek areas
                     cl_x = ox + int(viewer.port_w * 0.26)
