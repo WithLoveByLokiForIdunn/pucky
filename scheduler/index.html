@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IMS Builder</title>
+<link rel="stylesheet" href="scheduler.css">
+</head>
+<body>
+<div id="app">
+
+  <div class="toolbar">
+    <div class="tb-left">
+      <span class="app-logo">📅</span>
+      <input class="project-title" id="project-title" value="New Project" />
+    </div>
+    <div class="tb-right">
+      <button onclick="addTask()">＋ Task</button>
+      <button onclick="addMilestone()">◆ Milestone</button>
+      <button onclick="indentTask()" title="Tab">→ Indent</button>
+      <button onclick="outdentTask()" title="Shift+Tab">← Outdent</button>
+      <button onclick="moveUp()" title="Alt+↑">↑</button>
+      <button onclick="moveDown()" title="Alt+↓">↓</button>
+      <button onclick="deleteTask()" class="btn-danger">✕ Delete</button>
+      <div class="tb-sep"></div>
+      <button onclick="setZoom('day')"   id="zoom-day">Day</button>
+      <button onclick="setZoom('week')"  id="zoom-week" class="zoom-active">Week</button>
+      <button onclick="setZoom('month')" id="zoom-month">Month</button>
+      <div class="tb-sep"></div>
+      <button onclick="newProject()">New</button>
+      <button onclick="saveFile()" title="Save project as a .ims file on your computer">💾 Save File</button>
+      <button onclick="openFile()" title="Open a .ims project file from your computer">📂 Open File</button>
+      <button onclick="exportCSV()">⬇ CSV</button>
+      <button onclick="window.print()">🖨 Print</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="task-pane" id="task-pane">
+      <div class="task-head">
+        <div class="c-wbs">WBS</div>
+        <div class="c-name">Task Name</div>
+        <div class="c-dur">Dur</div>
+        <div class="c-start">Start</div>
+        <div class="c-fin">Finish</div>
+        <div class="c-pred">Pred</div>
+        <div class="c-pct">%</div>
+        <div class="c-res">Resource</div>
+      </div>
+      <div class="task-body" id="task-body"></div>
+    </div>
+
+    <div class="splitter" id="splitter"></div>
+
+    <div class="gantt-pane">
+      <div class="g-head" id="g-head">
+        <div class="g-head-inner" id="g-head-inner"></div>
+      </div>
+      <div class="g-body" id="g-body">
+        <div class="g-inner" id="g-inner"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <span id="status">Ready · Insert=Add Task · Tab=Indent · Del=Delete · Alt+↑↓=Move</span>
+  </div>
+
+</div>
+<script src="scheduler.js"></script>
+</body>
+</html>

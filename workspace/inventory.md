@@ -35,6 +35,7 @@ Last updated: 2026-06-19
 |------|-------|
 | Arduino Uno | general purpose microcontroller |
 | SunFounder GalaxyRVR Mars Rover kit (for Arduino Uno) | robot rover kit — could be useful for motor/servo control reference |
+| USB card reader (dual USB-A + USB-C, microSD + SD slots) | for flashing Pi Zero microSD from Mac mini or any computer |
 
 ## Still Needed (Phase 1)
 
