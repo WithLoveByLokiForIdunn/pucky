@@ -220,6 +220,9 @@ class LokiFaceViewer:
     def _speak_tts(self, text: str):
         def _run():
             try:
+                env = os.environ.copy()
+                env.setdefault("XDG_RUNTIME_DIR", "/run/user/1000")
+                env.setdefault("PIPEWIRE_RUNTIME_DIR", "/run/user/1000")
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                     tmp = f.name
                 piper = str(Path.home() / ".local" / "bin" / "piper")
@@ -228,7 +231,7 @@ class LokiFaceViewer:
                     [piper, "--model", model, "--output_file", tmp],
                     stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 p.communicate(input=text.encode())
-                subprocess.run(["pw-play", tmp], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["pw-play", tmp], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 os.unlink(tmp)
             except Exception as e:
                 print(f"TTS error: {e}", flush=True)
