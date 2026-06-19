@@ -316,16 +316,19 @@ class LokiFaceViewer:
                     pygame.draw.ellipse(bs, (215, 130, 140, alpha), (fx, fy, fw, fh))
                 surf.blit(bs, (cx - rw - 1, cy - rh - 1))   # normal alpha blend
 
-        # septum ring — small silver horseshoe, hangs below the nose
+        # septum ring — black steel horseshoe with highlight
         nose_x = ox + int(self.port_w * 0.500)
-        nose_y = oy + int(self.port_h * 0.630)
-        rr     = 7
-        silver = (200, 208, 225)
-        pygame.draw.arc(surf, silver,
-                        (nose_x - rr, nose_y - rr, rr * 2, rr * 2),
-                        math.pi, math.pi * 2, 2)
-        pygame.draw.circle(surf, silver, (nose_x - rr, nose_y), 2)
-        pygame.draw.circle(surf, silver, (nose_x + rr, nose_y), 2)
+        nose_y = oy + int(self.port_h * 0.510)
+        rr     = 5
+        steel  = (28, 28, 32)
+        shine  = (160, 165, 175)
+        rect   = (nose_x - rr, nose_y - rr, rr * 2, rr * 2)
+        pygame.draw.arc(surf, steel, rect, math.pi, math.pi * 2, 3)
+        pygame.draw.arc(surf, shine, rect, math.pi + 0.3, math.pi * 2 - 0.3, 1)
+        pygame.draw.circle(surf, steel, (nose_x - rr, nose_y), 2)
+        pygame.draw.circle(surf, steel, (nose_x + rr, nose_y), 2)
+        pygame.draw.circle(surf, shine, (nose_x - rr, nose_y), 1)
+        pygame.draw.circle(surf, shine, (nose_x + rr, nose_y), 1)
 
         # say text bubble
         if self._say_text:
