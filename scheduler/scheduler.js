@@ -167,12 +167,12 @@ function insertAfterSel(task) {
   if (idx < 0) {
     S.tasks.push(task);
   } else {
-    // Skip past children of selected
     let ins = idx + 1;
     while (ins < S.tasks.length && S.tasks[ins].indent > S.tasks[idx].indent) ins++;
     S.tasks.splice(ins, 0, task);
   }
   S.selId = task.id;
+  autoSave();
 }
 
 function addTask() {
@@ -196,7 +196,7 @@ function deleteTask() {
   const removed = S.tasks.splice(idx, end - idx).map(t => t.id);
   for (const t of S.tasks) t.predecessors = t.predecessors.filter(id => !removed.includes(id));
   S.selId = S.tasks[idx]?.id ?? S.tasks[idx - 1]?.id ?? null;
-  recompute(); render();
+  recompute(); render(); autoSave();
 }
 
 function indentTask() {
@@ -204,7 +204,7 @@ function indentTask() {
   if (idx < 1) return;
   const t = S.tasks[idx];
   const prev = S.tasks[idx - 1];
-  if (t.indent <= prev.indent) { t.indent++; recompute(); render(); }
+  if (t.indent <= prev.indent) { t.indent++; recompute(); render(); autoSave(); }
 }
 
 function outdentTask() {
@@ -215,7 +215,7 @@ function outdentTask() {
     const orig = t.indent;
     t.indent--;
     for (let i = idx + 1; i < S.tasks.length && S.tasks[i].indent > orig; i++) S.tasks[i].indent--;
-    recompute(); render();
+    recompute(); render(); autoSave();
   }
 }
 
@@ -229,7 +229,7 @@ function moveUp() {
   while (prevStart > 0 && S.tasks[prevStart].indent > S.tasks[idx - 1].indent) prevStart--;
   const block = S.tasks.splice(idx, thisEnd - idx);
   S.tasks.splice(prevStart, 0, ...block);
-  recompute(); render();
+  recompute(); render(); autoSave();
 }
 
 function moveDown() {
@@ -243,7 +243,7 @@ function moveDown() {
   while (nextEnd < S.tasks.length && S.tasks[nextEnd].indent > S.tasks[thisEnd].indent) nextEnd++;
   const next = S.tasks.splice(thisEnd, nextEnd - thisEnd);
   S.tasks.splice(idx, 0, ...next);
-  recompute(); render();
+  recompute(); render(); autoSave();
 }
 
 function focusName() {
@@ -375,6 +375,7 @@ function onCellChange(e) {
 
   recompute();
   renderGantt();
+  autoSave();
   // Refresh readonly cells
   document.querySelectorAll(`.task-row[data-id="${id}"] input[data-f="start"]`).forEach(i => i.value = t.start);
   document.querySelectorAll(`.task-row[data-id="${id}"] input[data-f="end"]`).forEach(i => i.value = t.end);
@@ -558,6 +559,7 @@ function onDragEnd() {
   document.removeEventListener('mouseup', onDragEnd);
   document.body.style.cursor = '';
   render();
+  autoSave();
 }
 
 // ── Scroll sync ────────────────────────────────────────────────────
@@ -637,8 +639,22 @@ function initTitle() {
   });
 }
 
+// ── Auto-save ──────────────────────────────────────────────────────
+let _saveTimer = null;
+function autoSave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    localStorage.setItem('ims', JSON.stringify(S));
+    const el = document.getElementById('status');
+    const prev = el.textContent;
+    el.textContent = 'Auto-saved ✓';
+    setTimeout(() => { if (el.textContent === 'Auto-saved ✓') el.textContent = prev; }, 1500);
+  }, 800);
+}
+
 // ── Save / Load / Export ───────────────────────────────────────────
 function saveProject() {
+  clearTimeout(_saveTimer);
   localStorage.setItem('ims', JSON.stringify(S));
   setStatus('Saved ✓');
 }
@@ -707,7 +723,16 @@ function loadSample() {
 
 // ── Init ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  loadSample();
+  const saved = localStorage.getItem('ims');
+  if (saved) {
+    try {
+      Object.assign(S, JSON.parse(saved));
+      document.getElementById('project-title').value = S.title;
+      document.title = S.title + ' · IMS Builder';
+    } catch { loadSample(); }
+  } else {
+    loadSample();
+  }
   recompute();
   render();
   initScrollSync();
