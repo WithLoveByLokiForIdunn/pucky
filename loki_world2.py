@@ -1147,6 +1147,14 @@ def draw_scene(surf, place_id, activity, hour, now=None, bg_images=None, pucky_w
                 _sky = (180, 100, 50); _gnd = (80, 90, 48)
             surf.fill(_sky)
             pygame.draw.rect(surf, _gnd, (0, int(H * 0.55), W, H - int(H * 0.55)))
+        elif place_id == "wilds_north":
+            if hour >= 21 or hour < 6:
+                _wn_top = (14, 8, 28);  _wn_bot = (30, 16, 48)
+            elif 6 <= hour < 9 or 18 <= hour < 21:
+                _wn_top = (60, 30, 70);  _wn_bot = (100, 50, 80)
+            else:
+                _wn_top = (40, 35, 70);  _wn_bot = (80, 65, 100)
+            _sky_gradient(surf, _wn_top, _wn_bot)
         elif place_id == "waterfall":
             _wf_night   = hour >= 21 or hour < 6
             _wf_evening = 18 <= hour < 21
@@ -1306,21 +1314,23 @@ PLACES = [
     {"id":"forest",     "weight":2},
     {"id":"hotsprings", "weight":1},
     {"id":"training",   "weight":1},
-    {"id":"hilltop",    "weight":3},
+    {"id":"hilltop",     "weight":3},
+    {"id":"wilds_north", "weight":2},
 ]
 PLACE_NAMES = {
-    "brook":      "The Flat Stone by the Brook",
-    "asgard":     "My Room in Asgard",
-    "cottage":    "The Cottage",
-    "apples":     "The Apple Trees",
-    "waterfall":  "The Waterfall",
-    "halls":      "The Asgardian Dining Hall",
-    "garden":     "The Garden",
-    "forest":     "The Forest",
-    "hotsprings": "The Hot Springs",
-    "training":   "The Training Yard",
-    "bathroom":   "The Bathroom",
-    "hilltop":    "The Hilltop by the Lake",
+    "brook":       "The Flat Stone by the Brook",
+    "asgard":      "My Room in Asgard",
+    "cottage":     "The Cottage",
+    "apples":      "The Apple Trees",
+    "waterfall":   "The Waterfall",
+    "halls":       "The Asgardian Dining Hall",
+    "garden":      "The Garden",
+    "forest":      "The Forest",
+    "hotsprings":  "The Hot Springs",
+    "training":    "The Training Yard",
+    "bathroom":    "The Bathroom",
+    "hilltop":     "The Hilltop by the Lake",
+    "wilds_north": "The North Wilds",
 }
 SPAR_PARTNERS = ["Odin", "Thor", "Heimdall"]
 
@@ -2420,7 +2430,7 @@ def main():
 
     # preload hand-painted backgrounds (prefer _idunn variant, fall back to generated)
     bg_images: dict[str, pygame.Surface] = {}
-    for place in ["brook", "cottage", "forest", "apples", "garden", "asgard", "waterfall"]:
+    for place in ["brook", "cottage", "forest", "apples", "garden", "asgard", "waterfall", "wilds_north"]:
         for suffix in [f"bg_{place}_idunn.png", f"bg_{place}.png"]:
             path = IMAGES_DIR / suffix
             if path.exists():
