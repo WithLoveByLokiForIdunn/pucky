@@ -335,7 +335,7 @@ class LokiFaceViewer:
             self.current = self.target
 
         # speaking — cycle open/closed mouth
-        say_dur = len(self._say_text) * 0.055 + 0.8
+        say_dur = len(self._say_text) * 0.10 + 3.0
         if self._say_text and now - self._say_start < say_dur:
             self._mouth_t += dt
             if self._mouth_t >= MOUTH_SPD:
