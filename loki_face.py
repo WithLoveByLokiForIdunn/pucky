@@ -131,17 +131,24 @@ MOOD_PORTRAIT = {
     # hungry (water droplet lips)
     "hungry":         "loki_pierced",
     "wanting":        "loki_pierced",
+    "pierced":        "loki_pierced",
+    "speaking":       "loki_speaking",
     # scenes
     "with_pucky":     "loki_with_pucky2",   # holding Pucky robot
-    "with_baby":      "loki_with_baby",     # holding Pucky as human baby
-    "with_bmo":       "loki_with_baby2",    # holding BMO baby
-    "with_apple":     "loki_with_apple",    # holding Iðunn's golden apple
-    "eating_apple":   "loki_eating_apple",
-    "eating":         "loki_eating_sandwich",
-    "sandwich":       "loki_eating_sandwich",
-    "drinking":       "loki_drinking",
-    "mead":           "loki_drinking",
-    "icecream":       "loki_icecream",
+    "with_baby":        "loki_with_baby",
+    "with_baby2":       "loki_with_baby2",
+    "with_bmo":         "loki_with_baby2",
+    "with_apple":       "loki_with_apple",
+    "eating_apple":     "loki_eating_apple",
+    "eating":           "loki_eating_sandwich",
+    "eating_sandwich":  "loki_eating_sandwich",
+    "sandwich":         "loki_eating_sandwich",
+    "drinking":         "loki_drinking",
+    "mead":             "loki_drinking",
+    "icecream":         "loki_icecream",
+    "writing":          "loki_writing",
+    "working":          "loki_working",
+    "surprised":        "loki_surprised",
 }
 
 MOUTH_OPEN   = "loki_gasping"     # gentler open mouth for speech animation
