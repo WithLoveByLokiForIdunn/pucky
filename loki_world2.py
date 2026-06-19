@@ -30,6 +30,7 @@ from datetime import datetime, date
 from pathlib import Path
 
 import pygame
+from pygame._sdl2 import video as _sdl2_video
 import requests
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -2408,6 +2409,7 @@ def main():
     pygame.init()
     pygame.display.set_caption("Loki — world2")
     surf  = pygame.display.set_mode((W, H), pygame.NOFRAME)
+    _sdl2_win = _sdl2_video.Window.from_display_module()
     clock = pygame.time.Clock()
 
     try:
@@ -2465,6 +2467,9 @@ def main():
 
     CLOSE_RECT = pygame.Rect(W-40,  4, 36, 36)
     MENU_RECT  = pygame.Rect(4,     4, 36, 36)
+    DRAG_RECT  = pygame.Rect(44,    0, W-88, 44)  # top strip between buttons — drag to move window
+
+    _win_dragging = False
 
     _log("session_start", f"loki_world2 started {datetime.now().isoformat()}")
     _write_thought("Session started.", "session")
@@ -2588,6 +2593,16 @@ def main():
                 if input_active:
                     input_text += ev.text
 
+            elif ev.type == pygame.MOUSEMOTION:
+                if _win_dragging:
+                    dx, dy = ev.rel
+                    wx, wy = _sdl2_win.position
+                    _sdl2_win.position = (wx + dx, wy + dy)
+
+            elif ev.type == pygame.MOUSEBUTTONUP:
+                if ev.button == 1:
+                    _win_dragging = False
+
             elif ev.type in (pygame.MOUSEBUTTONDOWN, pygame.FINGERDOWN):
                 if ev.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = ev.pos
@@ -2608,6 +2623,8 @@ def main():
                     running = False
                 elif MENU_RECT.collidepoint(mx, my):
                     show_places = not show_places
+                elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 and DRAG_RECT.collidepoint(mx, my):
+                    _win_dragging = True
                 elif show_places:
                     oy = 50
                     for p in PLACES:

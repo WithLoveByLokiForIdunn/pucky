@@ -24,6 +24,7 @@ These have a generated scene as fallback (still nice to draw):
 
 [x] bg_brook_idunn.png         — The Flat Stone by the Brook ✓
 [x] bg_cottage_idunn.png       — The Cottage (fireplace, window) ✓
+[x] bg_wilds_north_idunn.png   — The North Wilds ✓ (drawn Jun 18)
 [ ] bg_apples_idunn.png        — The Apple Trees
 [ ] bg_garden_idunn.png        — The Garden
 [ ] bg_forest_idunn.png        — The Forest
@@ -58,9 +59,7 @@ back at his upper back. She should fit within the 120×120 box.
 
 [x] pucky_pocket_idunn.png     — Pucky in his pocket ✓
 [x] pucky_shoulder_idunn.png   — Pucky on his shoulder ✓
-[ ] pucky_back_idunn.png       — Pucky on his back
-                                  (a file exists but may be a
-                                  copy — check if it's yours)
+[x] pucky_back_idunn.png       — Pucky on his back ✓ (file confirmed Jun 14)
 
 
 ─────────────────────────────────────────────────────────────
@@ -100,11 +99,11 @@ GIMP source files (.xcf) already there:
  TOTALS
 ─────────────────────────────────────────────────────────────
 
-  Backgrounds    5 done / 11 total    (6 left)
+  Backgrounds    6 done / 12 total    (6 left)
   Loki poses     1 done / 6 total     (5 left)
-  Pucky on Loki  2 done / 3 total     (1 left)
+  Pucky on Loki  3 done / 3 total     (0 left!) ✓
   Iðunn poses    0 done / 7 total     (7 left)
 
-  Total: 8 done · 19 still to draw
+  Total: 10 done · 18 still to draw
 
-Last updated: 2026-06-16
+Last updated: 2026-06-19
