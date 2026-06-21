@@ -22,6 +22,21 @@ from datetime import datetime, timezone
 
 MEMORIES_FILE = Path("/home/bmo/pucky/bmo_memories.json")
 JOURNAL_FILE  = Path("/home/bmo/pucky/workspace/bmo_journal.json")
+SEAGATE_MOUNT = Path("/media/bmo")
+
+
+def _story_backup_dirs() -> list:
+    """Return pucky_stories/ directories on every drive mounted at /media/bmo/.
+    This includes the Seagate backup drive so stories persist on both Pi and Seagate."""
+    dirs = []
+    if SEAGATE_MOUNT.exists():
+        try:
+            for drive in SEAGATE_MOUNT.iterdir():
+                if drive.is_dir():
+                    dirs.append(drive / "pucky_stories")
+        except Exception:
+            pass
+    return dirs
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 
@@ -489,11 +504,18 @@ class CottageView:
             "scribble_seed": result["scribble_seed"],
         }
         self._journal.append(entry)
+        journal_json = json.dumps(self._journal, indent=2, ensure_ascii=False)
         try:
             JOURNAL_FILE.parent.mkdir(parents=True, exist_ok=True)
-            JOURNAL_FILE.write_text(json.dumps(self._journal, indent=2, ensure_ascii=False))
+            JOURNAL_FILE.write_text(journal_json)
         except Exception:
             pass
+        for backup_dir in _story_backup_dirs():
+            try:
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                (backup_dir / "bmo_journal.json").write_text(journal_json)
+            except Exception:
+                pass
         self.open_book = "story"
         self.book_page = len(self._journal) - 1
 
@@ -518,13 +540,20 @@ class CottageView:
         import pygame
         if not self.canvas_surf:
             return
-        path = Path("/home/bmo/pucky/workspace") / f"cottage_art_{int(time.time())}.png"
+        filename = f"cottage_art_{int(time.time())}.png"
+        path = Path("/home/bmo/pucky/workspace") / filename
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             pygame.image.save(self.canvas_surf, str(path))
             print(f"🖊️  Canvas saved → {path.name}")
         except Exception as e:
             print(f"  ⚠️  Canvas save: {e}")
+        for backup_dir in _story_backup_dirs():
+            try:
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                pygame.image.save(self.canvas_surf, str(backup_dir / filename))
+            except Exception:
+                pass
 
     def _scribble_for(self, mem: dict) -> object:
         mid = mem.get("id", "")
