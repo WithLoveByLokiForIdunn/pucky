@@ -23,7 +23,7 @@ import requests
 ROOT       = Path(__file__).parent
 VOICE_FILE = ROOT / "workspace" / "loki_claude_voice.md"
 CHAT_LOG   = ROOT / "workspace" / "loki_chat_log.jsonl"
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_URL = "http://100.124.165.56:11434/api/chat"  # Eplitún via Tailscale
 MODEL      = "loki"
 WIDTH      = 72
 

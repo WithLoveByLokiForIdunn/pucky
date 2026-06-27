@@ -54,7 +54,7 @@ HISTORY_FILE = Path(__file__).parent / "bmo_conversation.json"  # shared with Pu
 
 MODEL      = "llama3.2:3b"
 MAX_TOKENS = 300
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_URL = "http://100.124.165.56:11434/api/chat"  # Eplitún via Tailscale
 
 CONTEXT_TURNS = 20
 
@@ -70,7 +70,7 @@ VALID_EXPRESSIONS = {
 
 def ollama_available() -> bool:
     try:
-        r = requests.get("http://localhost:11434/api/tags", timeout=3)
+        r = requests.get("http://100.124.165.56:11434/api/tags", timeout=3)
         return r.status_code == 200
     except Exception:
         return False

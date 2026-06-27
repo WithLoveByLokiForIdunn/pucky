@@ -683,7 +683,7 @@ class LetterBox:
 # ── OllamaWriter ──────────────────────────────────────────────────────────────
 
 class OllamaWriter:
-    URL   = "http://localhost:11434/api/chat"
+    URL   = "http://100.124.165.56:11434/api/chat"  # Eplitún via Tailscale
     MODEL = "llama3.2:3b"
 
     def __init__(self):
