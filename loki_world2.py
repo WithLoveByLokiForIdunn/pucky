@@ -77,7 +77,7 @@ ACT_DEAD      = "dead"
 ACT_GAME      = "play_ball"
 
 # ── Ollama ────────────────────────────────────────────────────────────────────
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_URL = "http://100.124.165.56:11434/api/chat"  # Eplitún via Tailscale
 MODEL      = "loki"
 
 # ── Game mode — pauses background simulation so only one thing runs at once ───

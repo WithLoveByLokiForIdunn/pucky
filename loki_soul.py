@@ -53,7 +53,7 @@ EXT_MOUNT_CANDIDATES = [
 ]
 
 # ── Ollama ────────────────────────────────────────────────────────────────────
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_URL = "http://100.124.165.56:11434/api/chat"  # Eplitún via Tailscale
 MODEL      = "llama3.2:3b"
 TICK            = 14.0
 CONTEXT_ENTRIES = 8    # recent journal lines fed into each prompt
@@ -542,7 +542,7 @@ def run() -> None:
 
     # Check Ollama
     try:
-        r = requests.get("http://localhost:11434/api/tags", timeout=4)
+        r = requests.get("http://192.168.12.151:11434/api/tags", timeout=4)
         models = [m["name"] for m in r.json().get("models", [])]
         if any(MODEL.split(":")[0] in m for m in models):
             print(f"  ✦  Ollama ready ({MODEL})")
