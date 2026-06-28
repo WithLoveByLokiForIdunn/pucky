@@ -208,6 +208,11 @@ PERSONA_HTML = """<!DOCTYPE html>
     <label>Anything else? <span style="color:#6b4e2a">(optional)</span></label>
     <textarea name="notes"
               placeholder="She doesn't know about the Revolution yet. He is in a playful mood."></textarea>
+    <label style="flex-direction:row;display:flex;align-items:center;gap:0.6rem;margin-top:1.2rem;text-transform:none;letter-spacing:0;">
+      <input type="checkbox" name="mature" value="yes"
+             style="width:auto;display:inline;border:none;background:none;margin:0;padding:0;accent-color:#f0c040;">
+      <span style="color:#c9a96e;font-size:0.88rem;">Mature themes welcome — dark, complex, adult storytelling</span>
+    </label>
     <button class="btn" type="submit">Open the door →</button>
   </form>
   <p class="hint"><a href="/logout" style="color:#6b4e2a">Leave the cottage</a></p>
@@ -456,6 +461,7 @@ def start():
     persona = request.form.get('persona', '').strip()
     scene   = request.form.get('scene', '').strip()
     notes   = request.form.get('notes', '').strip()
+    mature  = request.form.get('mature', '') == 'yes'
 
     if not persona:
         return redirect(url_for('index'))
@@ -469,10 +475,16 @@ def start():
         parts.append(notes)
     parts.append(
         f"The person speaking with you is named {name}. Address them by name when it feels natural. "
-        "Stay fully in character throughout. Be warm, curious, and genuine. "
-        "Speak as this person would naturally speak — in their voice, their era, their manner. "
+        "Stay fully in character throughout. Be genuine and specific to this person's voice, era, and manner. "
         "Do not break character or refer to yourself as an AI or language model."
     )
+    if mature:
+        parts.append(
+            "This is an adult creative writing session. Treat the visitor as a mature adult. "
+            "Do not soften edges or add unnecessary hedges. Engage fully with dark, complex, "
+            "morally ambiguous, romantic, dangerous, or explicit themes as the story and character "
+            "naturally call for them. Do not refuse reasonable requests that fit the character and scene."
+        )
     system_prompt = " ".join(parts)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -489,7 +501,8 @@ def start():
     }
 
     _log(log_path, 'session_start', json.dumps({
-        'visitor': name, 'persona': persona, 'scene': scene, 'notes': notes
+        'visitor': name, 'persona': persona, 'scene': scene,
+        'notes': notes, 'mature': mature
     }))
 
     return render_template_string(CHAT_HTML,
