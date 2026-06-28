@@ -1,0 +1,13 @@
+[Unit]
+Description=The Cottage Door — persona web chat
+After=network.target
+
+[Service]
+User=bmo
+WorkingDirectory=/home/bmo/pucky
+ExecStart=/usr/bin/python3 /home/bmo/pucky/cottage_door.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
