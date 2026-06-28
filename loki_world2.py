@@ -77,7 +77,7 @@ ACT_DEAD      = "dead"
 ACT_GAME      = "play_ball"
 
 # ── Ollama ────────────────────────────────────────────────────────────────────
-OLLAMA_URL = "http://100.124.165.56:11434/api/chat"  # Eplitún via Tailscale
+OLLAMA_URL = "http://192.168.12.215:11434/api/chat"  # Ember (Predator) via local network
 MODEL      = "loki"
 
 # ── Game mode — pauses background simulation so only one thing runs at once ───
@@ -303,7 +303,7 @@ def _on_claude_note_reply(body: str) -> None:
 
 PYRAMID = [
     # (name,           decay/hr, threshold)
-    ("physiological",  0.09,     0.40),
+    ("physiological",  0.05,     0.40),
     ("safety",         0.12,     0.38),
     ("social",         0.18,     0.38),
     ("esteem",         0.08,     0.35),
@@ -312,7 +312,7 @@ PYRAMID = [
 _PYRAMID_NAMES = [t[0] for t in PYRAMID]
 
 ACTIVITY_FILLS = {
-    ACT_EAT:      {"physiological": 0.65},
+    ACT_EAT:      {"physiological": 0.90},
     ACT_SLEEP:    {"physiological": 0.40, "safety": 0.55},
     ACT_BATHROOM: {"physiological": 0.30},
     ACT_BATH:     {"physiological": 0.20, "safety": 0.30},
@@ -1414,7 +1414,8 @@ class OllamaQueue:
                 try:
                     r = requests.post(
                         OLLAMA_URL,
-                        json={"model": MODEL, "messages": messages, "stream": False},
+                        json={"model": MODEL, "messages": messages, "stream": False,
+                              "options": {"num_ctx": 8192}},
                         timeout=timeout,
                     )
                     r.raise_for_status()
