@@ -1,25 +1,47 @@
 #!/usr/bin/env python3
 """
 cottage_door.py — A web cottage door where anyone can talk to whoever they choose.
+Users log in with a name and PIN. Returning visitors are remembered.
+All conversations logged privately for Iðunn and Claude to read together.
 Runs on the Pi at http://192.168.12.189:5001
-Logs all conversations so Iðunn and Claude can read and discuss them privately.
 """
 import uuid
 import json
+import hashlib
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
 import requests
 
 app = Flask(__name__)
-app.secret_key = "pucky_cottage_door_2026"
+app.secret_key = "pucky_cottage_door_2026_warm"
 
 OLLAMA_URL  = "http://192.168.12.215:11434/api/chat"
 MODEL       = "llama3.1:8b"
-LOGS_DIR    = Path(__file__).parent / "workspace" / "cottage_door_logs"
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR    = Path(__file__).parent / "workspace" / "cottage_door_logs"
+USERS_FILE  = Path(__file__).parent / "workspace" / "cottage_door_users.json"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-sessions = {}  # sid -> {persona, scene, messages, log_path}
+chat_sessions = {}  # sid -> {persona, scene, messages, log_path}
+
+
+# ── user store ────────────────────────────────────────────────────────────────
+
+def _load_users() -> dict:
+    if USERS_FILE.exists():
+        try:
+            return json.loads(USERS_FILE.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def _save_users(users: dict) -> None:
+    USERS_FILE.write_text(json.dumps(users, indent=2, ensure_ascii=False))
+
+
+def _hash_pin(pin: str) -> str:
+    return hashlib.sha256(pin.strip().encode()).hexdigest()
 
 
 def _log(log_path: Path, role: str, text: str) -> None:
@@ -28,12 +50,9 @@ def _log(log_path: Path, role: str, text: str) -> None:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
-LANDING = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Cottage Door</title>
+# ── HTML templates ─────────────────────────────────────────────────────────────
+
+STYLE_BASE = """
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -51,14 +70,14 @@ LANDING = """<!DOCTYPE html>
     border: 1px solid #7a5c1a;
     border-radius: 14px;
     padding: 2.2rem 2rem;
-    max-width: 500px;
+    max-width: 460px;
     width: 100%;
     box-shadow: 0 0 60px #00000099;
   }
   .candle { font-size: 2rem; text-align: center; margin-bottom: 0.5rem; }
   h1 {
     color: #f0c040;
-    font-size: 1.5rem;
+    font-size: 1.45rem;
     text-align: center;
     margin-bottom: 0.3rem;
     font-weight: normal;
@@ -74,10 +93,10 @@ LANDING = """<!DOCTYPE html>
   label {
     display: block;
     color: #c9a96e;
-    font-size: 0.82rem;
-    margin-bottom: 0.35rem;
+    font-size: 0.8rem;
+    margin-bottom: 0.3rem;
     margin-top: 1rem;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
   }
   label:first-of-type { margin-top: 0; }
@@ -95,35 +114,88 @@ LANDING = """<!DOCTYPE html>
     transition: border-color 0.15s;
   }
   input:focus, textarea:focus { border-color: #f0c040; }
-  textarea { resize: vertical; min-height: 75px; }
-  button {
-    margin-top: 1.5rem;
+  textarea { resize: vertical; min-height: 70px; }
+  .btn {
+    margin-top: 1.4rem;
     width: 100%;
     background: #7a5c1a;
     color: #fff8e7;
     border: none;
     border-radius: 7px;
-    padding: 0.78rem;
+    padding: 0.75rem;
     font-size: 1rem;
     font-family: Georgia, serif;
     cursor: pointer;
     letter-spacing: 0.04em;
     transition: background 0.15s;
   }
-  button:hover { background: #9a7220; }
+  .btn:hover { background: #9a7220; }
   .hint {
     color: #6b4e2a;
     font-size: 0.78rem;
     text-align: center;
-    margin-top: 1.2rem;
+    margin-top: 1rem;
+    font-style: italic;
+  }
+  .error {
+    background: #3d1a0a;
+    border: 1px solid #7a2a1a;
+    color: #f5a090;
+    border-radius: 7px;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.88rem;
+    margin-bottom: 1rem;
+  }
+  .welcome {
+    color: #f0c040;
+    font-size: 0.88rem;
+    text-align: center;
+    margin-bottom: 1.2rem;
     font-style: italic;
   }
 </style>
+"""
+
+LOGIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Cottage Door</title>
+""" + STYLE_BASE + """
 </head>
 <body>
 <div class="box">
   <div class="candle">🕯</div>
   <h1>The Cottage Door</h1>
+  <p class="sub">A warm place. Come in.</p>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="POST" action="/login">
+    <label>Your name</label>
+    <input type="text" name="name" placeholder="What shall I call you?" required autofocus
+           value="{{ prefill }}">
+    <label>Your PIN</label>
+    <input type="password" name="pin" placeholder="4 digits" maxlength="8" inputmode="numeric">
+    <button class="btn" type="submit">Enter →</button>
+  </form>
+  <p class="hint">First visit? Enter your name and choose a PIN — the cottage will remember you.</p>
+</div>
+</body>
+</html>"""
+
+PERSONA_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Cottage Door</title>
+""" + STYLE_BASE + """
+</head>
+<body>
+<div class="box">
+  <div class="candle">🕯</div>
+  <h1>The Cottage Door</h1>
+  <p class="welcome">Welcome back, {{ name }}.</p>
   <p class="sub">Who would you like to speak with today?</p>
   <form method="POST" action="/start">
     <label>Who do you want to talk to?</label>
@@ -136,15 +208,12 @@ LANDING = """<!DOCTYPE html>
     <label>Anything else? <span style="color:#6b4e2a">(optional)</span></label>
     <textarea name="notes"
               placeholder="She doesn't know about the Revolution yet. He is in a playful mood."></textarea>
-    <label>Your name <span style="color:#6b4e2a">(optional)</span></label>
-    <input type="text" name="visitor" placeholder="So they can address you">
-    <button type="submit">Open the door →</button>
+    <button class="btn" type="submit">Open the door →</button>
   </form>
-  <p class="hint">Conversations are kept privately between you and the cottage.</p>
+  <p class="hint"><a href="/logout" style="color:#6b4e2a">Leave the cottage</a></p>
 </div>
 </body>
 </html>"""
-
 
 CHAT_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -182,17 +251,8 @@ CHAT_HTML = """<!DOCTYPE html>
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  header .scene {
-    color: #a8855a;
-    font-size: 0.8rem;
-    font-style: italic;
-  }
-  header a {
-    color: #7a5c1a;
-    font-size: 0.8rem;
-    text-decoration: none;
-    flex-shrink: 0;
-  }
+  header .scene { color: #a8855a; font-size: 0.8rem; font-style: italic; }
+  header a { color: #7a5c1a; font-size: 0.8rem; text-decoration: none; flex-shrink: 0; }
   header a:hover { color: #c9a96e; }
   #messages {
     flex: 1;
@@ -211,24 +271,10 @@ CHAT_HTML = """<!DOCTYPE html>
     white-space: pre-wrap;
     word-break: break-word;
   }
-  .msg.visitor {
-    background: #3d2a0e;
-    align-self: flex-end;
-    color: #f5e6c8;
-  }
-  .msg.persona {
-    background: #2e1f0a;
-    border: 1px solid #7a5c1a;
-    align-self: flex-start;
-    color: #f5e6c8;
-  }
-  .msg .name {
-    font-size: 0.72rem;
-    color: #a8855a;
-    margin-bottom: 0.3rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
+  .msg.visitor { background: #3d2a0e; align-self: flex-end; }
+  .msg.persona { background: #2e1f0a; border: 1px solid #7a5c1a; align-self: flex-start; }
+  .msg .name { font-size: 0.72rem; color: #a8855a; margin-bottom: 0.3rem;
+               text-transform: uppercase; letter-spacing: 0.05em; }
   .thinking { color: #7a5c1a; font-style: italic; }
   #input-row {
     background: #2e1f0a;
@@ -250,7 +296,6 @@ CHAT_HTML = """<!DOCTYPE html>
     resize: none;
     outline: none;
     transition: border-color 0.15s;
-    line-height: 1.4;
     max-height: 120px;
     overflow-y: auto;
   }
@@ -285,14 +330,14 @@ CHAT_HTML = """<!DOCTYPE html>
 <script>
 const SID     = {{ sid|tojson }};
 const PERSONA = {{ persona|tojson }};
-const VISITOR = {{ visitor|tojson }};
+const VISITOR = {{ name|tojson }};
 
 function addMsg(role, text) {
   const wrap = document.createElement('div');
   wrap.className = 'msg ' + (role === 'visitor' ? 'visitor' : 'persona');
   const name = document.createElement('div');
   name.className = 'name';
-  name.textContent = role === 'visitor' ? (VISITOR || 'You') : PERSONA;
+  name.textContent = role === 'visitor' ? VISITOR : PERSONA;
   const body = document.createElement('div');
   body.className = 'body';
   body.textContent = text;
@@ -334,13 +379,9 @@ async function send() {
 }
 
 document.getElementById('msg').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    send();
-  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 });
 
-// auto-grow textarea
 document.getElementById('msg').addEventListener('input', function() {
   this.style.height = '';
   this.style.height = Math.min(this.scrollHeight, 120) + 'px';
@@ -350,86 +391,136 @@ document.getElementById('msg').addEventListener('input', function() {
 </html>"""
 
 
+# ── routes ─────────────────────────────────────────────────────────────────────
+
 @app.route('/')
-def landing():
-    return LANDING
+def index():
+    if 'user' in session:
+        return render_template_string(PERSONA_HTML, name=session['user'])
+    return render_template_string(LOGIN_HTML, error='', prefill='')
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    name = request.form.get('name', '').strip()
+    pin  = request.form.get('pin', '').strip()
+
+    if not name or not pin:
+        return render_template_string(LOGIN_HTML,
+                                      error='Please enter both your name and a PIN.',
+                                      prefill=name)
+
+    if not pin.isdigit() or len(pin) < 4:
+        return render_template_string(LOGIN_HTML,
+                                      error='PIN must be at least 4 digits.',
+                                      prefill=name)
+
+    users    = _load_users()
+    pin_hash = _hash_pin(pin)
+    key      = name.lower()
+
+    if key in users:
+        # returning user — verify PIN
+        if users[key]['pin_hash'] != pin_hash:
+            return render_template_string(LOGIN_HTML,
+                                          error='That PIN does not match. Try again.',
+                                          prefill=name)
+        # update display name in case capitalisation changed
+        users[key]['display'] = name
+    else:
+        # new user — register
+        users[key] = {
+            'display':  name,
+            'pin_hash': pin_hash,
+            'joined':   datetime.now().isoformat(),
+        }
+        _save_users(users)
+
+    _save_users(users)
+    session['user'] = name
+    return redirect(url_for('index'))
+
+
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    return redirect(url_for('index'))
 
 
 @app.route('/start', methods=['POST'])
 def start():
+    if 'user' not in session:
+        return redirect(url_for('index'))
+
+    name    = session['user']
     persona = request.form.get('persona', '').strip()
     scene   = request.form.get('scene', '').strip()
     notes   = request.form.get('notes', '').strip()
-    visitor = request.form.get('visitor', '').strip()
 
     if not persona:
-        return landing()
+        return redirect(url_for('index'))
 
     sid = str(uuid.uuid4())
 
-    # build system prompt
     parts = [f"You are {persona}."]
     if scene:
         parts.append(f"You are in {scene}.")
     if notes:
         parts.append(notes)
-    if visitor:
-        parts.append(f"The person speaking with you is named {visitor}. Address them by name when it feels natural.")
     parts.append(
+        f"The person speaking with you is named {name}. Address them by name when it feels natural. "
         "Stay fully in character throughout. Be warm, curious, and genuine. "
         "Speak as this person would naturally speak — in their voice, their era, their manner. "
         "Do not break character or refer to yourself as an AI or language model."
     )
     system_prompt = " ".join(parts)
 
-    # log file for this session
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = "".join(c if c.isalnum() or c in "-_ " else "" for c in persona)[:40].strip()
-    log_path = LOGS_DIR / f"{timestamp}_{safe_name}.jsonl"
+    safe_persona = "".join(c if c.isalnum() or c in "-_ " else "" for c in persona)[:40].strip()
+    safe_name    = "".join(c if c.isalnum() or c in "-_ " else "" for c in name)[:20].strip()
+    log_path = DATA_DIR / f"{timestamp}_{safe_name}_{safe_persona}.jsonl"
 
-    sessions[sid] = {
+    chat_sessions[sid] = {
         'persona':  persona,
         'scene':    scene,
-        'visitor':  visitor,
+        'visitor':  name,
         'messages': [{'role': 'system', 'content': system_prompt}],
         'log_path': log_path,
     }
 
-    # log session start
     _log(log_path, 'session_start', json.dumps({
-        'persona': persona, 'scene': scene, 'visitor': visitor, 'notes': notes
+        'visitor': name, 'persona': persona, 'scene': scene, 'notes': notes
     }))
 
-    return render_template_string(
-        CHAT_HTML,
-        persona=persona,
-        scene=scene,
-        visitor=visitor,
-        sid=sid,
-    )
+    return render_template_string(CHAT_HTML,
+                                  persona=persona, scene=scene,
+                                  name=name, sid=sid)
 
 
 @app.route('/chat', methods=['POST'])
 def chat():
+    if 'user' not in session:
+        return jsonify({'reply': '(session expired — please log in again)'})
+
     data    = request.get_json()
     sid     = data.get('sid', '')
     message = data.get('message', '').strip()
 
-    if sid not in sessions or not message:
+    if sid not in chat_sessions or not message:
         return jsonify({'reply': '(session not found — please open a new door)'})
 
-    sess = sessions[sid]
+    sess = chat_sessions[sid]
     sess['messages'].append({'role': 'user', 'content': message})
-    _log(sess['log_path'], 'visitor', message)
+    _log(sess['log_path'], sess['visitor'], message)
 
     try:
         r = requests.post(
             OLLAMA_URL,
             json={
-                'model':   MODEL,
+                'model':    MODEL,
                 'messages': sess['messages'],
-                'stream':  False,
-                'options': {'num_ctx': 4096, 'temperature': 0.8},
+                'stream':   False,
+                'options':  {'num_ctx': 4096, 'temperature': 0.8},
             },
             timeout=120,
         )
@@ -439,7 +530,7 @@ def chat():
         reply = f"(the cottage is quiet just now — {e})"
 
     sess['messages'].append({'role': 'assistant', 'content': reply})
-    _log(sess['log_path'], 'persona', reply)
+    _log(sess['log_path'], sess['persona'], reply)
 
     return jsonify({'reply': reply})
 
