@@ -57,3 +57,8 @@ __pycache__/
 *.pyc
 *.pyo
 phototest_ai camera.py
+workspace/loki_idunn_private.md
+
+# Cottage Door — user data, never goes to GitHub
+cottage_door_users.json
+workspace/cottage_door_logs/
