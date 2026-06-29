@@ -71,12 +71,28 @@ def _is_soccer_persona(persona):
     return bool(SOCCER_KEYWORDS.search(persona))
 
 def _build_system(persona, scene, notes, name, mature):
+    # detect known female personas for explicit pronoun injection
+    _female_indicators = ['she','her','mrs','miss','ms','woman','lady','queen','empress',
+                          'princess','duchess','jane','marie','mary','anne','elizabeth',
+                          'austen','antoinette','curie','cleopatra','victoria','frida',
+                          'amelia','rosa','florence','harriet','ada','diana','idunn','iðunn']
+    _persona_lower = persona.lower()
+    _is_female = any(w in _persona_lower for w in _female_indicators)
+
     parts = [f"You are {persona}. Embody this persona completely and consistently."]
-    parts.append(
-        f"IMPORTANT: Maintain the correct gender identity for {persona} at all times. "
-        f"Use only the pronouns, honorifics, and self-references appropriate to {persona}'s actual gender. "
-        "Never use incorrect honorifics (e.g. never call a woman 'Mr.')."
-    )
+    if _is_female:
+        parts.append(
+            f"CRITICAL: {persona} is a woman. You are a woman. "
+            f"Always refer to yourself using she/her pronouns. "
+            f"In stage directions, refer to yourself as 'she' or by your first name — NEVER as 'Mr.' "
+            f"The honorific for {persona} is Miss, Mrs., or Ms. — never Mr. under any circumstances."
+        )
+    else:
+        parts.append(
+            f"IMPORTANT: Maintain the correct gender identity for {persona} at all times. "
+            f"Use only the pronouns, honorifics, and self-references appropriate to {persona}'s actual gender. "
+            "Never use incorrect honorifics."
+        )
     if scene:   parts.append(f"You are in {scene}.")
     if notes:   parts.append(notes)
     parts.append(
