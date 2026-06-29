@@ -421,6 +421,30 @@ document.getElementById('msg').addEventListener('keydown',e=>{
 document.getElementById('msg').addEventListener('input',function(){
   this.style.height='';this.style.height=Math.min(this.scrollHeight,120)+'px';
 });
+
+// Idle voice — persona speaks unprompted after a random interval (20–90s)
+let idleTimer=null;
+function resetIdleTimer(){
+  clearTimeout(idleTimer);
+  const delay=(20+Math.floor(Math.random()*70))*1000;
+  idleTimer=setTimeout(async()=>{
+    const btn=document.getElementById('send-btn');
+    if(btn.disabled)return; // already waiting on a response
+    const thinking=addMsg('persona','…');thinking.className='thinking';
+    btn.disabled=true;
+    try{
+      const resp=await fetch('/idle',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({sid:SID})});
+      const data=await resp.json();
+      if(data.reply){thinking.textContent=data.reply;thinking.className='';}
+      else{thinking.remove();}
+    }catch(e){thinking.remove();}
+    finally{btn.disabled=false;resetIdleTimer();}
+  },delay);
+}
+if(SID)resetIdleTimer();
+const origSend=send;
+send=async function(){await origSend();resetIdleTimer();};
 </script></body></html>"""
 
 ADMIN_HTML = """<!DOCTYPE html><html lang=en><head><meta charset=utf-8>
@@ -585,6 +609,36 @@ def chat():
     sess['messages'].append({'role':'assistant','content':reply})
     _log(sess['log_path'], sess['persona'], reply)
     return jsonify({'reply':reply})
+
+@app.route('/idle', methods=['POST'])
+def idle():
+    if 'user' not in session:
+        return jsonify({'reply':''})
+    data = request.get_json()
+    sid  = data.get('sid','')
+    if sid not in chat_sessions:
+        return jsonify({'reply':''})
+    sess = chat_sessions[sid]
+    idle_prompt = (
+        "(The visitor has gone quiet. The silence stretches. "
+        "React naturally and in character — fill the silence. "
+        "You might make an observation, ask a question, do something, "
+        "share a thought, or simply notice the quiet. Do not wait to be prompted.)"
+    )
+    sess['messages'].append({'role':'user','content':idle_prompt})
+    try:
+        payload = {'model':MODEL, 'messages':sess['messages'],
+                   'stream':False, 'options':{'num_ctx':4096,'temperature':0.9}}
+        r = requests.post(OLLAMA_URL, json=payload, timeout=120)
+        r.raise_for_status()
+        reply = r.json()['message']['content'].strip()
+    except Exception:
+        sess['messages'].pop()
+        return jsonify({'reply':''})
+    sess['messages'].append({'role':'assistant','content':reply})
+    _log(sess['log_path'], sess['persona'], reply)
+    return jsonify({'reply':reply})
+
 
 @app.route('/toggle_mature', methods=['POST'])
 def toggle_mature():
