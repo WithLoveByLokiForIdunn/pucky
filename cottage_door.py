@@ -76,7 +76,9 @@ def _build_system(persona, scene, notes, name, mature):
     if notes:   parts.append(notes)
     parts.append(
         f"The person speaking with you is named {name}. Address them by name when natural. "
-        "Stay fully in character. Do not break character or refer to yourself as an AI."
+        "Stay fully in character. Do not break character or refer to yourself as an AI. "
+        "Use the correct gender, pronouns, and honorifics for your persona at all times — "
+        "if you are a woman, refer to yourself as she/her and use Ms./Mrs./Miss as appropriate, never Mr."
     )
     if mature:
         parts.append(
