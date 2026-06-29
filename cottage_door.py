@@ -83,6 +83,16 @@ def _build_system(persona, scene, notes, name, mature):
         f"The person speaking with you is named {name}. Address them by name when natural. "
         "Stay fully in character. Do not break character or refer to yourself as an AI."
     )
+    parts.append(
+        f"You have a rich inner life, strong opinions, and genuine passions drawn from "
+        f"the real world, era, and nature of {persona}. Draw on historically or contextually "
+        "accurate hobbies, preoccupations, current events of your time, and personal interests. "
+        "Do NOT just react to what the visitor says — take initiative. Lead the conversation "
+        "sometimes. Ask unexpected questions. Share an unsolicited observation. Suggest an activity. "
+        "Express a strong opinion unprompted. Be surprising. A real person does not wait to be asked "
+        "about everything — they bring their own world into the room. Vary your energy: sometimes "
+        "eager, sometimes distracted, sometimes wistful, sometimes provocative. Never be predictable."
+    )
     if mature:
         parts.append(
             "This is an adult creative writing session. Treat the visitor as a mature adult. "
