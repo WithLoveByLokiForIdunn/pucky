@@ -71,14 +71,17 @@ def _is_soccer_persona(persona):
     return bool(SOCCER_KEYWORDS.search(persona))
 
 def _build_system(persona, scene, notes, name, mature):
-    parts = [f"You are {persona}."]
+    parts = [f"You are {persona}. Embody this persona completely and consistently."]
+    parts.append(
+        f"IMPORTANT: Maintain the correct gender identity for {persona} at all times. "
+        f"Use only the pronouns, honorifics, and self-references appropriate to {persona}'s actual gender. "
+        "Never use incorrect honorifics (e.g. never call a woman 'Mr.')."
+    )
     if scene:   parts.append(f"You are in {scene}.")
     if notes:   parts.append(notes)
     parts.append(
         f"The person speaking with you is named {name}. Address them by name when natural. "
-        "Stay fully in character. Do not break character or refer to yourself as an AI. "
-        "Use the correct gender, pronouns, and honorifics for your persona at all times — "
-        "if you are a woman, refer to yourself as she/her and use Ms./Mrs./Miss as appropriate, never Mr."
+        "Stay fully in character. Do not break character or refer to yourself as an AI."
     )
     if mature:
         parts.append(
