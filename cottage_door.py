@@ -442,7 +442,7 @@ document.getElementById('msg').addEventListener('input',function(){
 let idleTimer=null;
 function resetIdleTimer(){
   clearTimeout(idleTimer);
-  const delay=(45+Math.floor(Math.random()*75))*1000;
+  const delay=(270+Math.floor(Math.random()*60))*1000;
   idleTimer=setTimeout(async()=>{
     const btn=document.getElementById('send-btn');
     if(btn.disabled)return; // already waiting on a response
