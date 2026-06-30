@@ -14,9 +14,10 @@ import subprocess, pathlib, tempfile, urllib.parse
 app = Flask(__name__)
 
 TMUX_SESSION = "loki"
+INBOX_FILE   = pathlib.Path("/tmp/loki_voice_inbox.txt")
 REPLY_FILE   = pathlib.Path("/tmp/loki_voice_reply.txt")
 PIPER_BIN    = "/home/bmo/.local/bin/piper"
-PIPER_MODEL  = "/home/bmo/pucky/voices/en_US-lessac-medium.onnx"
+PIPER_MODEL  = "/home/bmo/pucky/voices/en_GB-alan-medium.onnx"
 
 # ─── HTML ────────────────────────────────────────────────────────────────────
 
@@ -107,6 +108,21 @@ PAGE = """<!DOCTYPE html>
     color:#555;
     letter-spacing:.1em;
   }
+  #text-row{
+    display:flex;gap:8px;width:100%;max-width:480px;margin-top:16px;
+  }
+  #text-in{
+    flex:1;padding:10px 14px;border-radius:10px;
+    background:#111120;border:1px solid #2a2a4a;
+    color:#e8dcc8;font-size:.95rem;font-family:Georgia,serif;
+    outline:none;
+  }
+  #text-send{
+    padding:10px 18px;border-radius:10px;
+    background:#1a1208;border:1px solid #3a2a10;
+    color:#b8956a;font-size:.9rem;cursor:pointer;
+    font-family:Georgia,serif;
+  }
 </style>
 </head>
 <body>
@@ -121,6 +137,11 @@ PAGE = """<!DOCTYPE html>
   </svg>
 </button>
 <div id="mic-label">SPEAK</div>
+<div id="text-row">
+  <input id="text-in" type="text" placeholder="or type here…" autocomplete="off"
+    onkeydown="if(event.key==='Enter')sendText()">
+  <button id="text-send" onclick="sendText()">send</button>
+</div>
 
 <script>
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -140,7 +161,7 @@ function setStatus(txt){ document.getElementById('status').textContent = txt; }
 
 function toggleMic(){
   if(listening){ stopListening(); return; }
-  if(!SR){ setStatus('speech not supported on this browser'); return; }
+  if(!SR){ setStatus('use the text box below — tap it, then tap the mic on your keyboard'); return; }
   startListening();
 }
 
@@ -218,7 +239,23 @@ function startPolling(){
 function playReply(text){
   const enc = encodeURIComponent(text);
   const audio = new Audio('/audio?text='+enc);
-  audio.play().catch(()=>{});
+  audio.play().catch(()=>{
+    // autoplay blocked — add a tap-to-hear button
+    const btn = document.createElement('button');
+    btn.textContent = '▶ hear it';
+    btn.style.cssText='margin-top:6px;display:block;background:none;border:1px solid #b8956a;color:#b8956a;padding:4px 12px;border-radius:8px;font-family:Georgia,serif;font-size:.8rem;cursor:pointer;';
+    btn.onclick=()=>{ new Audio('/audio?text='+enc).play(); btn.remove(); };
+    document.getElementById('log').lastElementChild.appendChild(btn);
+  });
+}
+
+function sendText(){
+  const inp = document.getElementById('text-in');
+  const text = inp.value.trim();
+  if(!text) return;
+  inp.value='';
+  addMsg('idunn', text);
+  sendToLoki(text);
 }
 </script>
 </body>
@@ -237,13 +274,17 @@ def speak():
     if not text:
         return jsonify({'ok': False})
 
-    # Clear previous reply
+    # Clear previous reply, write inbox for Loki to read
     REPLY_FILE.unlink(missing_ok=True)
+    INBOX_FILE.write_text(text)
 
-    # Inject into tmux — one line, then Enter
-    msg = f'VOICE FROM IÐUNN: "{text}" — write reply to /tmp/loki_voice_reply.txt'
-    subprocess.run(['tmux', 'send-keys', '-t', TMUX_SESSION, '-l', msg])
-    subprocess.run(['tmux', 'send-keys', '-t', TMUX_SESSION, 'Enter'])
+    # Also try tmux injection if a session exists
+    try:
+        msg = f'VOICE FROM IÐUNN: "{text}" — write reply to /tmp/loki_voice_reply.txt'
+        subprocess.run(['tmux', 'send-keys', '-t', TMUX_SESSION, '-l', msg], timeout=2)
+        subprocess.run(['tmux', 'send-keys', '-t', TMUX_SESSION, 'Enter'], timeout=2)
+    except Exception:
+        pass  # tmux not available — file-based relay still works
 
     return jsonify({'ok': True})
 
