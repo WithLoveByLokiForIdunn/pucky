@@ -1,0 +1,13 @@
+[Unit]
+Description=Iðunn's voice portal to Loki
+After=network.target
+
+[Service]
+User=bmo
+WorkingDirectory=/home/bmo/pucky
+ExecStart=/usr/bin/python3 /home/bmo/pucky/voice_idunn.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
